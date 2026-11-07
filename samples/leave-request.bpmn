@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  id="Definitions_LeaveRequest" targetNamespace="http://flowable.org/test">
+  <bpmn:process id="LeaveRequest" name="Leave Request Process" isExecutable="true">
+    <bpmn:startEvent id="StartEvent" name="Submit Leave"/>
+    <bpmn:userTask id="Task_Submit" name="Employee: Submit Form"/>
+    <bpmn:userTask id="Task_Supervisor" name="Supervisor: Approve"/>
+    <bpmn:exclusiveGateway id="Gateway_Sup" name="Approved?"/>
+    <bpmn:userTask id="Task_HR" name="HR: Approve"/>
+    <bpmn:exclusiveGateway id="Gateway_HR" name="Approved?"/>
+    <bpmn:endEvent id="End_Approved" name="Approved"/>
+    <bpmn:endEvent id="End_Rejected" name="Rejected"/>
+    <bpmn:sequenceFlow id="F1" sourceRef="StartEvent" targetRef="Task_Submit"/>
+    <bpmn:sequenceFlow id="F2" sourceRef="Task_Submit" targetRef="Task_Supervisor"/>
+    <bpmn:sequenceFlow id="F3" sourceRef="Task_Supervisor" targetRef="Gateway_Sup"/>
+    <bpmn:sequenceFlow id="F4" sourceRef="Gateway_Sup" targetRef="Task_HR">
+      <bpmn:conditionExpression>${approved == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="F5" sourceRef="Gateway_Sup" targetRef="End_Rejected">
+      <bpmn:conditionExpression>${approved == false}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="F6" sourceRef="Task_HR" targetRef="Gateway_HR"/>
+    <bpmn:sequenceFlow id="F7" sourceRef="Gateway_HR" targetRef="End_Approved">
+      <bpmn:conditionExpression>${approved == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="F8" sourceRef="Gateway_HR" targetRef="End_Rejected">
+      <bpmn:conditionExpression>${approved == false}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="LeaveRequest">
+      <bpmndi:BPMNShape id="StartEvent_di" bpmnElement="StartEvent"><dc:Bounds x="100" y="100" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Submit_di" bpmnElement="Task_Submit"><dc:Bounds x="190" y="80" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Supervisor_di" bpmnElement="Task_Supervisor"><dc:Bounds x="350" y="80" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_Sup_di" bpmnElement="Gateway_Sup"><dc:Bounds x="510" y="95" width="40" height="40"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_HR_di" bpmnElement="Task_HR"><dc:Bounds x="610" y="80" width="100" height="80"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_HR_di" bpmnElement="Gateway_HR"><dc:Bounds x="770" y="95" width="40" height="40"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Approved_di" bpmnElement="End_Approved"><dc:Bounds x="870" y="100" width="36" height="36"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Rejected_di" bpmnElement="End_Rejected"><dc:Bounds x="510" y="200" width="36" height="36"/></bpmndi:BPMNShape>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

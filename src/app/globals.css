@@ -1,0 +1,15 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+/* Global zoom-out: render the whole app slightly smaller for a roomier,
+   more "zoomed out" layout by default (previously users zoomed Chrome to ~80%).
+   Applied on <body>; html carries a matching background so short pages
+   have no bare strip below the scaled content. */
+html { background: #f9fafb; }
+body {
+  font-family: 'Segoe UI', sans-serif;
+  zoom: 0.85;
+}

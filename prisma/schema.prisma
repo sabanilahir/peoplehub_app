@@ -1,0 +1,584 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  // Runtime uses the POOLED connection (safe for serverless / Vercel).
+  url       = env("DATABASE_URL")
+  // Migrations use a DIRECT (unpooled) connection. On a plain local Postgres
+  // set DIRECT_URL to the same value as DATABASE_URL.
+  directUrl = env("DIRECT_URL")
+}
+
+// --- AUTH & USERS -----------------------------
+model User {
+  id         Int      @id // explicit id (matches Employee.id for imported users)
+  username   String   @unique
+  password   String
+  name       String
+  role       String // employee | manager | hr | hr_officer | hr_manager | od_officer | od_manager | superadmin
+  dept       String   @default("")
+  position   String   @default("")
+  email      String   @default("")
+  employeeId Int? // link to Employee.id
+  salary     Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+   odoo_id       String?
+  imported_from String?
+  last_sync_at  DateTime?
+
+  leaves Leave[]
+}
+
+// --- ORG STRUCTURE ----------------------------
+// Enterprise ? Division ? Company ? Business Unit ? Department; Position lives under
+// Department and references JobFamily + Grade. References use plain Int fields (with
+// indexes) rather than enforced FKs, to keep the bulk import seed order-independent.
+model Enterprise {
+  id       Int    @id
+  code     String @default("")
+  name     String
+  country  String @default("")
+  industry String @default("")
+  status   String @default("Active")
+}
+
+model Division {
+  id           Int    @id
+  enterpriseId Int?
+  code         String @default("")
+  name         String
+  headName     String @default("")
+  status       String @default("Active")
+
+  @@index([enterpriseId])
+}
+
+model Company {
+  id          Int    @id
+  divisionId  Int?
+  code        String @default("")
+  companyCode String @default("")
+  name        String
+  legalEntity String @default("")
+  country     String @default("")
+  status      String @default("Active")
+
+  @@index([divisionId])
+}
+
+model BusinessUnit {
+  id         Int    @id
+  companyId  Int?
+  code       String @default("")
+  name       String
+  costCenter String @default("")
+  status     String @default("Active")
+
+  @@index([companyId])
+}
+
+model Department {
+  id             Int       @id @default(autoincrement())
+  businessUnitId Int?
+  code           String    @default("")
+  name           String
+  status         String    @default("Active")
+  odoo_id        String?
+  last_sync_at   DateTime?
+
+  @@index([businessUnitId])
+}
+
+model JobFamily {
+  id          Int       @id @default(autoincrement())
+  code        String    @default("")
+  name        String
+  description String    @default("")
+  status      String    @default("Active")
+}
+
+model Grade {
+  id        Int       @id @default(autoincrement())
+  code      String    @default("")
+  pc        Int
+  name      String    @default("")
+  category  String    @default("")
+  minSalary Int       @default(0)
+  maxSalary Int       @default(0)
+}
+
+model Position {
+  id           Int       @id @default(autoincrement())
+  departmentId Int?
+  jobFamilyId  Int?
+  gradeId      Int?
+  code         String    @default("")
+  name         String
+  status       String    @default("Active")
+  odoo_id      String?
+  last_sync_at DateTime?
+
+  @@index([departmentId])
+  @@index([jobFamilyId])
+}
+
+// --- EMPLOYEE ---------------------------------
+model Employee {
+  id             Int      @id // explicit id (200001+ for imported)
+  nik            String // Person Number (not unique: source has 1 dup)
+  name           String
+  status         String   @default("Active")
+  // Employment / org placement
+  companyId      Int?
+  divisionId     Int?
+  businessUnitId Int?
+  departmentId   Int?
+  positionId     Int?
+  gradeId        Int?
+  managerId      Int? // supervisor Employee.id
+  approver1Id    Int? // Approval 1: Koordinator / Team Lead / SPV
+  approver2Id    Int? // Approval 2: Manager / Dept Head / HR Manager
+  employmentType String   @default("")
+  role           String   @default("employee")
+  joinDate       String   @default("")
+  endDate        String   @default("")
+  // Bio
+  gender         String   @default("")
+  birthPlace     String   @default("")
+  birthDate      String   @default("")
+  nationality    String   @default("")
+  religion       String   @default("")
+  maritalStatus  String   @default("")
+  ktp            String   @default("")
+  phone          String   @default("")
+  email          String   @default("")
+  personalEmail  String   @default("")
+  address        String   @default("")
+  city           String   @default("")
+  province       String   @default("")
+  country        String   @default("")
+  location       String   @default("")
+  // Legacy plain-text fields (demo compatibility)
+  dept           String   @default("")
+  position       String   @default("")
+  jobPosition    String   @default("") // Odoo Job Position (Staff, Manager, etc.)
+  jobTitle       String   @default("") // Odoo Job Title (Videographer & Editor Staff, etc.)
+  salary         Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+   odoo_id            String?   // ID dari Odoo
+  imported_from      String?   // "odoo" jika dari Odoo
+  last_sync_at       DateTime? // Waktu sync terakhir
+  odooWorkLocationId String?   // ID lokasi kerja di Odoo
+  workLocationCode   String?   // Kode aturan jam kerja terpetakan ('ho', 'sales', 'gudang', 'livestream')
+
+  payroll     Payroll?
+  assignments ScheduleAssignment[]
+  attendance  Attendance[]
+
+  @@index([nik])
+  @@index([managerId])
+  @@index([approver1Id])
+  @@index([approver2Id])
+  @@index([departmentId])
+  @@index([companyId])
+}
+
+// --- ONBOARDING TEMPLATE ----------------------
+// Master onboarding/induction templates. JSON-shaped fields (sections, review
+// items, assignment criteria) are stored as JSON strings � matching how other
+// models here keep structured data (e.g. ShiftPattern.days, LeaveType.levels).
+// Id is client-supplied (like Employee/User) so the offline store and the DB agree.
+model OnboardingTemplate {
+  id           Int      @id
+  name         String
+  active       Boolean  @default(true)
+  autoAssign   Boolean  @default(false)
+  mainSections String   @default("[]") // JSON: array of sections
+  reviewItems  String? // JSON: array, or null when unused
+  criteria     String   @default("{}") // JSON: { employmentTypes, departmentIds, companyIds, positionIds }
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// --- LEAVE ------------------------------------
+model LeaveType {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  maxDays     Int
+  requireDoc  Boolean  @default(false)
+  levels      String   @default("[\"supervisor\"]") // JSON string: ["supervisor","indirect_sup","hr_manager"]
+  autoApprove Boolean  @default(false)
+  active      Boolean  @default(true)
+  formFields  Json?    // Array konfigurasi Form Builder: [{ id, label, type, required, options, placeholder }]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  leaves Leave[]
+}
+
+model Leave {
+  id         Int       @id @default(autoincrement())
+  userId     Int
+  user       User      @relation(fields: [userId], references: [id])
+  typeId     Int
+  leaveType  LeaveType @relation(fields: [typeId], references: [id])
+  typeName   String
+  startDate  String
+  endDate    String
+  days       Int       @default(1)
+  note       String?
+  customData Json?     // Isian form dinamis dari Form Builder
+  attachment String?   // URL / path dokumen lampiran
+  status     String    @default("Pending") // Pending | Approved | Rejected | Withdrawn
+  steps      Json?     // Riwayat & status approver bertingkat: [{ level, type, label, approverId, approverName, status, note, actedAt }]
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+}
+
+// --- HOLIDAY ----------------------------------
+model Holiday {
+  id        Int      @id @default(autoincrement())
+  country   String
+  name      String
+  date      String
+  type      String   @default("National") // National | Optional | Company
+  recurring Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+// --- SHIFT ------------------------------------
+model Shift {
+  id        Int      @id @default(autoincrement())
+  name      String
+  code      String   @unique
+  startTime String
+  endTime   String
+  breakMins Int      @default(60)
+  color     String   @default("#3b82f6")
+  type      String   @default("Regular") // Regular | Off | Flexible
+  overnight Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model ShiftPattern {
+  id          Int      @id @default(autoincrement())
+  name        String
+  description String?
+  days        String // JSON: {"1":4,"2":4,...,"7":5} shiftId per day
+  createdAt   DateTime @default(now())
+
+  workSchedules WorkSchedule[]
+}
+
+model WorkSchedule {
+  id            Int          @id @default(autoincrement())
+  name          String
+  patternId     Int
+  pattern       ShiftPattern @relation(fields: [patternId], references: [id])
+  effectiveDate String
+  endDate       String?
+  timezone      String       @default("WIB (UTC+7)")
+  active        Boolean      @default(true)
+  createdAt     DateTime     @default(now())
+
+  assignments ScheduleAssignment[]
+}
+
+model ScheduleAssignment {
+  id            Int          @id @default(autoincrement())
+  empId         Int
+  employee      Employee     @relation(fields: [empId], references: [id])
+  wsId          Int
+  workSchedule  WorkSchedule @relation(fields: [wsId], references: [id])
+  effectiveDate String
+  endDate       String?
+  createdAt     DateTime     @default(now())
+}
+
+// --- ATTENDANCE -------------------------------
+model Attendance {
+  id            Int      @id @default(autoincrement())
+  empId         Int
+  employee      Employee @relation(fields: [empId], references: [id])
+  date          String   // YYYY-MM-DD
+  checkIn       String?  // HH:MM, null jika belum clock in
+  checkOut      String?  // HH:MM, null jika belum clock out
+  status        String   @default("Present") // Present | Late | Absent
+  lateMinutes   Int      @default(0)
+  penaltyAmount Int      @default(0)
+  note          String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([empId, date])
+}
+
+
+// --- PAYROLL ----------------------------------
+model Payroll {
+  id         Int       @id @default(autoincrement())
+  empId      Int       @unique
+  employee   Employee  @relation(fields: [empId], references: [id])
+  month      Int
+  year       Int
+  basic      Int
+  allowance  Int       @default(0)
+  overtime   Int       @default(0)
+  deduction  Int       @default(0)
+  bpjsHealth Int       @default(0)
+  bpjsTk     Int       @default(0)
+  pph21      Int       @default(0)
+  paid       Boolean   @default(false)
+  paidAt     DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+}
+
+// --- GENERIC APP STATE ------------------------
+// Cross-device sync for the remaining zustand stores. Each store persists its
+// serialized state as one row keyed by the store name (last-write-wins). Big
+// relational data (employees, users, org structure) stays in its own tables.
+model AppState {
+  key       String   @id
+  value     String // serialized JSON store state
+  updatedAt DateTime @updatedAt
+}
+
+// --- MENU MANAGEMENT --------------------------
+model MenuItem {
+  id        Int        @id @default(autoincrement())
+  key       String     @unique
+  label     String
+  icon      String?
+  href      String?
+  parentId  Int?
+  parent    MenuItem?  @relation("MenuTree", fields: [parentId], references: [id])
+  children  MenuItem[] @relation("MenuTree")
+  roles     String     @default("[]")
+  departments String?  @default("[\"*\"]")
+  order     Int        @default(0)
+  active    Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@index([parentId])
+}
+
+// --- ROLE MANAGEMENT --------------------------
+model Role {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  label       String
+  color       String   @default("#666666")
+  description String?
+  permissions Json     @default("[]")
+  isSystem    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// --- PERMISSION MANAGEMENT --------------------
+model Permission {
+  id          Int      @id @default(autoincrement())
+  key         String   @unique
+  name        String
+  module      String   @default("common")
+  description String?
+  group       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([module])
+}
+
+// --- BRANDING --------------------------------
+model Branding {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String   @default("")
+  type      String   @default("text")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model OdooSettings {
+  id        String   @id @default(cuid())
+  url       String
+  db        String
+  user      String
+  apiKey    String
+  model     String   @default("hr.employee")
+  syncEnabled Boolean @default(false)
+  autoSyncInterval Int @default(0)
+  lastSyncAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// --- FLOWABLE WORKFLOW ENGINE --------------------
+model FlowableSettings {
+  id        String   @id @default(cuid())
+  url       String   @default("http://localhost:8080/flowable-rest")
+  uiUrl     String   @default("http://localhost:8080/flowable-ui")
+  username  String   @default("admin")
+  password  String   @default("test")
+  enabled   Boolean  @default(false)
+  syncEnabled Boolean @default(false)
+  lastSyncAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model WorkflowDefinition {
+  id          Int      @id @default(autoincrement())
+  key         String   @unique
+  name        String
+  description String   @default("")
+  xml         String   @db.Text
+  forms       Json?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  instances   ProcessInstance[]
+}
+
+model ProcessInstance {
+  id            Int      @id @default(autoincrement())
+  definitionId  Int
+  definition    WorkflowDefinition @relation(fields: [definitionId], references: [id])
+  flowableId    String?  // Flowable process instance ID
+  status        String   @default("pending") // pending, active, completed, cancelled
+  currentStep   String   @default("")
+  initiatorId   Int
+  variables     Json     @default("{}")
+  startedAt     DateTime @default(now())
+  completedAt   DateTime?
+  updatedAt     DateTime @updatedAt
+  
+  tasks         ProcessTask[]
+  
+  @@index([definitionId])
+  @@index([initiatorId])
+  @@index([status])
+}
+
+model ProcessTask {
+  id          Int      @id @default(autoincrement())
+  instanceId  Int
+  instance    ProcessInstance @relation(fields: [instanceId], references: [id])
+  flowableTaskId String? // Flowable task ID
+  taskKey     String   // BPMN element ID
+  taskName    String
+  assigneeId  Int?
+  status      String   @default("pending") // pending, completed, rejected
+  variables   Json     @default("{}")
+  completedAt DateTime?
+  note        String?
+  createdAt   DateTime @default(now())
+  
+  @@index([instanceId])
+  @@index([assigneeId])
+  @@index([status])
+}
+
+// --- LIVESTREAM OPERATIONS & PAYROLL ----------
+model LivestreamSlot {
+  id           Int      @id @default(autoincrement())
+  date         String   // YYYY-MM-DD
+  slotNumber   Int      // 1 s/d 12
+  timeRange    String   // "00:00 - 02:00", "02:00 - 04:00", dst.
+  startTime    String   // "00:00"
+  endTime      String   // "02:00"
+  
+  hostId       Int?     // Employee.id
+  hostName     String?  // Melly, Sevia, Romi, Rizki, Cecil, Mella
+  channel      String   @default("TikTok Live")
+  status       String   @default("Scheduled") // Scheduled | On-Air | Completed | Empty
+  notes        String?
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  sessionLogs  LivestreamSessionLog[]
+
+  @@unique([date, slotNumber, channel])
+  @@index([date])
+  @@index([hostId])
+}
+
+model LivestreamSessionLog {
+  id              Int             @id @default(autoincrement())
+  slotId          Int?
+  slot            LivestreamSlot? @relation(fields: [slotId], references: [id])
+  hostId          Int             // Employee.id
+  hostName        String
+  date            String          // YYYY-MM-DD
+  
+  scheduledStart  String          // "08:00"
+  scheduledEnd    String          // "10:00"
+  actualStart     String?         // "08:03"
+  actualEnd       String?         // "10:01"
+  
+  durationMinutes Int             @default(0) // Menit aktual siaran
+  durationHours   Float           @default(0) // Jam aktual
+  lateMinutes     Int             @default(0) // Keterlambatan masuk live
+  penaltyAmount   Int             @default(0) // Potongan denda telat
+  
+  status          String          @default("Scheduled") // Scheduled | On-Air | Completed | Late | Missed
+  notes           String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([hostId, date])
+  @@index([slotId])
+}
+
+model LivestreamRateConfig {
+  id           Int      @id @default(autoincrement())
+  name         String   @default("Standar Host Livestream")
+  tiers        Json     // [ { "minHours": 60, "maxHours": 90, "ratePerHour": 60000 }, { "minHours": 91, "maxHours": 120, "ratePerHour": 65000 }, { "minHours": 121, "maxHours": 150, "ratePerHour": 70000 } ]
+  underMinRate Int      @default(50000) // Tarif jika < 60 jam
+  overMaxRate  Int      @default(70000) // Tarif jika > 150 jam
+  penaltyPer10Min Int   @default(10000) // Denda per keterlambatan 1-10 menit
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// --- WORK LOCATION RULES & PENALTIES ----------
+model WorkLocationConfig {
+  id                 Int       @id @default(autoincrement())
+  locationCode       String    @unique // ho, gudang, sales, livestream
+  locationName       String    // Head Office, Gudang Cakung, Area Sales, Studio Livestream
+  workDays           String    @default("Senin-Jumat")
+  gracePeriodMinutes Int       @default(0) // Default 0 menit toleransi (sesuai instruksi)
+  schedules          Json      @default("[]") // [ { "day": "Senin-Jumat", "startTime": "09:00", "endTime": "18:00", "breakMinutes": 60 } ]
+  latePenalties      Json      @default("[]") // [ { "min": 1, "max": 10, "amount": 10000, "label": "1 - 10 Menit" } ]
+  rewardAmount       Int       @default(0) // 200000
+  rewardCriteria     String?   // Kriteria reward kehadiran penuh
+  active             Boolean   @default(true)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+}
+
+// --- ODOO WORK LOCATION MAPPING ---------------
+model OdooWorkLocation {
+  id                 Int       @id @default(autoincrement())
+  odoo_id            String    @unique // ID dari Odoo: "8", "9", "10", "11"
+  name               String    // "Gudang", "Head Office", "Manhattan", "Others"
+  locationType       String?   // "office", dsb.
+  mappedLocationCode String?   // 'gudang', 'ho', 'livestream', 'sales'
+  active             Boolean   @default(true)
+  last_sync_at       DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+}
+
+

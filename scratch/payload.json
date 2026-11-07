@@ -1,0 +1,10 @@
+{
+  "mappings": [
+    { "odoo_id": "9", "mappedLocationCode": "gudang" },
+    { "odoo_id": "8", "mappedLocationCode": "ho" },
+    { "odoo_id": "10", "mappedLocationCode": "livestream" },
+    { "odoo_id": "11", "mappedLocationCode": "sales" }
+  ],
+  "applyToEmployees": true
+}
+

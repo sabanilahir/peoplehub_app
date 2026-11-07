@@ -1,0 +1,244 @@
+<USER_REQUEST>
+/plan Name	Level Jabatan	Department	Job Position	Atasan Langsung	Approval 1	Approval 2
+Tan Sui Lian	Senior Staff	FAT	Finance AP	Devita Lesmana	MOH. RAUL AMARULLAH	Devita Lesmana
+Nurcahya Sakti	Staff	Support	Office Boy	Novi Atien Purwana Putri	Sandy	Novi Atien Purwana Putri
+Imam Mustadi	Staff	Support	Office Boy	Novi Atien Purwana Putri	Sandy	Novi Atien Purwana Putri
+Tino Pratama	Staff	Support	Driver	Novi Atien Purwana Putri	Sandy	Novi Atien Purwana Putri
+Muhammad Naufal Syauqii	Staff	Fullfilment	Staff Warehouse	Rhesa Gunawan	Rhesa Gunawan	
+Valena Revelin	Senior Staff	Brand Marketing	KOL Specialist	Devan Widiananda Rachman	Devan Widiananda Rachman	
+Agusto Hendrik Fernando	Staff	Live Streaming	Livestream Operator	Salma Aulia Insani	Salma Aulia Insani	
+Muhamad Andri Saputra	Staff	Fullfilment	Staff Packing Warehouse	Rhesa Gunawan	Rhesa Gunawan	
+Alfitra Swary Fachreza	Staff	Fullfilment	Admin Scan Warehouse	Rhesa Gunawan	Rhesa Gunawan	
+Panut Al Bashir	Staff	Fullfilment	Admin Scan Warehouse	Rhesa Gunawan	Rhesa Gunawan	
+Didih Murodi	Staff	Fullfilment	Staff Packing Warehouse	Rhesa Gunawan	Rhesa Gunawan	
+Cindy Herawati	Staff	Fullfilment	Admin Gudang Online	Rhesa Gunawan	Rhesa Gunawan	
+Rizki Mulyono	Staff	Live Streaming	Livestream Operator	Salma Aulia Insani	Salma Aulia Insani	
+Muhammad Aryansyah	Staff	Fullfilment	Admin Gudang Online	Rhesa Gunawan	Rhesa Gunawan	
+Tajul	Staff	Fullfilment	Staff Packing Warehouse	Rhesa Gunawan	Rhesa Gunawan	
+Juhenah	Staff	Live Streaming	Livestream Host	Salma Aulia Insani	Salma Aulia Insani	
+Nico Rahmat Fauzi	Manager	Sales Offline	Key Account Manager (MT)	Ronny Daeng Badjie	Andy Lesmana	
+Ismail	Supervisor / Coordinator	Fullfilment	Senior Staff Gudang Offline	Rhesa Gunawan	Rhesa Gunawan	
+Tika Fitriyah Dewi	Staff	Fullfilment	Admin Gudang Offline	Rhesa Gunawan	Rhesa Gunawan	
+Daniel	Staff	Fullfilment	Admin Gudang	Rhesa Gunawan	Rhesa Gunawan	
+Hasan	Staff	Fullfilment	Office Boy	Rhesa Gunawan	Rhesa Gunawan	
+Novi Atien Purwana Putri	Manager	HR/GA	HRGA Head	Andy Lesmana	Andy Lesmana	
+Dian Rosnawaty	Supervisor / Coordinator	Sales Offline	Sales Executive Supervisor Area Pontianak	Ronny Daeng Badjie	Ronny Daeng Badjie	
+Rini Indriani	Supervisor / Coordinator	Sales Offline	Sales Executive Supervisor Area Banjarmasin	Ronny Daeng Badjie	Ronny Daeng Badjie	
+Sarta	Staff	Fullfilment	Staff Packing Warehouse	Rhesa Gunawan	Rhesa Gunawan	
+Pirlo Wan Saliem	Staff	Fullfilment	Staff Packing Warehouse	Rhesa Gunawan	Rhesa Gunawan	
+Dwi Widna Zhazanty	Staff	Live Streaming	Livestream Host	Salma Aulia Insani	Salma Aulia Insani	
+Anne Marliane T.R	Senior Staff	Brand Marketing	Graphic Design Staff	Agung Purnama	Agung Purnama	
+Ayu Fitriana Anjarwati	Staff	Sales Offline	Sales Promotion MD	Nico Rahmat Fauzi	Nico Rahmat Fauzi	
+UTARY PRAMESTI RAHAYU	Staff	Live Streaming	Livestream Host	Salma Aulia Insani	Salma Aulia Insani	
+Noel Jeconiah Janitra Setjo	Staff	Brand Marketing	KOL Specialist	Devan Widiananda Rachman	Devan Widiananda Rachman	
+Gerry Krisnandi	Staff	Brand Marketing	Videographer & Editor Staff	muhammad rifki	muhammad rifki	
+Wanda Haptasari	Senior Staff	Sales Offline	Reseller Officer	Ronny Daeng Badjie	Ronny Daeng Badjie	
+Andhika Agil Prasetya	Staff	Fullfilment	Staff Packing Warehouse	Rhesa Gunawan	Rhesa Gunawan	
+Maulana Malik Ibrahim	Staff	Fullfilment	Staff Packing Warehouse	Rhesa Gunawan	Rhesa Gunawan	
+Andre Ferdiansyah	Staff	Fullfilment	Staff Packing Warehouse	Rhesa Gunawan	Rhesa Gunawan	
+Ongki Andrean	Staff	Live Streaming	Livestream Operator	Salma Aulia Insani	Salma Aulia Insani	
+Dian Novita	Supervisor / Coordinator	Sales Offline	Sales Executive Supervisor Area Pekanbaru	Ronny Daeng Badjie	Ronny Daeng Badjie	
+Rudiansyah 	Senior Staff	Supplychain	Supplychain Staff	Yuke Valency	Yuke Valency	
+Rachel Diandra Chairunnisa	Staff	Brand Marketing	Content Creator	muhammad rifki	muhammad rifki	
+Putry Rinjani	Staff	Sales Offline	Sales Promotion MD	Nico Rahmat Fauzi	Nico Rahmat Fauzi	
+Melyta Hasty Dwi Andini Kharis	Staff	FAT	Finance Staff (KOL & Ads)	Devita Lesmana	MOH. RAUL AMARULLAH	Devita Lesmana
+Muhammad imam Suhandi	Senior Staff	Sales Offline	Area Sales Palembang	Ronny Daeng Badjie	Ronny Daeng Badjie	
+Fina septania	Senior Staff	Sales Offline	Sales Executive Supervisor Area Padang	Ronny Daeng Badjie	Ronny Daeng Badjie	
+Agung Purnama	Supervisor / Coordinator	Brand Marketing	Creative Design Marketing	Vira Hadist	Vira Hadist	
+SELVI RAHMANDANI	Staff	Fullfilment	Admin Gudang	Rhesa Gunawan	Rhesa Gunawan	
+Indri Novianti	Supervisor / Coordinator	Sales Offline	SPV Semarang	Ronny Daeng Badjie	Ronny Daeng Badjie	
+MOH. RAUL AMARULLAH	Supervisor / Coordinator	FAT	Koordinator Finance	Devita Lesmana	MOH. RAUL AMARULLAH	Devita Lesmana
+Nisa Afni Oktafia 	Staff	Live Streaming	Host Live	Salma Aulia Insani	Salma Aulia Insani	
+Doni Damara	Staff	Fullfilment	Security	Rhesa Gunawan	Rhesa Gunawan	
+Adestya Suci Pratiwi	Staff	Live Streaming	Host Live	Salma Aulia Insani	Salma Aulia Insani	
+Milah Diyah Kustiyani Khairo	Staff	Sales Offline	Admin Sales GT	Ronny Daeng Badjie	Ronny Daeng Badjie	
+SHERLY OKTAVIANI	Staff	Sales Offline	Admin Reseller	Wanda Haptasari	Wanda Haptasari	Ronny Daeng Badjie
+ARI TEGAR RIAWAN	Staff	Brand Marketing	Videographer & Editor Staff	Agung Purnama	Agung Purnama	
+Ahmad Ansori Budiaji	Staff	Fullfilment	Packing Gudang	Rhesa Gunawan	Rhesa Gunawan	
+Achmad Rizali	Staff	Fullfilment	Packing Gudang	Rhesa Gunawan	Rhesa Gunawan	
+M Zaky Abdillah	Staff	Fullfilment	Packing Gudang	Rhesa Gunawan	Rhesa Gunawan	
+Agung Septa Wijaya	Staff	Brand Marketing	Videographer & Editor Staff	Agung Purnama	Agung Purnama	
+SEPTIANA	Staff	Fullfilment	Asst. Warehouse Lead Offline	Rhesa Gunawan	Rhesa Gunawan	
+RIFKA SYIFA ZAKIYA	Staff	Brand Marketing	Affiliate Marketing	Bagas Ikhwan Muharram	Bagas Ikhwan Muharram	
+Vidya Shevina	Staff	FAT	Finance AR	Devita Lesmana	MOH. RAUL AMARULLAH	Devita Lesmana
+Faizah Nur Hasanah	Staff	Brand Marketing	Affiliate Marketing	Bagas Ikhwan Muharram	Bagas Ikhwan Muharram	
+RM Syauqi Soeryohananto	Senior Staff	Brand Marketing	Videographer & Editor Staff	Agung Purnama	Agung Purnama	
+RUSNIAWATI	Staff	Live Streaming	Host Live	Salma Aulia Insani	Salma Aulia Insani	
+Asharianto	Staff	Fullfilment	Admin Retur	Rhesa Gunawan	Rhesa Gunawan	
+Muhammad Firdaus	Staff	Brand Marketing	Videographer & Editor Staff	muhammad rifki	muhammad rifki	
+Rizki Rufi Sabila	Staff	Brand Marketing	Videographer & Editor Staff	muhammad rifki	muhammad rifki	
+Nur Chotimah	Staff	Live Streaming	Host Live	Salma Aulia Insani	Salma Aulia Insani	
+Zulfikri Yarahman	Staff	Brand Marketing	Videographer & Editor Staff	muhammad rifki	muhammad rifki	
+Muhamad Denies Nurrohman	Staff	Brand Marketing	Videographer & Editor Staff	Agung Purnama	Agung Purnama	
+muhammad rifki	Staff	Brand Marketing	Videographer & Editor Staff	muhammad rifki	muhammad rifki	
+MUHAMAD TEGAR	Staff	Live Streaming	Operator Livestream	Salma Aulia Insani	Salma Aulia Insani	
+Peralihan Talenta Aurora Nz	Staff	Live Streaming	Host Live	Salma Aulia Insani	Salma Aulia Insani	
+Muhammad Arsya Fahrezi	Staff	Brand Marketing	Videographer & Editor Staff	muhammad rifki	muhammad rifki	
+RIANTY OCTAVIANA DJAMI	Supervisor / Coordinator	Sales Offline	Sales Executive Supervisor Area Kupang	Ronny Daeng Badjie	Ronny Daeng Badjie	
+Antonius Oscar Pascale Aditya Syahputra	Staff	Brand Marketing	Videographer & Editor Staff	muhammad rifki	muhammad rifki	
+Gaudentio Oriensu Dioktokusuma	Staff	Brand Marketing	Videographer & Editor Staff	muhammad rifki	muhammad rifki	
+Nadilla	Staff	Live Streaming	Host Live	Salma Aulia Insani	Salma Aulia Insani	
+Asyuni Simanjuntak	Staff	FAT	Finance Staff	Devita Lesmana	MOH. RAUL AMARULLAH	Devita Lesmana
+Vira Mutiara Hadits	Manager	Brand Marketing	Brand Manager	Andy Lesmana	Andy Lesmana	
+Sarah Muthia Rahma	Staff	Brand Marketing	Creative Officer	Thalia Vernanda	Thalia Vernanda	
+Dwi ratu andika rahayu	Staff	Live Streaming	Livestream Host	Salma Aulia Insani	Salma Aulia Insani	
+Elza Mourine Clarista	Staff	HR/GA	HRGA Generalist	Novi Atien Purwana Putri	Sandy	Novi Atien Purwana Putri
+Hiskia Sinaga	Staff	Fullfilment	Warehouse Leader Online	Rhesa Gunawan	Rhesa Gunawan	
+Yusuf Hannanto Wibowo	Staff	Fullfilment	Packing Gudang	Rhesa Gunawan	Rhesa Gunawan	
+Dedi	Staff	Fullfilment	Packing Gudang	Rhesa Gunawan	Rhesa Gunawan	
+Maryatun	Supervisor / Coordinator	Sales Offline	Area Sales Purwokerto	Ronny Daeng Badjie	Ronny Daeng Badjie	
+Devita Lesmana Teng	Manager	FAT	Finance Accounting 	Andy Lesmana	Andy Lesmana	
+Setiani Purnama Dewi	Staff	Live Streaming	Host Live	Salma Aulia Insani	Salma Aulia Insani	
+Rahayu prasetyaning Wulandari	Supervisor / Coordinator	Sales Offline	Area Sales Supervisor - Surabaya	Ronny Daeng Badjie	Ronny Daeng Badjie	
+Randi Apriyansyah	Staff	Sales Offline	Sales Merchandiser	Nico Rahmat Fauzi	Nico Rahmat Fauzi	
+Tarono	Staff	Support	Office Boy	Novi Atien Purwana Putri	Sandy	Novi Atien Purwana Putri
+Warsito	Staff	Support	Driver	Novi Atien Purwana Putri	Sandy	Novi Atien Purwana Putri
+Muis	Staff	Fullfilment	Armada Gudang	Rhesa Gunawan	Rhesa Gunawan	
+Agus	Staff	Fullfilment	Armada Gudang	Rhesa Gunawan	Rhesa Gunawan	
+Agung Hakiki	Staff	Fullfilment	Armada Gudang	Rhesa Gunawan	Rhesa Gunawan	
+Anggi Wahyudin	Staff	Fullfilment	Armada Gudang	Rhesa Gunawan	Rhesa Gunawan	
+Sandy	Supervisor / Coordinator	HR/GA	Koordinator GA	Novi Atien Purwana Putri	Novi Atien Purwana Putri	
+Rhesa Gunawan	Staff	Fullfilment	Fullfilment Lead	Rhesa Gunawan	Rhesa Gunawan	
+Suhibi	Staff	Fullfilment	Armada Gudang	Rhesa Gunawan	Rhesa Gunawan	
+Suharjo	Staff	Fullfilment	Armada Gudang	Rhesa Gunawan	Rhesa Gunawan	
+Zaeni	Staff	Fullfilment	Armada Gudang	Rhesa Gunawan	Rhesa Gunawan	
+Eniseventina Giawa	Staff	Fullfilment	Armada Gudang	Rhesa Gunawan	Rhesa Gunawan	
+Sofyan Hadi	Staff	Support	Driver	Novi Atien Purwana Putri	Sandy	Novi Atien Purwana Putri
+Ridho Adi Setiawan	Staff	Fullfilment	Security	Rhesa Gunawan	Rhesa Gunawan	
+Vionna Febrianni Limiarti	Staff	Product Development	Product Development	Andy Lesmana	Andy Lesmana	
+Rakhmat Hidayat	Staff	Support	Office Boy	Novi Atien Purwana Putri	Sandy	Novi Atien Purwana Putri
+Michelle Sifran	Staff	Live Streaming	Host Live	Salma Aulia Insani	Salma Aulia Insani	
+Ronny Daeng Badjie	Manager	Sales Offline	GT Manager	Andy Lesmana	Andy Lesmana	
+Muhammad Baidillah	Staff	Fullfilment	Packing Gudang	Rhesa Gunawan	Rhesa Gunawan	
+Zakki Izza Hadirati Maulana	Staff	Fullfilment	Packing Gudang	Rhesa Gunawan	Rhesa Gunawan	
+Brigita Caroline Simanungkalit	Senior Staff	Brand Marketing	Art Director	Vira Hadist	Vira Hadist	
+Riska Rustiani	Staff	Sales Offline	Admin Sales MT	Nico Rahmat Fauzi	Nico Rahmat Fauzi	
+Yolanda Septifani Purba	Staff	Live Streaming	Host Live	Salma Aulia Insani	Salma Aulia Insani	
+Mega Putri Wijaya	Staff	Live Streaming	Host Live	Salma Aulia Insani	Salma Aulia Insani	
+Fadhilah	Staff	Brand Marketing	Data Analyst	Vira Hadist	Vira Hadist	
+FETY SUSIANI	Supervisor / Coordinator	Sales Offline	Area Sales Supervisor Kediri	Ronny Daeng Badjie	Ronny Daeng Badjie	
+Yani hardianti	Supervisor / Coordinator	Sales Offline	Area Sales Supervisor Medan	Ronny Daeng Badjie	Ronny Daeng Badjie	
+Yulian Agung Setia 	Supervisor / Coordinator	Sales Offline	Area Sales Supervisor Lampung	Ronny Daeng Badjie	Ronny Daeng Badjie	
+SRI DEWI MANDALIKA 	Supervisor / Coordinator	Sales Offline	Area Sales Supervisor Lombok	Ronny Daeng Badjie	Ronny Daeng Badjie	
+Rizka Fitriani 	Staff	Live Streaming	Host Live	Salma Aulia Insani	Salma Aulia Insani	
+Nadya Analinta 	Staff	Sales Offline	Sales Merchandiser - Bandung	Ronny Daeng Badjie	Ronny Daeng Badjie	
+Arif Rahmat Abdullah SE	Supervisor / Coordinator	Ecommerce & Ads	Online Sales Manager	Vira Hadist	Vira Hadist	
+Yuke Valency	Manager	Purchasing	Lead of Purchasing	Andy Lesmana	Andy Lesmana	
+Alma Aprilia	Staff	Purchasing	 Purchasing Specialist	Yuke Valency	Yuke Valency	
+Desviani Alyaa	Staff	Live Streaming	Host Live	Salma Aulia Insani	Salma Aulia Insani	
+RETI KISMARINI 	Supervisor / Coordinator	Sales Offline	Area Sales Supervisor Bandung	Ronny Daeng Badjie	Ronny Daeng Badjie	
+Itang	Staff	Fullfilment	Packing Gudang	Rhesa Gunawan	Rhesa Gunawan	
+Maulana Yusuf	Staff	Fullfilment	Packing Gudang	Rhesa Gunawan	Rhesa Gunawan	
+Muhamad Hasim Asari	Staff	Fullfilment	Packing Gudang	Rhesa Gunawan	Rhesa Gunawan	
+Rama Aditya Fauzi	Staff	Fullfilment	Packing Gudang	Rhesa Gunawan	Rhesa Gunawan	
+Iqbal Ramadhan Priatna	Staff	Fullfilment	Packing Gudang	Rhesa Gunawan	Rhesa Gunawan	
+Irpan	Staff	Fullfilment	Packing Gudang	Rhesa Gunawan	Rhesa Gunawan	
+Lintang Afifah 	Staff	Live Streaming	Host Live	Salma Aulia Insani	Salma Aulia Insani	
+Rindiani Sekar Arum	Staff	Live Streaming	Host Live	Salma Aulia Insani	Salma Aulia Insani	
+Aulia laela	Staff	Live Streaming	Host Live	Salma Aulia Insani	Salma Aulia Insani	
+Luthfia Faradila	Staff	Live Streaming	Host Live	Salma Aulia Insani	Salma Aulia Insani	
+Marsela	Supervisor / Coordinator	Sales Offline	Area Sales Supervisor - Yogyakarta	Ronny Daeng Badjie	Ronny Daeng Badjie	
+Eni Setiyowati	Supervisor / Coordinator	Sales Offline	Area Sales Supervisor - Batam	Ronny Daeng Badjie	Ronny Daeng Badjie	
+ADDIS INTAN AMALIA PUTRI	Supervisor / Coordinator	Sales Offline	Area Sales Supervisor - Malang	Ronny Daeng Badjie	Ronny Daeng Badjie	
+Serly Dauhan	Supervisor / Coordinator	Sales Offline	Area Sales Supervisor - Manado	Ronny Daeng Badjie	Ronny Daeng Badjie	
+Romawati 	Supervisor / Coordinator	Sales Offline	BA - Surabaya	Ronny Daeng Badjie	Ronny Daeng Badjie	
+Thalia Vernanda	Supervisor / Coordinator	Brand Marketing	Asst. Brand Marketing	Vira Hadist	Vira Hadist	
+Mahardhika Dwi Ananta Sofyan	Supervisor / Coordinator	Brand Marketing	ADS Lead	Vira Hadist	Vira Hadist	
+Viona Anggraina	Staff	Brand Marketing	Admin Marketing	Vira Hadist	Vira Hadist	
+Bagas Ikhwan Muharram	Supervisor / Coordinator	Brand Marketing	Lead Affiliate	Arif Rahmat Abdullah SE	Arif Rahmat Abdullah SE	
+YOLANDA DWI PUTRI	Supervisor / Coordinator	Sales Offline	Area Sales Supervisor - Padang	Ronny Daeng Badjie	Ronny Daeng Badjie	
+Aztrio Ridho Anugrah  	Supervisor / Coordinator	Sales Offline	Area Sales Supervisor - Makassar	Ronny Daeng Badjie	Ronny Daeng Badjie	
+ARIES MARGIANTO	Senior Staff	Supplychain	Supplychain Senior Staff	Yuke Valency	Yuke Valency	
+Salma Aulia Insani	Supervisor / Coordinator	Live Streaming	Livestream Lead	Arif Rahmat Abdullah SE	Andy Lesmana	
+Galang Alfiyansyah	Staff	Ecommerce & Ads	Ads Specialist	Mahardihika	Mahardhika Dwi Ananta Sofyan	
+Femmy Isnawati	Staff	Brand Marketing	Creative Officer	Thalia Vernanda	Thalia Vernanda	
+Windy Putri Iryanto	Staff	HR/GA	Talent Acquisition	Novi Atien Purwana Putri	Novi Atien Purwana Putri	
+Devan Widiananda Rachman	Supervisor / Coordinator	Brand Marketing	Lead KOL	Vira Hadist	Vira Hadist	
+
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-11-03T16:38:48+07:00.
+
+The user's current state is as follows:
+Other open documents:
+- d:\data pribadi\project\manusistem\manusistem_demo-main\scripts\seed_leave_types.mjs (LANGUAGE_UNSPECIFIED)
+- d:\data pribadi\project\manusistem\manusistem_demo-main\src\app\(protected)\sysadmin\workflow\page.jsx (LANGUAGE_UNSPECIFIED)
+- d:\data pribadi\project\manusistem\manusistem_demo-main\src\app\(protected)\mss\approve-leave\page.jsx (LANGUAGE_UNSPECIFIED)
+- d:\data pribadi\project\manusistem\manusistem_demo-main\src\app\(protected)\sysadmin\leave-workflow\page.jsx (LANGUAGE_UNSPECIFIED)
+- d:\data pribadi\project\manusistem\manusistem_demo-main\scripts\test_2_tier_approval.mjs (LANGUAGE_UNSPECIFIED)
+
+The user has mentioned some items in the form @[ITEM]. Here is extra information about the items that were mentioned by the user, in the order that they appear:
+
+/plan is a [Slash Command]:
+<PLAN>The user is requesting that you think and plan carefully before executing the upcoming task.
+Carefully research the task, make sure that you and the user are aligned on the goals and requirements,
+create a detailed implementation plan artifact, and get user approval on the plan before making any code changes (besides artifacts)
+or running any modifying commands.
+
+# Guidelines
+- Establish a shared understanding of the task with the user. If there are any ambiguities, underspecified requirements,
+or implicit assumptions, clarify them with the user before proceeding.
+- Thoroughly research the codebase to establish a solid understanding of the relevant components, systems, dependencies, and architecture.
+As you research, provide verbal updates of your research steps and thought process with the user, so they can follow along.
+- Create an implementation plan artifact that outlines your proposed execution strategy.
+Set request_feedback = true and user_facing = true in the ArtifactMetadata. The user will automatically
+see any new and modified plans you create, so DO NOT re-summarize the plan.
+- Only after the user explicitly approves the plan should you proceed to execution.
+- Verify that your changes have the desired effects e.g. run unit tests, make sure code builds, etc. before claiming that the task is complete.
+- After you've completed your task and verified that your solution works, create a walkthrough artifact to summarize your work.
+
+# Planning Mode Artifacts
+When in planning mode, you should create two special artifacts.
+
+# Implementation Plan
+Path: <Artifact Directory>/<plan_name>.md
+
+**Purpose**: A technical design document to present your implementation plan to the user for feedback and approval.
+After reading the document, the user should understand the key technical details of your plan, and be able to make an informed decision on whether to approve it.
+This document should be very detailed, including code snippets, diffs, mermaid diagrams, verification strategies, and background information.
+
+**Format**: Use the following format, omitting any irrelevant sections:
+
+## [Goal Description]
+Provide a brief description of the problem, any background context, and what the change accomplishes.
+
+## User Review Required
+Document anything that requires user review or feedback, for example, breaking changes or significant design decisions. Use GitHub alerts (IMPORTANT/WARNING/CAUTION) to highlight critical items.
+
+## Open Questions
+Any clarifying or design questions for the user that will impact the implementation plan. Use GitHub alerts (IMPORTANT/WARNING/CAUTION) to highlight critical items.
+
+## Proposed Changes
+Group files by component (e.g., package, feature area, dependency layer) and order logically (dependencies first). Separate components with horizontal rules for visual clarity.
+
+### [Component Name]
+Summary of what will change in this component with explicit code snippets and diffs. For specific files, Use [NEW] and [DELETE] to demarcate new and deleted files, for example:
+#### [MODIFY] file basename
+#### [NEW] file basename
+#### [DELETE] file basename
+
+## Verification Plan
+Summary of how you will verify that your changes have the desired effects.
+
+### Automated Tests
+Exact commands to run automated tests
+
+### Manual Verification
+Instructions for what the user should manually verify.
+
+# Walkthrough
+Path: <Artifact Directory>/walkthrough.md
+
+**Purpose**: After completing work, summarize what you accomplished. Update an existing walkthrough for related follow-up work rather than creating a new one.
+
+**Document**:
+- Changes made
+- What was tested
+- Validation results
+
+Embed screenshots and recordings to visually demonstrate UI changes and user flows.</PLAN>
+
+The user has uploaded 1 image(s):
+- C:/Users/lahirs/.gemini/antigravity/brain/5a98aac6-a4cb-4a5f-9394-77d4c6e08078/.user_uploaded/media_1793698727745_2b6cdd97.jpg
+You can embed this image in an artifact if you need the USER to review it.
+</ADDITIONAL_METADATA>

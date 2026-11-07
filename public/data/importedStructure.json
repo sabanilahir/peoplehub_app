@@ -1,0 +1,1809 @@
+{
+  "enterprises": [
+    {
+      "id": 1001,
+      "code": "ENT-KPB",
+      "name": "Kappabel Group",
+      "country": "Indonesia",
+      "industry": "Diversified",
+      "status": "Active"
+    }
+  ],
+  "divisions": [
+    {
+      "id": 1001,
+      "enterpriseId": 1001,
+      "code": "DIV-KPB",
+      "name": "Kappabel",
+      "headName": "",
+      "status": "Active"
+    }
+  ],
+  "companies": [
+    {
+      "id": 2001,
+      "divisionId": 1001,
+      "code": "CO-AG",
+      "companyCode": "AG",
+      "name": "PT Anugerah Andalan Gemilang",
+      "legalEntity": "PT",
+      "country": "Indonesia",
+      "status": "Active"
+    },
+    {
+      "id": 2002,
+      "divisionId": 1001,
+      "code": "CO-AM",
+      "companyCode": "AM",
+      "name": "PT Aneka Abadi Mandiri",
+      "legalEntity": "PT",
+      "country": "Indonesia",
+      "status": "Active"
+    },
+    {
+      "id": 2003,
+      "divisionId": 1001,
+      "code": "CO-BP",
+      "companyCode": "BP",
+      "name": "PT Berkah Pratama",
+      "legalEntity": "PT",
+      "country": "Indonesia",
+      "status": "Active"
+    },
+    {
+      "id": 2004,
+      "divisionId": 1001,
+      "code": "CO-CD",
+      "companyCode": "CD",
+      "name": "Dwikarya Anugerah Cambodia Ltd. - DC",
+      "legalEntity": "Other",
+      "country": "Indonesia",
+      "status": "Active"
+    },
+    {
+      "id": 2005,
+      "divisionId": 1001,
+      "code": "CO-DC",
+      "companyCode": "DC",
+      "name": "Dinamika Andalan Phils. Ltd.",
+      "legalEntity": "Other",
+      "country": "Indonesia",
+      "status": "Active"
+    },
+    {
+      "id": 2006,
+      "divisionId": 1001,
+      "code": "CO-DD",
+      "companyCode": "DD",
+      "name": "PT Dinamika Distribusi",
+      "legalEntity": "PT",
+      "country": "Indonesia",
+      "status": "Active"
+    },
+    {
+      "id": 2007,
+      "divisionId": 1001,
+      "code": "CO-DM",
+      "companyCode": "DM",
+      "name": "PT Daya Mitra Medika",
+      "legalEntity": "PT",
+      "country": "Indonesia",
+      "status": "Active"
+    },
+    {
+      "id": 2008,
+      "divisionId": 1001,
+      "code": "CO-DX",
+      "companyCode": "DX",
+      "name": "PT Dwikarya Mandiri",
+      "legalEntity": "PT",
+      "country": "Indonesia",
+      "status": "Active"
+    },
+    {
+      "id": 2009,
+      "divisionId": 1001,
+      "code": "CO-EQ",
+      "companyCode": "EQ",
+      "name": "PT Estetika Internasional",
+      "legalEntity": "PT",
+      "country": "Indonesia",
+      "status": "Active"
+    },
+    {
+      "id": 2010,
+      "divisionId": 1001,
+      "code": "CO-FI",
+      "companyCode": "FI",
+      "name": "PT Farma Inovasi Pharmaceutical",
+      "legalEntity": "PT",
+      "country": "Indonesia",
+      "status": "Active"
+    },
+    {
+      "id": 2011,
+      "divisionId": 1001,
+      "code": "CO-FP",
+      "companyCode": "FP",
+      "name": "PT Farma Prima Pharmaceutical",
+      "legalEntity": "PT",
+      "country": "Indonesia",
+      "status": "Active"
+    },
+    {
+      "id": 2012,
+      "divisionId": 1001,
+      "code": "CO-GE",
+      "companyCode": "GE",
+      "name": "PT Global Utama Engineering",
+      "legalEntity": "PT",
+      "country": "Indonesia",
+      "status": "Active"
+    },
+    {
+      "id": 2013,
+      "divisionId": 1001,
+      "code": "CO-GM",
+      "companyCode": "GM",
+      "name": "Gemilang Daya Medika Inc.",
+      "legalEntity": "Other",
+      "country": "Indonesia",
+      "status": "Active"
+    },
+    {
+      "id": 2014,
+      "divisionId": 1001,
+      "code": "CO-GN",
+      "companyCode": "GN",
+      "name": "Gemilang Daya Medika Limited",
+      "legalEntity": "Other",
+      "country": "Indonesia",
+      "status": "Active"
+    },
+    {
+      "id": 2015,
+      "divisionId": 1001,
+      "code": "CO-GS",
+      "companyCode": "GS",
+      "name": "Gemilang Daya Sejahtera Pte. Ltd.",
+      "legalEntity": "Other",
+      "country": "Indonesia",
+      "status": "Active"
+    },
+    {
+      "id": 2016,
+      "divisionId": 1001,
+      "code": "CO-IU",
+      "companyCode": "IU",
+      "name": "PT Inti Utama",
+      "legalEntity": "PT",
+      "country": "Indonesia",
+      "status": "Active"
+    },
+    {
+      "id": 2017,
+      "divisionId": 1001,
+      "code": "CO-JG",
+      "companyCode": "JG",
+      "name": "PT Jaya Anugerah Global Abadi",
+      "legalEntity": "PT",
+      "country": "Indonesia",
+      "status": "Active"
+    },
+    {
+      "id": 2018,
+      "divisionId": 1001,
+      "code": "CO-KI",
+      "companyCode": "KI",
+      "name": "PT Karya Inti Teknologi Andalan",
+      "legalEntity": "PT",
+      "country": "Indonesia",
+      "status": "Active"
+    },
+    {
+      "id": 2019,
+      "divisionId": 1001,
+      "code": "CO-MP",
+      "companyCode": "MP",
+      "name": "PT Mitra Pratama Teknologi",
+      "legalEntity": "PT",
+      "country": "Indonesia",
+      "status": "Active"
+    },
+    {
+      "id": 2020,
+      "divisionId": 1001,
+      "code": "CO-TM",
+      "companyCode": "TM",
+      "name": "PT Sinar Terang Manufaktur",
+      "legalEntity": "PT",
+      "country": "Indonesia",
+      "status": "Active"
+    }
+  ],
+  "businessUnits": [
+    {
+      "id": 3001,
+      "companyId": 2001,
+      "code": "BU3001",
+      "name": "AG - Manufacture",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3002,
+      "companyId": 2001,
+      "code": "BU3002",
+      "name": "AG - Board of Director",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3003,
+      "companyId": 2001,
+      "code": "BU3003",
+      "name": "AG - Finance & Accounting Management",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3004,
+      "companyId": 2001,
+      "code": "BU3004",
+      "name": "AG - Human Resource Management",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3005,
+      "companyId": 2001,
+      "code": "BU3005",
+      "name": "AG - Sourcing",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3006,
+      "companyId": 2002,
+      "code": "BU3006",
+      "name": "AM - Commercial",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3007,
+      "companyId": 2002,
+      "code": "BU3007",
+      "name": "AM - Supply Chain & System",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3008,
+      "companyId": 2002,
+      "code": "BU3008",
+      "name": "AM - Board of Director",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3009,
+      "companyId": 2002,
+      "code": "BU3009",
+      "name": "AM - Business & Strategy Development",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3010,
+      "companyId": 2002,
+      "code": "BU3010",
+      "name": "AM - Finance & Accounting Management",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3011,
+      "companyId": 2002,
+      "code": "BU3011",
+      "name": "AM - Data & Analytics",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3012,
+      "companyId": 2002,
+      "code": "BU3012",
+      "name": "AM - Human Resource Management",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3013,
+      "companyId": 2002,
+      "code": "BU3013",
+      "name": "AM - Digital Transformation",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3014,
+      "companyId": 2003,
+      "code": "BU3014",
+      "name": "BP - Manufacture",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3015,
+      "companyId": 2003,
+      "code": "BU3015",
+      "name": "BP - Human Resource & General Affairs",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3016,
+      "companyId": 2003,
+      "code": "BU3016",
+      "name": "BP - Board of Director",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3017,
+      "companyId": 2003,
+      "code": "BU3017",
+      "name": "BP - Finance & Accounting Management",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3018,
+      "companyId": 2003,
+      "code": "BU3018",
+      "name": "BP - Corporate Function",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3019,
+      "companyId": 2004,
+      "code": "BU3019",
+      "name": "CD - Finance & Accounting Management",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3020,
+      "companyId": 2004,
+      "code": "BU3020",
+      "name": "CD - Commercial",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3021,
+      "companyId": 2005,
+      "code": "BU3021",
+      "name": "DC - Support",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3022,
+      "companyId": 2005,
+      "code": "BU3022",
+      "name": "DC - Commercial",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3023,
+      "companyId": 2005,
+      "code": "BU3023",
+      "name": "DC - Regulatory & Quality Assurance",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3024,
+      "companyId": 2005,
+      "code": "BU3024",
+      "name": "DC - Supply Chain Management",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3025,
+      "companyId": 2005,
+      "code": "BU3025",
+      "name": "DC - Finance & Accounting Management",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3026,
+      "companyId": 2006,
+      "code": "BU3026",
+      "name": "DD - Board of Director",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3027,
+      "companyId": 2006,
+      "code": "BU3027",
+      "name": "DD - Commercial",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3028,
+      "companyId": 2006,
+      "code": "BU3028",
+      "name": "DD - Human Resource Management",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3029,
+      "companyId": 2006,
+      "code": "BU3029",
+      "name": "DD - Business Development",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3030,
+      "companyId": 2006,
+      "code": "BU3030",
+      "name": "DD - Finance & Accounting Management",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3031,
+      "companyId": 2006,
+      "code": "BU3031",
+      "name": "DD - Information Technology",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3032,
+      "companyId": 2007,
+      "code": "BU3032",
+      "name": "DM - Site Operation",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3033,
+      "companyId": 2007,
+      "code": "BU3033",
+      "name": "DM - Finance & Accounting Management",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3034,
+      "companyId": 2007,
+      "code": "BU3034",
+      "name": "DM - Human Resource Management",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3035,
+      "companyId": 2008,
+      "code": "BU3035",
+      "name": "DX - Commercial",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3036,
+      "companyId": 2008,
+      "code": "BU3036",
+      "name": "DX - Manufacture",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3037,
+      "companyId": 2008,
+      "code": "BU3037",
+      "name": "DX - Development",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3038,
+      "companyId": 2008,
+      "code": "BU3038",
+      "name": "DX - Sourcing",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3039,
+      "companyId": 2008,
+      "code": "BU3039",
+      "name": "DX - Research",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3040,
+      "companyId": 2008,
+      "code": "BU3040",
+      "name": "DX - Corporate Function",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3041,
+      "companyId": 2008,
+      "code": "BU3041",
+      "name": "DX - Finance & Accounting Management",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3042,
+      "companyId": 2008,
+      "code": "BU3042",
+      "name": "DX - Human Resource Management",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3043,
+      "companyId": 2008,
+      "code": "BU3043",
+      "name": "DX - Discovery",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3044,
+      "companyId": 2008,
+      "code": "BU3044",
+      "name": "DX - Board of Director",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3045,
+      "companyId": 2008,
+      "code": "BU3045",
+      "name": "DX - Corporate Social Integration",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3046,
+      "companyId": 2009,
+      "code": "BU3046",
+      "name": "EQ - Human Resources & General Affairs",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3047,
+      "companyId": 2009,
+      "code": "BU3047",
+      "name": "EQ - Development",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3048,
+      "companyId": 2009,
+      "code": "BU3048",
+      "name": "EQ - Research",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3049,
+      "companyId": 2009,
+      "code": "BU3049",
+      "name": "EQ - Board of Director",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3050,
+      "companyId": 2009,
+      "code": "BU3050",
+      "name": "EQ - Finance & Accounting",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3051,
+      "companyId": 2009,
+      "code": "BU3051",
+      "name": "EQ - Commercial",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3052,
+      "companyId": 2010,
+      "code": "BU3052",
+      "name": "FI - Manufacture",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3053,
+      "companyId": 2010,
+      "code": "BU3053",
+      "name": "FI - Finance & Accounting Management",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3054,
+      "companyId": 2010,
+      "code": "BU3054",
+      "name": "FI - Corporate Function",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3055,
+      "companyId": 2011,
+      "code": "BU3055",
+      "name": "FP - Commercial",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3056,
+      "companyId": 2011,
+      "code": "BU3056",
+      "name": "FP - Manufacture",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3057,
+      "companyId": 2011,
+      "code": "BU3057",
+      "name": "FP - Finance & Accounting Management",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3058,
+      "companyId": 2011,
+      "code": "BU3058",
+      "name": "FP - Human Resource Management",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3059,
+      "companyId": 2011,
+      "code": "BU3059",
+      "name": "FP - Board of Director",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3060,
+      "companyId": 2011,
+      "code": "BU3060",
+      "name": "FP - Corporate Function",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3061,
+      "companyId": 2011,
+      "code": "BU3061",
+      "name": "FP - Purchasing",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3062,
+      "companyId": 2012,
+      "code": "BU3062",
+      "name": "GE - Commercial",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3063,
+      "companyId": 2012,
+      "code": "BU3063",
+      "name": "GE - Finance & Accounting Management",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3064,
+      "companyId": 2012,
+      "code": "BU3064",
+      "name": "GE - Human Resource Management",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3065,
+      "companyId": 2013,
+      "code": "BU3065",
+      "name": "GM - Finance & Accounting Management",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3066,
+      "companyId": 2013,
+      "code": "BU3066",
+      "name": "GM - Commercial",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3067,
+      "companyId": 2013,
+      "code": "BU3067",
+      "name": "GM - Human Resource Management",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3068,
+      "companyId": 2013,
+      "code": "BU3068",
+      "name": "GM - Development",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3069,
+      "companyId": 2014,
+      "code": "BU3069",
+      "name": "GN - Commercial",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3070,
+      "companyId": 2014,
+      "code": "BU3070",
+      "name": "GN - Finance & Accounting Management",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3071,
+      "companyId": 2014,
+      "code": "BU3071",
+      "name": "GN - Human Resource Management",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3072,
+      "companyId": 2015,
+      "code": "BU3072",
+      "name": "GS - Commercial",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3073,
+      "companyId": 2016,
+      "code": "BU3073",
+      "name": "IU - Sourcing & Purchasing",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3074,
+      "companyId": 2016,
+      "code": "BU3074",
+      "name": "IU - Corporate Quality Management",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3075,
+      "companyId": 2016,
+      "code": "BU3075",
+      "name": "IU - Human Resource Management",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3076,
+      "companyId": 2016,
+      "code": "BU3076",
+      "name": "IU - Information Technology",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3077,
+      "companyId": 2016,
+      "code": "BU3077",
+      "name": "IU - Legal Affairs",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3078,
+      "companyId": 2016,
+      "code": "BU3078",
+      "name": "IU - Board of Director",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3079,
+      "companyId": 2016,
+      "code": "BU3079",
+      "name": "IU - Corporate Finance & Tax",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3080,
+      "companyId": 2016,
+      "code": "BU3080",
+      "name": "IU - Corporate Audit & Risk Management",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3081,
+      "companyId": 2016,
+      "code": "BU3081",
+      "name": "IU - Dharma Dexa",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3082,
+      "companyId": 2016,
+      "code": "BU3082",
+      "name": "IU - Corporate Communication",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3083,
+      "companyId": 2016,
+      "code": "BU3083",
+      "name": "IU - International Business Development",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3084,
+      "companyId": 2017,
+      "code": "BU3084",
+      "name": "JG - Finance & Accounting Management",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3085,
+      "companyId": 2017,
+      "code": "BU3085",
+      "name": "JG - Information Technology",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3086,
+      "companyId": 2017,
+      "code": "BU3086",
+      "name": "JG - Commercial",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3087,
+      "companyId": 2017,
+      "code": "BU3087",
+      "name": "JG - Board of Director",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3088,
+      "companyId": 2017,
+      "code": "BU3088",
+      "name": "JG - Human Resource Management",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3089,
+      "companyId": 2018,
+      "code": "BU3089",
+      "name": "KI - Commercial",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3090,
+      "companyId": 2018,
+      "code": "BU3090",
+      "name": "KI - Human Resource Management",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3091,
+      "companyId": 2018,
+      "code": "BU3091",
+      "name": "KI - Information Technology",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3092,
+      "companyId": 2018,
+      "code": "BU3092",
+      "name": "KI - Finance & Accounting Management",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3093,
+      "companyId": 2018,
+      "code": "BU3093",
+      "name": "KI - Data Analytics",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3094,
+      "companyId": 2019,
+      "code": "BU3094",
+      "name": "MP - Information Technology",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3095,
+      "companyId": 2019,
+      "code": "BU3095",
+      "name": "MP - Financial & Accounting Management",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3096,
+      "companyId": 2019,
+      "code": "BU3096",
+      "name": "MP - Board of Director",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3097,
+      "companyId": 2019,
+      "code": "BU3097",
+      "name": "MP - Corporate Communication & Design",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3098,
+      "companyId": 2019,
+      "code": "BU3098",
+      "name": "MP - General Services",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3099,
+      "companyId": 2019,
+      "code": "BU3099",
+      "name": "MP - Legal Affairs",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3100,
+      "companyId": 2019,
+      "code": "BU3100",
+      "name": "MP - Purchasing & Export Import",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3101,
+      "companyId": 2019,
+      "code": "BU3101",
+      "name": "MP - Internal Audit",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3102,
+      "companyId": 2019,
+      "code": "BU3102",
+      "name": "MP - Human Resource Management",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3103,
+      "companyId": 2019,
+      "code": "BU3103",
+      "name": "MP - Corporate Secretary",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3104,
+      "companyId": 2020,
+      "code": "BU3104",
+      "name": "TM - Commercial",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3105,
+      "companyId": 2020,
+      "code": "BU3105",
+      "name": "TM - Board of Director",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3106,
+      "companyId": 2020,
+      "code": "BU3106",
+      "name": "TM - Engineering",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3107,
+      "companyId": 2020,
+      "code": "BU3107",
+      "name": "TM - Human Resource & General Affairs",
+      "costCenter": "",
+      "status": "Active"
+    },
+    {
+      "id": 3108,
+      "companyId": 2020,
+      "code": "BU3108",
+      "name": "TM - Finance & Accounting Management",
+      "costCenter": "",
+      "status": "Active"
+    }
+  ],
+  "departments": [
+    {
+      "id": 1,
+      "businessUnitId": 1,
+      "code": "ADM",
+      "name": "Administration",
+      "status": "Active"
+    },
+    {
+      "id": 2,
+      "businessUnitId": 1,
+      "code": "BM",
+      "name": "Brand Marketing",
+      "status": "Active"
+    },
+    {
+      "id": 3,
+      "businessUnitId": 1,
+      "code": "ECOM",
+      "name": "Ecommerce & Ads",
+      "status": "Active"
+    },
+    {
+      "id": 4,
+      "businessUnitId": 1,
+      "code": "FAT",
+      "name": "FAT",
+      "status": "Active"
+    },
+    {
+      "id": 5,
+      "businessUnitId": 1,
+      "code": "FUL",
+      "name": "Fullfilment",
+      "status": "Active"
+    },
+    {
+      "id": 6,
+      "businessUnitId": 1,
+      "code": "HRGA",
+      "name": "HR/GA",
+      "status": "Active"
+    },
+    {
+      "id": 7,
+      "businessUnitId": 1,
+      "code": "LIVE",
+      "name": "Live Streaming",
+      "status": "Active"
+    },
+    {
+      "id": 8,
+      "businessUnitId": 1,
+      "code": "PD",
+      "name": "Product Development",
+      "status": "Active"
+    },
+    {
+      "id": 9,
+      "businessUnitId": 1,
+      "code": "PUR",
+      "name": "Purchasing",
+      "status": "Active"
+    },
+    {
+      "id": 10,
+      "businessUnitId": 1,
+      "code": "SAL",
+      "name": "Sales Offline",
+      "status": "Active"
+    },
+    {
+      "id": 11,
+      "businessUnitId": 1,
+      "code": "SC",
+      "name": "Supplychain",
+      "status": "Active"
+    },
+    {
+      "id": 12,
+      "businessUnitId": 1,
+      "code": "SUP",
+      "name": "Support",
+      "status": "Active"
+    },
+    {
+      "id": 13,
+      "businessUnitId": 1,
+      "code": "ENG",
+      "name": "Engineering",
+      "status": "Active"
+    },
+    {
+      "id": 14,
+      "businessUnitId": 1,
+      "code": "IT",
+      "name": "IT",
+      "status": "Active"
+    }
+  ],
+  "jobFamilies": [
+    {
+      "id": 6001,
+      "code": "SPC-SCL",
+      "name": "Supply Chain-Supply Chain Leadership",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6002,
+      "code": "ESE-SCC",
+      "name": "Engineering & Science-Science",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6003,
+      "code": "ESE-ENG",
+      "name": "Engineering & Science-Engineering",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6004,
+      "code": "QMT-MPQ",
+      "name": "Quality Management-Manufacturing/Product Quality",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6005,
+      "code": "GMT-GMT",
+      "name": "General Management-General Management",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6006,
+      "code": "FIN-TRS",
+      "name": "Finance-Treasury",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6007,
+      "code": "HRM-TND",
+      "name": "Human Resources-Training & Development (Internal)",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6008,
+      "code": "FIN-ACT",
+      "name": "Finance-Accounting",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6009,
+      "code": "SPC-WDT",
+      "name": "Supply Chain-Warehousing, Distribution & Transportation",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6010,
+      "code": "PST-MPA",
+      "name": "Production & Skilled Trades-Manufacturing Production, Processing & Assembly",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6011,
+      "code": "SPC-LOG",
+      "name": "Supply Chain-Logistics",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6012,
+      "code": "SPC-PRC",
+      "name": "Supply Chain-Procurement",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6013,
+      "code": "ESE-ETC",
+      "name": "Engineering & Science-Engineering Technicians",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6014,
+      "code": "HRM-HRG",
+      "name": "Human Resources-Human Resources Generalists",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6015,
+      "code": "AFS-FMP",
+      "name": "Administration, Facilities & Secretarial-Facilities Management & Planning",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6016,
+      "code": "ITI-ITG",
+      "name": "IT, Telecom & Internet-IT, Telecom & Internet Generalists",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6017,
+      "code": "SPC-SCO",
+      "name": "Supply Chain-Supply Chain Planning & Operations",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6018,
+      "code": "QMT-QML",
+      "name": "Quality Management-Quality Management Leadership",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6019,
+      "code": "ESE-SRS",
+      "name": "Engineering & Science-Science Research & Quality Laboratory Services",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6020,
+      "code": "PST-MPM",
+      "name": "Production & Skilled Trades-Manufacturing Plant Management",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6021,
+      "code": "QMT-BPQ",
+      "name": "Quality Management-Business Process/Service Quality",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6022,
+      "code": "FIN-FGL",
+      "name": "Finance-Finance Generalists",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6023,
+      "code": "AFS-ASE",
+      "name": "Administration, Facilities & Secretarial-Administration & Secretarial",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6024,
+      "code": "FIN-MAC",
+      "name": "Finance-Management Accounting",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6025,
+      "code": "CSC-CSE",
+      "name": "Customer Service & Contact Center Operations-Customer Service",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6026,
+      "code": "SMP-FSA",
+      "name": "Sales, Marketing & Product Management-Field Sales & Account Management",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6027,
+      "code": "SMP-SOA",
+      "name": "Sales, Marketing & Product Management-Sales Operations/Administration",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6028,
+      "code": "FIN-CCS",
+      "name": "Finance-Credit & Collections",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6029,
+      "code": "SMP-ACM",
+      "name": "Sales, Marketing & Product Management-Account & Client Management",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6030,
+      "code": "SMP-SNM",
+      "name": "Sales, Marketing & Product Management-Sales & Marketing",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6031,
+      "code": "SMP-PMM",
+      "name": "Sales, Marketing & Product Management-Product Marketing & Management",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6032,
+      "code": "FIN-FCL",
+      "name": "Finance-Financial Control",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6033,
+      "code": "CSC-CRM",
+      "name": "Customer Service & Contact Center Operations-Customer Relationship Management, Issue Resolution & Account Activation",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6034,
+      "code": "GMT-BSP",
+      "name": "General Management-Business Strategy & Planning",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6035,
+      "code": "DBI-DAW",
+      "name": "Data Analytics/Warehousing, & Business Intelligence-Data Analytics/Warehousing, & Business Intelligence Management",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6036,
+      "code": "FIN-APR",
+      "name": "Finance-Accounts Payable/Receivable",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6037,
+      "code": "PPM-GPM",
+      "name": "Project/Program Management-General Business Project/Program Management",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6038,
+      "code": "HRM-HRO",
+      "name": "Human Resources-Human Resources Operations",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6039,
+      "code": "CSC-CSL",
+      "name": "Customer Service & Contact Center Operations-Customer Service & Contact Center Operations Leadership",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6040,
+      "code": "HRM-TOD",
+      "name": "Human Resources-Talent Management & Organization Development",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6041,
+      "code": "CDN-MCD",
+      "name": "Creative & Design-Media/Communications Creative & Design",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6042,
+      "code": "FIN-FPA",
+      "name": "Finance-Corporate Finance (Financial Planning/Analysis)",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6043,
+      "code": "AFS-FCC",
+      "name": "Administration, Facilities & Secretarial-Facilities/Grounds, Custodial, Cleaning & Laundry",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6044,
+      "code": "AFS-TMS",
+      "name": "Administration, Facilities & Secretarial-Transportation & Messenger Services",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6045,
+      "code": "ITI-ITB",
+      "name": "IT, Telecom & Internet-IT Business Systems Analysts",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6046,
+      "code": "SMP-SML",
+      "name": "Sales, Marketing & Product Management-Sales, Marketing & Product Management Leadership",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6047,
+      "code": "ITI-SPE",
+      "name": "IT, Telecom & Internet-Software Product Engineering",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6048,
+      "code": "DBI-BEP",
+      "name": "Data Analytics/Warehousing, & Business Intelligence-Back-End Transaction/Data Processing",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6049,
+      "code": "ITI-ITL",
+      "name": "IT, Telecom & Internet-IT, Telecom & Internet Leadership",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6050,
+      "code": "ITI-ITA",
+      "name": "IT, Telecom & Internet-IT Applications Development",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6051,
+      "code": "ITI-ITP",
+      "name": "IT, Telecom & Internet-IT Systems Configuration & Programming",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6052,
+      "code": "LCA-CMP",
+      "name": "Legal, Compliance & Audit-Compliance",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6053,
+      "code": "LCA-IAD",
+      "name": "Legal, Compliance & Audit-Internal Audit",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6054,
+      "code": "CDN-WID",
+      "name": "Creative & Design-Web/New Media Creative & User Interface Design",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6055,
+      "code": "SMP-RAM",
+      "name": "Sales, Marketing & Product Management-Remote/Telesales & Account Management",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6056,
+      "code": "DBI-DAB",
+      "name": "Data Analytics/Warehousing, & Business Intelligence-Data Analytics & Business Intelligence (BI)",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6057,
+      "code": "HRM-TAQ",
+      "name": "Human Resources-Talent Acquisition",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6058,
+      "code": "SMP-MRA",
+      "name": "Sales, Marketing & Product Management-Market Research & Analysis",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6059,
+      "code": "FIN-TAX",
+      "name": "Finance-Tax",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6060,
+      "code": "AFS-PFS",
+      "name": "Administration, Facilities & Secretarial-Property, Facilities & Asset Security",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6061,
+      "code": "PST-PPC",
+      "name": "Production & Skilled Trades-Production Planning & Control",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6062,
+      "code": "SMP-STG",
+      "name": "Sales, Marketing & Product Management-Sales Training",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6063,
+      "code": "LCA-RAF",
+      "name": "Legal, Compliance & Audit-Regulatory Affairs",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6064,
+      "code": "ITI-ISR",
+      "name": "IT, Telecom & Internet-Information Systems Administration & Reporting",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6065,
+      "code": "ESE-TPO",
+      "name": "Engineering & Science-Technical Product Development/Research Operations",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6066,
+      "code": "ESE-JEL",
+      "name": "Engineering & Science-Joint Engineering & Science Technical Leadership",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6067,
+      "code": "SPC-IEC",
+      "name": "Supply Chain-Import/Export & Customs Operations",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6068,
+      "code": "AFS-FRR",
+      "name": "Administration, Facilities & Secretarial-Facilities Refurbishment, Repair & Maintenance",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6069,
+      "code": "CDN-PCD",
+      "name": "Creative & Design-Product Creative/Industrial Design",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6070,
+      "code": "LCA-FDP",
+      "name": "Legal, Compliance & Audit-Fraud Detection & Prevention",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6071,
+      "code": "SMP-MGL",
+      "name": "Sales, Marketing & Product Management-Marketing Generalists",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6072,
+      "code": "PPM-TPM",
+      "name": "Project/Program Management-Technical Project/Program Management",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6073,
+      "code": "NON-NON",
+      "name": "(No Job Family)",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6074,
+      "code": "HRM-PAY",
+      "name": "Human Resources-Payroll",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6075,
+      "code": "HRM-CNB",
+      "name": "Human Resources-Compensation & Benefits",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6076,
+      "code": "ITI-ITN",
+      "name": "IT, Telecom & Internet-IT Infrastructure & Systems Administration",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6077,
+      "code": "DBI-IDE",
+      "name": "Data Analytics/Warehousing, & Business Intelligence-Internal Data Engineering & Warehousing",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6078,
+      "code": "PST-HET",
+      "name": "Production & Skilled Trades-Heavy Equipment & Construction Trades",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6079,
+      "code": "HRM-HRL",
+      "name": "Human Resources-Human Resources Leadership",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6080,
+      "code": "ITI-ITY",
+      "name": "IT, Telecom & Internet-IT Security",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6081,
+      "code": "LCA-CCL",
+      "name": "Legal, Compliance & Audit-Corporate Compliance & Legal Leadership",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6082,
+      "code": "FIN-FAL",
+      "name": "Finance-Finance & Accounting Leadership",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6083,
+      "code": "GMT-RSK",
+      "name": "General Management-Risk Management",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6084,
+      "code": "LCA-LGL",
+      "name": "Legal, Compliance & Audit-Legal",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6085,
+      "code": "CCA-CAF",
+      "name": "Communications & Corporate Affairs-Corporate Affairs",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6086,
+      "code": "CCA-CCL",
+      "name": "Communications & Corporate Affairs-Communications & Corporate Affairs Leadership",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6087,
+      "code": "SMP-AMC",
+      "name": "Sales, Marketing & Product Management-Advertising & Marketing Communications",
+      "description": "",
+      "status": "Active"
+    },
+    {
+      "id": 6088,
+      "code": "ITI-ITS",
+      "name": "IT, Telecom & Internet-IT User Support",
+      "description": "",
+      "status": "Active"
+    }
+  ],
+  "positions": []
+}
