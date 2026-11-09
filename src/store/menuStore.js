@@ -91,6 +91,7 @@ import {
   CheckSquare,
   ListChecks,
   Palette,
+  Calculator,
 } from "lucide-react"
 
 const rawIconMap = {
@@ -112,6 +113,7 @@ const rawIconMap = {
   calendarCheck: CalendarCheck,
   dollar: DollarSign,
   money: DollarSign,
+  calculator: Calculator,
   wallet: Wallet,
   creditCard: CreditCard,
   receipt: Receipt,
@@ -246,9 +248,10 @@ export const DEFAULT_MENUS = [
   { id: 302, key: "hr-leave", permissionKey: "hr_leave", label: "Leave Management", icon: "calendar", href: "/hr/apply-leave", parentId: 30, roles: '["hr","hr_officer","hr_manager","superadmin"]', order: 3, active: true },
   { id: 303, key: "hr-recruitment", permissionKey: "hr_recruitment", label: "Recruitment", icon: "userCheck", href: "/hr/recruitment/job-requisition", parentId: 30, roles: '["hr","hr_manager","superadmin"]', order: 4, active: true },
   { id: 304, key: "hr-onboarding", permissionKey: "hr_onboarding", label: "Onboarding", icon: "clipboard", href: "/hr/onboarding/tracker", parentId: 30, roles: '["hr","hr_manager","superadmin"]', order: 5, active: true },
-  { id: 305, key: "hr-payroll", permissionKey: "hr_payroll", label: "Payroll", icon: "dollar", href: "/hr/payroll/odoo-sync", parentId: 30, roles: '["hr","hr_manager","superadmin"]', order: 6, active: true },
-  { id: 3051, key: "hr-payroll-odoo-sync", permissionKey: "hr_payroll_odoo_sync", label: "Integrasi Odoo Payroll", icon: "link", href: "/hr/payroll/odoo-sync", parentId: 305, roles: '["hr","hr_manager","superadmin"]', order: 1, active: true },
-  { id: 3052, key: "hr-payroll-setup", permissionKey: "hr_payroll_setup", label: "Setup Komponen Gaji", icon: "settings", href: "/hr/payroll/setup", parentId: 305, roles: '["hr","hr_manager","superadmin"]', order: 2, active: true },
+  { id: 305, key: "hr-payroll", permissionKey: "hr_payroll", label: "Payroll", icon: "dollar", href: "/hr/payroll/ho-calculator", parentId: 30, roles: '["hr","hr_manager","superadmin"]', order: 6, active: true },
+  { id: 3050, key: "hr-payroll-ho-calculator", permissionKey: "hr_payroll_ho_calculator", label: "Kalkulator Payroll HO", icon: "calculator", href: "/hr/payroll/ho-calculator", parentId: 305, roles: '["hr","hr_manager","superadmin"]', order: 1, active: true },
+  { id: 3051, key: "hr-payroll-odoo-sync", permissionKey: "hr_payroll_odoo_sync", label: "Integrasi Odoo Payroll", icon: "link", href: "/hr/payroll/odoo-sync", parentId: 305, roles: '["hr","hr_manager","superadmin"]', order: 2, active: true },
+  { id: 3052, key: "hr-payroll-setup", permissionKey: "hr_payroll_setup", label: "Setup Komponen Gaji", icon: "settings", href: "/hr/payroll/setup", parentId: 305, roles: '["hr","hr_manager","superadmin"]', order: 3, active: true },
   { id: 306, key: "hr-performance", permissionKey: "hr_performance", label: "Performance", icon: "trending", href: "/hr/performance", parentId: 30, roles: '["hr","hr_manager","superadmin"]', order: 7, active: true },
   { id: 307, key: "hr-talent", permissionKey: "hr_talent", label: "Talent", icon: "star", href: "/hr/talent", parentId: 30, roles: '["hr","hr_manager","superadmin"]', order: 8, active: true },
   { id: 308, key: "hr-org-chart", permissionKey: "hr_org_chart", label: "Org Chart", icon: "building", href: "/hr/org-chart", parentId: 30, roles: '["*"]', order: 9, active: true },
@@ -512,7 +515,7 @@ export const useMenuStore = create(
     }),
     {
       name: "hcm-menus",
-      version: 3,
+      version: 4,
       migrate: (persistedState, version) => {
         const existing = persistedState?.menus || []
         const existingKeys = new Set(existing.map((m) => m.key))
@@ -523,6 +526,15 @@ export const useMenuStore = create(
           }
           if (m.key === 'sysadmin-workflow-userlists') {
             return { ...m, roles: '["superadmin","sysadmin","hr_manager","hr","hr_officer"]', permissionKey: 'workflow_engine_userlists' }
+          }
+          if (m.key === 'hr-payroll') {
+            return { ...m, href: '/hr/payroll/ho-calculator' }
+          }
+          if (m.key === 'hr-payroll-odoo-sync') {
+            return { ...m, order: 2 }
+          }
+          if (m.key === 'hr-payroll-setup') {
+            return { ...m, order: 3 }
           }
           return m
         })

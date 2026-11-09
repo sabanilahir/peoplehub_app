@@ -78,6 +78,69 @@ export async function GET() {
       })
     }
 
+    // Auto-seed / Auto-heal jika menu Kalkulator Payroll HO belum ada di tabel MenuItem
+    const hasHoCalculator = menus.some(m => m.key === 'hr-payroll-ho-calculator')
+    if (!hasHoCalculator && menus.length > 0) {
+      const parentPayroll = menus.find(m => m.key === 'hr-payroll')
+      const parentId = parentPayroll?.id ?? 305
+
+      // Pastikan parent payroll mengarah ke /hr/payroll/ho-calculator
+      if (parentPayroll) {
+        try {
+          await prisma.menuItem.update({
+            where: { id: parentPayroll.id },
+            data: { href: '/hr/payroll/ho-calculator' }
+          })
+        } catch {}
+      }
+
+      // Geser urutan odoo-sync ke 2 dan setup ke 3
+      try {
+        await prisma.menuItem.updateMany({
+          where: { key: 'hr-payroll-odoo-sync' },
+          data: { order: 2 }
+        })
+        await prisma.menuItem.updateMany({
+          where: { key: 'hr-payroll-setup' },
+          data: { order: 3 }
+        })
+      } catch {}
+
+      // Upsert menu Kalkulator Payroll HO
+      try {
+        await prisma.menuItem.upsert({
+          where: { key: 'hr-payroll-ho-calculator' },
+          create: {
+            id: 3050,
+            key: 'hr-payroll-ho-calculator',
+            label: 'Kalkulator Payroll HO',
+            icon: 'calculator',
+            href: '/hr/payroll/ho-calculator',
+            parentId: parentId,
+            roles: JSON.stringify(['hr', 'hr_manager', 'superadmin']),
+            departments: JSON.stringify(['*']),
+            order: 1,
+            active: true,
+          },
+          update: {
+            label: 'Kalkulator Payroll HO',
+            icon: 'calculator',
+            href: '/hr/payroll/ho-calculator',
+            parentId: parentId,
+            roles: JSON.stringify(['hr', 'hr_manager', 'superadmin']),
+            departments: JSON.stringify(['*']),
+            order: 1,
+            active: true,
+          }
+        })
+      } catch {}
+
+      // Reload menus
+      menus = await prisma.menuItem.findMany({
+        orderBy: { order: 'asc' },
+      })
+    }
+
     return Response.json(menus)
   } catch {
     return dbDown()

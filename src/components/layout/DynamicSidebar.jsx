@@ -164,7 +164,8 @@ export default function DynamicSidebar() {
                       const hasChildren = childItems.length > 0
                       const isChildActive = hasChildren && childItems.some(c => isItemActive(c.href))
                       const activeItem = isItemActive(item.href) || isChildActive
-                      const isSubOpen = expandedSubIds[item.id] !== undefined ? expandedSubIds[item.id] : isChildActive
+                      const defaultOpen = isChildActive || item.key === 'hr-payroll'
+                      const isSubOpen = expandedSubIds[item.id] !== undefined ? expandedSubIds[item.id] : defaultOpen
 
                       if (hasChildren) {
                         return (
