@@ -73,6 +73,7 @@ export const DEFAULT_PERMISSIONS = [
   { id: 511, key: 'workflow_engine_main', label: 'Workflow Menu', group: 'sysadmin-workflow' },
   { id: 512, key: 'workflow_engine_designer', label: 'BPMN Designer', group: 'sysadmin-workflow' },
   { id: 513, key: 'workflow_engine_definitions', label: 'Definitions', group: 'sysadmin-workflow' },
+  { id: 517, key: 'workflow_engine_userlists', label: 'Userlists (Grup Penyetuju)', group: 'sysadmin-workflow' },
   { id: 515, key: 'workflow_engine_analytics', label: 'Workflow Analytics', group: 'sysadmin-workflow' },
   { id: 514, key: 'workflow_engine_settings', label: 'Flowable Settings', group: 'sysadmin-workflow' },
 
@@ -128,6 +129,8 @@ const PERM_ALIASES = {
   sysadmin_workflow_definitions: 'workflow_engine_definitions',
   sysadmin_workflow_analytics: 'workflow_engine_analytics',
   sysadmin_workflow_settings: 'workflow_engine_settings',
+  sysadmin_workflow_userlists: 'workflow_engine_userlists',
+  workflow_userlists: 'workflow_engine_userlists',
   user_workflow_tasks: 'workflow_tasks',
   user_workflow_my: 'workflow_my_requests',
   user_workflow_history: 'workflow_history',
@@ -152,6 +155,7 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     ...WORKFLOW_KEYS,
     'system_work_location',
     'system_leave_workflow',
+    'workflow_engine_userlists',
   ],
   hr: [
     'dashboard_view',
@@ -165,6 +169,7 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     'hr_org_chart',
     'hr_livestream_schedule',
     ...WORKFLOW_KEYS,
+    'workflow_engine_userlists',
   ],
   hr_officer: [
     'dashboard_view',
@@ -179,6 +184,7 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     'hr_livestream_schedule',
     'workflow_tasks',
     'workflow_my_requests',
+    'workflow_engine_userlists',
   ],
   manager: [
     'dashboard_view',

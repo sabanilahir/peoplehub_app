@@ -9,9 +9,75 @@ const dbDown = () => new Response(JSON.stringify({ error: 'db_unavailable' }), {
 // GET: ambil semua menu dari PostgreSQL (bukan dari Zustand!)
 export async function GET() {
   try {
-    const menus = await prisma.menuItem.findMany({
+    let menus = await prisma.menuItem.findMany({
       orderBy: { order: 'asc' },
     })
+
+    // Auto-seed / Auto-heal jika menu Userlists belum ada di tabel MenuItem
+    const hasUserlists = menus.some(m => m.key === 'sysadmin-workflow-userlists')
+    if (!hasUserlists && menus.length > 0) {
+      const parentWorkflow = menus.find(m => m.key === 'sysadmin-workflow')
+      const parentId = parentWorkflow?.id ?? 510
+
+      // Pastikan parent workflow mengizinkan hr_manager, hr, hr_officer
+      if (parentWorkflow) {
+        try {
+          await prisma.menuItem.update({
+            where: { id: parentWorkflow.id },
+            data: {
+              roles: JSON.stringify(['superadmin', 'sysadmin', 'hr_manager', 'hr', 'hr_officer'])
+            }
+          })
+        } catch {}
+      }
+
+      // Pastikan urutan analytics dan flowable-settings digeser jika perlu
+      try {
+        await prisma.menuItem.updateMany({
+          where: { key: 'sysadmin-workflow-analytics' },
+          data: { order: 5 }
+        })
+        await prisma.menuItem.updateMany({
+          where: { key: 'sysadmin-workflow-settings' },
+          data: { order: 6 }
+        })
+      } catch {}
+
+      // Upsert menu Userlists
+      try {
+        await prisma.menuItem.upsert({
+          where: { key: 'sysadmin-workflow-userlists' },
+          create: {
+            id: 517,
+            key: 'sysadmin-workflow-userlists',
+            label: 'Userlists (Grup Penyetuju)',
+            icon: 'users',
+            href: '/sysadmin/workflow/userlists',
+            parentId: parentId,
+            roles: JSON.stringify(['superadmin', 'sysadmin', 'hr_manager', 'hr', 'hr_officer']),
+            departments: JSON.stringify(['*']),
+            order: 4,
+            active: true,
+          },
+          update: {
+            label: 'Userlists (Grup Penyetuju)',
+            icon: 'users',
+            href: '/sysadmin/workflow/userlists',
+            parentId: parentId,
+            roles: JSON.stringify(['superadmin', 'sysadmin', 'hr_manager', 'hr', 'hr_officer']),
+            departments: JSON.stringify(['*']),
+            order: 4,
+            active: true,
+          }
+        })
+      } catch {}
+
+      // Reload menus
+      menus = await prisma.menuItem.findMany({
+        orderBy: { order: 'asc' },
+      })
+    }
+
     return Response.json(menus)
   } catch {
     return dbDown()

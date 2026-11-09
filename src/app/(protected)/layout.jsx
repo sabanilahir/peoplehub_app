@@ -111,7 +111,7 @@ export default function ProtectedLayout({ children }) {
 
       if (role === 'superadmin') {
         // Full access
-      } else if (['hr_manager', 'hr'].includes(role) && isHrAllowedSysadminRoute) {
+      } else if (['hr_manager', 'hr', 'hr_officer'].includes(role) && isHrAllowedSysadminRoute) {
         // Diizinkan khusus kebijakan HR & Grup Penyetuju Workflow
       } else {
         router.replace('/dashboard')
