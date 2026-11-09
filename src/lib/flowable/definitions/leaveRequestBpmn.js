@@ -1,0 +1,77 @@
+export const LEAVE_REQUEST_BPMN_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                  xmlns:flowable="http://flowable.org/bpmn"
+                  id="Definitions_LeaveRequest"
+                  targetNamespace="http://flowable.org/bpmn20">
+  <bpmn:process id="LeaveRequest" name="Leave Request Workflow" isExecutable="true">
+    <bpmn:startEvent id="StartEvent" name="Submit Leave"/>
+
+    <bpmn:sequenceFlow id="Flow_To_Sup" sourceRef="StartEvent" targetRef="Task_Supervisor"/>
+
+    <bpmn:userTask id="Task_Supervisor" name="Supervisor Approval"
+                   flowable:assignee="\${supervisorUsername}"
+                   flowable:candidateGroups="manager,managers,supervisor,supervisors,superadmin">
+      <bpmn:documentation>Review pengajuan cuti oleh atasan langsung (Supervisor / Manager).</bpmn:documentation>
+    </bpmn:userTask>
+
+    <bpmn:sequenceFlow id="Flow_Sup_To_Gw" sourceRef="Task_Supervisor" targetRef="Gateway_Sup"/>
+
+    <bpmn:exclusiveGateway id="Gateway_Sup" name="Supervisor Decision"/>
+
+    <bpmn:sequenceFlow id="Flow_Sup_Approved" name="Approved" sourceRef="Gateway_Sup" targetRef="Task_HR">
+      <bpmn:conditionExpression>\${approved == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+
+    <bpmn:sequenceFlow id="Flow_Sup_Rejected" name="Rejected" sourceRef="Gateway_Sup" targetRef="End_Rejected">
+      <bpmn:conditionExpression>\${approved == false}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+
+    <bpmn:userTask id="Task_HR" name="HR Approval"
+                   flowable:candidateGroups="hr,hr_manager,superadmin">
+      <bpmn:documentation>Verifikasi kuota dan persetujuan final oleh HR Department.</bpmn:documentation>
+    </bpmn:userTask>
+
+    <bpmn:sequenceFlow id="Flow_HR_To_Gw" sourceRef="Task_HR" targetRef="Gateway_HR"/>
+
+    <bpmn:exclusiveGateway id="Gateway_HR" name="HR Decision"/>
+
+    <bpmn:sequenceFlow id="Flow_HR_Approved" name="Final Approved" sourceRef="Gateway_HR" targetRef="End_Approved">
+      <bpmn:conditionExpression>\${approved == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+
+    <bpmn:sequenceFlow id="Flow_HR_Rejected" name="Rejected" sourceRef="Gateway_HR" targetRef="End_Rejected">
+      <bpmn:conditionExpression>\${approved == false}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+
+    <bpmn:endEvent id="End_Approved" name="Approved &amp; Synced to Payroll"/>
+    <bpmn:endEvent id="End_Rejected" name="Leave Request Rejected"/>
+  </bpmn:process>
+
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="LeaveRequest">
+      <bpmndi:BPMNShape id="StartEvent_di" bpmnElement="StartEvent">
+        <dc:Bounds x="100" y="100" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Supervisor_di" bpmnElement="Task_Supervisor">
+        <dc:Bounds x="200" y="78" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_Sup_di" bpmnElement="Gateway_Sup">
+        <dc:Bounds x="380" y="98" width="40" height="40"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_HR_di" bpmnElement="Task_HR">
+        <dc:Bounds x="480" y="78" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_HR_di" bpmnElement="Gateway_HR">
+        <dc:Bounds x="660" y="98" width="40" height="40"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Approved_di" bpmnElement="End_Approved">
+        <dc:Bounds x="760" y="100" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Rejected_di" bpmnElement="End_Rejected">
+        <dc:Bounds x="382" y="220" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>`

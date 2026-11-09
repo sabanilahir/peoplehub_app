@@ -1,6 +1,6 @@
 // src/app/api/leave/requests/route.js
 import { prisma } from '@/lib/prisma'
-import { startProcess } from '@/lib/flowable/client'
+import { startProcess, ensureLeaveProcessDeployed } from '@/lib/flowable/client'
 
 export const dynamic = 'force-dynamic'
 
@@ -373,6 +373,9 @@ export async function POST(req) {
           { name: 'supervisorUsername', value: String(supervisorUsername), type: 'string' },
           { name: 'attachment', value: String(attachment || ''), type: 'string' },
         ]
+
+        // Pastikan definisi LeaveRequest sudah ter-deploy di Flowable Engine
+        await ensureLeaveProcessDeployed()
 
         const procRes = await startProcess('LeaveRequest', flowVariables)
         if (procRes.success && procRes.data?.id) {

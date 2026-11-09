@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { LEAVE_REQUEST_BPMN_XML } from './definitions/leaveRequestBpmn.js'
 
 // Flowable REST API Client
 // Base URL - can be overridden via env or settings
@@ -124,6 +125,17 @@ export const getProcessInstance = async (processInstanceId) => {
 export const getProcessInstances = async (params = {}) => {
   try {
     const response = await flowableClient.get('/runtime/process-instances', { params })
+    return { success: true, data: response.data }
+  } catch (error) {
+    return { success: false, error: error.message, data: null }
+  }
+}
+
+export const deleteProcessInstance = async (processInstanceId, deleteReason = 'Cancelled') => {
+  try {
+    const response = await flowableClient.delete(`/runtime/process-instances/${processInstanceId}`, {
+      params: { deleteReason },
+    })
     return { success: true, data: response.data }
   } catch (error) {
     return { success: false, error: error.message, data: null }
@@ -310,6 +322,26 @@ export const submitForm = async (formFields) => {
   }
 }
 
+// Ensure LeaveRequest process is deployed in Flowable
+export const ensureLeaveProcessDeployed = async () => {
+  try {
+    const defsRes = await getProcessDefinitions({ key: 'LeaveRequest', latest: true })
+    if (defsRes.success && Array.isArray(defsRes.data?.data) && defsRes.data.data.length > 0) {
+      return { success: true, message: 'Process already deployed', data: defsRes.data.data[0] }
+    }
+
+    // Deploy the standard LeaveRequest process BPMN
+    const deployRes = await deployProcess(LEAVE_REQUEST_BPMN_XML, 'Leave Request Workflow', 'LeaveRequest')
+    if (deployRes.success) {
+      console.log('[Flowable Auto-Bootstrap] Successfully deployed LeaveRequest process definition.')
+    }
+    return deployRes
+  } catch (err) {
+    console.error('[Flowable Auto-Bootstrap error]:', err.message)
+    return { success: false, error: err.message }
+  }
+}
+
 // -- Utility ------------------------------------------------------------------
 export const testConnection = async (username = 'admin', password = 'test') => {
   try {
@@ -332,6 +364,8 @@ export default {
   startProcess,
   getProcessInstance,
   getProcessInstances,
+  deleteProcessInstance,
+  ensureLeaveProcessDeployed,
   
   // Tasks
   getTasks,

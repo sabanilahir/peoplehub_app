@@ -1,5 +1,6 @@
 // src/app/api/leave/requests/[id]/route.js
 import { prisma } from '@/lib/prisma'
+import { deleteProcessInstance, getTasks, completeTask } from '@/lib/flowable/client'
 
 export const dynamic = 'force-dynamic'
 
@@ -46,8 +47,17 @@ export async function PUT(req, { params }) {
       return Response.json({ success: false, error: 'Pengajuan cuti tidak ditemukan' }, { status: 404 })
     }
 
+    const flowProcId = leave.customData?.flowableProcessInstanceId
+
     // Aksi withdraw oleh pengaju
     if (action === 'withdraw') {
+      if (flowProcId) {
+        try {
+          await deleteProcessInstance(flowProcId, 'Withdrawn by employee')
+        } catch (e) {
+          console.warn('[Flowable deleteProcessInstance warning]:', e.message)
+        }
+      }
       const updated = await prisma.leave.update({
         where: { id: Number(id) },
         data: { status: 'Withdrawn' },
@@ -67,7 +77,27 @@ export async function PUT(req, { params }) {
 
     const nowStr = new Date().toISOString()
 
+    // Sinkronisasi ke Flowable task jika instance Flowable aktif
+    const syncFlowableTask = async (isApproved) => {
+      if (!flowProcId) return
+      try {
+        const tasksRes = await getTasks({ processInstanceId: flowProcId })
+        const activeTask = tasksRes?.data?.data?.[0]
+        if (activeTask?.id) {
+          await completeTask(activeTask.id, [
+            { name: 'approved', value: isApproved, type: 'boolean' },
+            { name: 'approverName', value: approverName || 'Approver', type: 'string' },
+            { name: 'approvalNote', value: note || (isApproved ? 'Disetujui' : 'Ditolak'), type: 'string' },
+          ])
+        }
+      } catch (e) {
+        console.warn('[syncFlowableTask warning]:', e.message)
+      }
+    }
+
     if (action === 'reject') {
+      await syncFlowableTask(false)
+
       if (pendingIdx !== -1) {
         steps[pendingIdx] = {
           ...steps[pendingIdx],
@@ -89,6 +119,8 @@ export async function PUT(req, { params }) {
     }
 
     if (action === 'approve') {
+      await syncFlowableTask(true)
+
       if (pendingIdx !== -1) {
         steps[pendingIdx] = {
           ...steps[pendingIdx],

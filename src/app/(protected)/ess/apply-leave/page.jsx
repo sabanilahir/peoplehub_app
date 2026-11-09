@@ -34,12 +34,50 @@ export default function ApplyLeavePage() {
   const [types, setTypes] = useState([])
   const [loadingTypes, setLoadingTypes] = useState(true)
 
+  // Real-time user leave requests from DB & Flowable
+  const [dbLeaves, setDbLeaves] = useState([])
+  const [loadingDbLeaves, setLoadingDbLeaves] = useState(true)
+
   const [form, setForm] = useState({ type: '', start: '', end: '', note: '' })
   const [customData, setCustomData] = useState({})
   const [submitting, setSubmitting] = useState(false)
   const [msg, setMsg] = useState(null)
 
-  // Fetch live leave types
+  // Fetch real leaves from PostgreSQL database
+  const loadMyLeaves = async () => {
+    if (!currentUser?.id) return
+    try {
+      setLoadingDbLeaves(true)
+      const res = await fetch(`/api/leave/requests?userId=${currentUser.id}`)
+      if (res.ok) {
+        const json = await res.json()
+        if (json.success && Array.isArray(json.data)) {
+          const mapped = json.data.map((l) => ({
+            id: l.id,
+            userId: l.userId,
+            name: l.user?.name || currentUser.name,
+            workflowName: 'Apply Leave',
+            type: l.typeName || l.leaveType?.name || 'Cuti',
+            start: l.startDate,
+            end: l.endDate,
+            note: l.note || '',
+            status: l.status,
+            steps: Array.isArray(l.steps) ? l.steps : [],
+            customData: l.customData || {},
+            flowableProcessInstanceId: l.customData?.flowableProcessInstanceId || null,
+          }))
+          setDbLeaves(mapped)
+          return
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load DB leaves:', err)
+    } finally {
+      setLoadingDbLeaves(false)
+    }
+  }
+
+  // Fetch live leave types & user requests
   useEffect(() => {
     const loadTypes = async () => {
       try {
@@ -62,6 +100,10 @@ export default function ApplyLeavePage() {
     loadTypes()
   }, [])
 
+  useEffect(() => {
+    loadMyLeaves()
+  }, [currentUser?.id])
+
   const activeTypes = types.filter((lt) => lt.active)
   const selectedTypeObj = activeTypes.find((lt) => lt.name === form.type)
 
@@ -71,8 +113,15 @@ export default function ApplyLeavePage() {
     setCustomData({})
   }
 
-  const myLeaves = leaves.filter((l) => l.userId === currentUser?.id)
+  // Gunakan dbLeaves jika ada, fallback ke Zustand store
+  const myLeaves = dbLeaves.length > 0 ? dbLeaves : leaves.filter((l) => l.userId === currentUser?.id)
   const [selectedLeaveId, setSelectedLeaveId] = useState(() => myLeaves[0]?.id ?? null)
+
+  useEffect(() => {
+    if (myLeaves.length > 0 && !selectedLeaveId) {
+      setSelectedLeaveId(myLeaves[0].id)
+    }
+  }, [myLeaves])
 
   const leaveUsed = (typeName) =>
     myLeaves
@@ -120,7 +169,7 @@ export default function ApplyLeavePage() {
       setSubmitting(true)
       setMsg(null)
 
-      // 1. Simpan ke Database PostgreSQL melalui API
+      // 1. Simpan ke Database PostgreSQL melalui API (otomatis memicu Flowable BPMN Engine)
       const payload = {
         userId: currentUser.id,
         typeId: lt?.id || 1,
@@ -139,34 +188,44 @@ export default function ApplyLeavePage() {
 
       const json = await res.json()
 
-      // 2. Simpan juga ke local leaveStore untuk sinkronisasi instan
-      submitLeave(
-        {
-          userId: currentUser.id,
-          name: currentUser.name,
-          workflowName: 'Apply Leave',
-          ...form,
-          customData,
-          steps: json.data?.steps,
-        },
-        getLevelsForPage('Apply Leave')
-      )
+      if (json.success) {
+        // Sinkronkan juga ke local leaveStore untuk backward compatibility
+        submitLeave(
+          {
+            userId: currentUser.id,
+            name: currentUser.name,
+            workflowName: 'Apply Leave',
+            ...form,
+            customData: json.data?.customData || customData,
+            steps: json.data?.steps,
+          },
+          getLevelsForPage('Apply Leave')
+        )
 
-      setForm({ type: '', start: '', end: '', note: '' })
-      setCustomData({})
-      setMsg({
-        type: 'success',
-        text: t('Pengajuan cuti berhasil dikirim ke database & diteruskan ke atasan!', 'Leave request submitted successfully!'),
-      })
+        // Muat ulang daftar real-time dari PostgreSQL
+        await loadMyLeaves()
 
-      setTimeout(() => setMsg(null), 4000)
+        const isFlowableStarted = !!json.data?.customData?.flowableProcessInstanceId
 
-      setTimeout(() => {
-        const latest = useLeaveStore.getState().leaves.filter((l) => l.userId === currentUser.id).at(-1)
-        if (latest) setSelectedLeaveId(latest.id)
-      }, 50)
+        setForm({ type: '', start: '', end: '', note: '' })
+        setCustomData({})
+        setMsg({
+          type: 'success',
+          text: isFlowableStarted
+            ? t('Pengajuan cuti berhasil dikirim & proses Flowable BPMN telah berjalan!', 'Leave request submitted & Flowable BPMN process started!')
+            : t('Pengajuan cuti berhasil disimpan ke database.', 'Leave request saved successfully.'),
+        })
+
+        if (json.data?.id) {
+          setSelectedLeaveId(json.data.id)
+        }
+
+        setTimeout(() => setMsg(null), 5000)
+      } else {
+        setMsg({ type: 'error', text: json.error || 'Terjadi kendala saat menyimpan permohonan ke database.' })
+      }
     } catch (err) {
-      setMsg({ type: 'error', text: 'Terjadi kendala saat mengirim permohonan ke database.' })
+      setMsg({ type: 'error', text: 'Terjadi kendala saat mengirim permohonan ke server: ' + err.message })
     } finally {
       setSubmitting(false)
     }
@@ -178,11 +237,30 @@ export default function ApplyLeavePage() {
     return !(l.steps || []).some((s) => s.status === 'Approved' || s.status === 'Rejected')
   }
 
-  const handleWithdraw = (l) => {
+  const handleWithdraw = async (l) => {
     if (!confirm(`Withdraw pengajuan cuti "${l.type}" (${l.start} — ${l.end})?`)) return
-    withdrawLeave(l.id)
-    setMsg({ type: 'success', text: t('Pengajuan cuti berhasil di-withdraw.', 'Leave request withdrawn successfully.') })
-    setTimeout(() => setMsg(null), 3000)
+    try {
+      const res = await fetch(`/api/leave/requests/${l.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'withdraw' }),
+      })
+      const json = await res.json()
+      if (json.success) {
+        withdrawLeave(l.id)
+        await loadMyLeaves()
+        setMsg({
+          type: 'success',
+          text: t('Pengajuan cuti berhasil di-withdraw & instance Flowable dibatalkan.', 'Leave request withdrawn successfully.'),
+        })
+      } else {
+        setMsg({ type: 'error', text: json.error || 'Gagal membatalkan pengajuan cuti.' })
+      }
+    } catch (e) {
+      withdrawLeave(l.id)
+      setMsg({ type: 'success', text: t('Pengajuan cuti berhasil di-withdraw.', 'Leave request withdrawn.') })
+    }
+    setTimeout(() => setMsg(null), 3500)
   }
 
   return (
@@ -347,7 +425,18 @@ export default function ApplyLeavePage() {
                     )}
                   </Td>
                   <Td>
-                    <StatusBadge status={l.status} />
+                    <div className="flex flex-col gap-1 items-start">
+                      <StatusBadge status={l.status} />
+                      {l.flowableProcessInstanceId ? (
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-sky-50 text-sky-700 border border-sky-200">
+                          ⚡ Flowable BPMN
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-gray-50 text-gray-500 border border-gray-200">
+                          Standard
+                        </span>
+                      )}
+                    </div>
                   </Td>
                   <Td>
                     {canWithdraw(l) && (

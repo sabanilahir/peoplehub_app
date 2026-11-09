@@ -559,9 +559,12 @@ export default function DashboardPage() {
   /* ── pending tasks ──────────────────────────────────────────────────────── */
   const tasks = []
 
-  // Leave pending approval (manager/hr/superadmin)
+  // Leave pending approval (Flowable BPMN & MSS)
   if (role === 'manager' || role === 'hr' || role === 'superadmin') {
     const pendingLeaves = leaves.filter(l => {
+      // Jika pengajuan sudah memiliki instance Flowable, akan ditangani oleh flowableTasks
+      if (l.customData?.flowableProcessInstanceId) return false
+
       const ps = (l.steps || []).find(s => s.status === 'Pending')
       if (!ps) return false
       if (ps.delegatedTo === uid) return true
@@ -577,7 +580,8 @@ export default function DashboardPage() {
       title: t(`Persetujuan cuti: ${l.name}`, `Leave approval: ${l.name}`),
       subtitle: `${l.type} · ${l.start} → ${l.end}`,
       badge: t('Pending', 'Pending'),
-      href: '/hr/leave',
+      badgeColor: 'bg-amber-100 text-amber-800',
+      href: '/mss/approve-leave',
     }))
   }
 
