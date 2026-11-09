@@ -1,25 +1,99 @@
-import { NextResponse} from 'next/server'
-import { prisma} from '@/lib/prisma'
+import { NextResponse } from 'next/server'
+import { prisma } from '@/lib/prisma'
+
+const DEFAULT_SYSTEM_ROLES = [
+  { name: 'superadmin', label: 'Superadmin', color: '#dc2626', description: 'Akses penuh ke semua fitur sistem', isSystem: true },
+  { name: 'hr_manager', label: 'HR Manager', color: '#2563eb', description: 'Manajer HR dengan akses penuh ke modul HR', isSystem: true },
+  { name: 'hr', label: 'HR Staff', color: '#7c3aed', description: 'Staff HR dengan akses operasional HR', isSystem: true },
+  { name: 'hr_officer', label: 'HR Officer', color: '#0891b2', description: 'Officer HR untuk operasional harian', isSystem: true },
+  { name: 'manager', label: 'Manager', color: '#059669', description: 'Manager dengan akses MSS dan tim', isSystem: true },
+  { name: 'employee', label: 'Employee', color: '#d97706', description: 'Karyawan dengan akses ESS saja', isSystem: true },
+]
 
 export async function GET() {
- try{
-  const roles = await prisma.role.findMany({
-  orderBy: {id: 'asc'}
- })
-  return NextResponse.json(roles)
- }catch(e){
-  return NextResponse.json({error: e.message}, {status: 500})
- }
+  try {
+    let roles = await prisma.role.findMany({
+      orderBy: { id: 'asc' }
+    })
+
+    // Auto-seed default roles jika tabel masih kosong
+    if (!roles || roles.length === 0) {
+      for (const r of DEFAULT_SYSTEM_ROLES) {
+        await prisma.role.upsert({
+          where: { name: r.name },
+          update: {},
+          create: {
+            name: r.name,
+            label: r.label,
+            color: r.color,
+            description: r.description,
+            isSystem: r.isSystem,
+            permissions: [],
+          }
+        })
+      }
+      roles = await prisma.role.findMany({ orderBy: { id: 'asc' } })
+    }
+
+    const formatted = roles.map(r => ({
+      id: r.id,
+      key: r.name,
+      name: r.name,
+      label: r.label,
+      color: r.color || '#666666',
+      desc: r.description,
+      description: r.description,
+      permissions: r.permissions || [],
+      isSystem: r.isSystem || false,
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt,
+    }))
+
+    return NextResponse.json(formatted)
+  } catch (e) {
+    return NextResponse.json({ error: e.message }, { status: 500 })
+  }
 }
 
 export async function POST(req) {
- try{
-  const body = await req.json()
-  const role = await prisma.role.create({
-   data: body
- })
-  return NextResponse.json(role, {status: 201})
- }catch(e){
-  return NextResponse.json({error: e.message}, {status: 500})
- }
+  try {
+    const body = await req.json()
+    const name = (body.key || body.name || '').trim().toLowerCase()
+    const label = (body.label || '').trim()
+
+    if (!name || !label) {
+      return NextResponse.json({ error: 'Key (name) and Label are required' }, { status: 400 })
+    }
+
+    const role = await prisma.role.upsert({
+      where: { name },
+      update: {
+        label,
+        color: body.color || '#666666',
+        description: body.desc ?? body.description ?? null,
+      },
+      create: {
+        name,
+        label,
+        color: body.color || '#666666',
+        description: body.desc ?? body.description ?? null,
+        permissions: body.permissions || [],
+        isSystem: body.isSystem || false,
+      }
+    })
+
+    return NextResponse.json({
+      id: role.id,
+      key: role.name,
+      name: role.name,
+      label: role.label,
+      color: role.color,
+      desc: role.description,
+      description: role.description,
+      permissions: role.permissions || [],
+      isSystem: role.isSystem || false,
+    }, { status: 201 })
+  } catch (e) {
+    return NextResponse.json({ error: e.message }, { status: 500 })
+  }
 }

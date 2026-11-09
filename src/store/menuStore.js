@@ -275,12 +275,13 @@ export const DEFAULT_MENUS = [
   { id: 516, key: "sysadmin-work-location", permissionKey: "system_work_location", label: "Aturan Jam Kerja & Lokasi", icon: "clock", href: "/sysadmin/settings/work-location", parentId: 50, roles: '["superadmin"]', order: 10, active: true },
 
   // Workflow Management (Flowable + BPMN.js)
-  { id: 510, key: "sysadmin-workflow", label: "Workflow Engine", icon: "gitbranch", roles: '["superadmin","sysadmin"]', order: 9, active: true },
+  { id: 510, key: "sysadmin-workflow", label: "Workflow Engine", icon: "gitbranch", roles: '["superadmin","sysadmin","hr_manager","hr"]', order: 9, active: true },
   { id: 511, key: "sysadmin-workflow-main", permissionKey: "workflow_engine_main", label: "Workflow Menu", icon: "gitbranch", href: "/sysadmin/workflow", parentId: 510, roles: '["superadmin","sysadmin"]', order: 1, active: true },
   { id: 512, key: "sysadmin-workflow-designer", permissionKey: "workflow_engine_designer", label: "BPMN Designer", icon: "palette", href: "/sysadmin/workflow/designer", parentId: 510, roles: '["superadmin","sysadmin"]', order: 2, active: true },
   { id: 513, key: "sysadmin-workflow-definitions", permissionKey: "workflow_engine_definitions", label: "Definitions", icon: "clipboard", href: "/sysadmin/workflow/definitions", parentId: 510, roles: '["superadmin","sysadmin"]', order: 3, active: true },
-  { id: 515, key: "sysadmin-workflow-analytics", permissionKey: "workflow_engine_analytics", label: "Workflow Analytics", icon: "trending", href: "/sysadmin/workflow/analytics", parentId: 510, roles: '["superadmin","sysadmin"]', order: 4, active: true },
-  { id: 514, key: "sysadmin-workflow-settings", permissionKey: "workflow_engine_settings", label: "Flowable Settings", icon: "settings", href: "/sysadmin/workflow/flowable-settings", parentId: 510, roles: '["superadmin","sysadmin"]', order: 5, active: true },
+  { id: 517, key: "sysadmin-workflow-userlists", permissionKey: "workflow_engine_userlists", label: "Userlists (Grup Penyetuju)", icon: "users", href: "/sysadmin/workflow/userlists", parentId: 510, roles: '["superadmin","sysadmin","hr_manager","hr"]', order: 4, active: true },
+  { id: 515, key: "sysadmin-workflow-analytics", permissionKey: "workflow_engine_analytics", label: "Workflow Analytics", icon: "trending", href: "/sysadmin/workflow/analytics", parentId: 510, roles: '["superadmin","sysadmin"]', order: 5, active: true },
+  { id: 514, key: "sysadmin-workflow-settings", permissionKey: "workflow_engine_settings", label: "Flowable Settings", icon: "settings", href: "/sysadmin/workflow/flowable-settings", parentId: 510, roles: '["superadmin","sysadmin"]', order: 6, active: true },
 
   // User Workflow
   { id: 900, key: "user-workflow", label: "Workflow", icon: "gitbranch", roles: '["*"]', order: 10, active: true },

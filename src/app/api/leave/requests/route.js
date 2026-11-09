@@ -1,5 +1,6 @@
 // src/app/api/leave/requests/route.js
 import { prisma } from '@/lib/prisma'
+import { startProcess } from '@/lib/flowable/client'
 
 export const dynamic = 'force-dynamic'
 
@@ -105,7 +106,7 @@ export async function POST(req) {
     }
 
     // Ambil data Jenis Cuti dari DB
-    const leaveType = await prisma.leaveType.findUnique({
+    let leaveType = await prisma.leaveType.findUnique({
       where: { id: Number(typeId) },
     })
 
@@ -113,10 +114,73 @@ export async function POST(req) {
       return Response.json({ success: false, error: 'Jenis cuti tidak ditemukan' }, { status: 404 })
     }
 
-    // Ambil info Karyawan beserta Approver 1 & Approver 2
-    const employee = await prisma.employee.findUnique({
-      where: { id: Number(userId) },
-    })
+    // Penanganan Khusus Kebijakan Cuti Sakit (Point 1, 2, 3):
+    // 1. Wajib melampirkan Surat sakit dari minimal HaloDoc, Puskesmas, dan Rumah Sakit
+    // 2. Wajib melampirkan di hari H ybs sakit
+    // 3. Tidak ada surat sakit akan dianggap Unpaid Leave
+    let finalTypeId = Number(typeId)
+    let finalTypeName = leaveType.name
+    let autoConvertedNote = ''
+
+    const isSickLeave = leaveType.name.toLowerCase().includes('sakit')
+    if (isSickLeave) {
+      const todayStr = new Date().toISOString().slice(0, 10)
+      const isDayH = startDate === todayStr
+      const hasAttachment = Boolean(attachment && String(attachment).trim().length > 0)
+
+      if (!hasAttachment || !isDayH) {
+        // Cari jenis cuti Unpaid Leave di DB
+        const unpaidType = await prisma.leaveType.findFirst({
+          where: {
+            OR: [
+              { name: { contains: 'Unpaid', mode: 'insensitive' } },
+              { name: { contains: 'Potong Gaji', mode: 'insensitive' } },
+            ],
+          },
+        })
+
+        if (unpaidType) {
+          finalTypeId = unpaidType.id
+          finalTypeName = unpaidType.name
+        }
+
+        const reason = !hasAttachment
+          ? 'tidak melampirkan Surat Sakit (HaloDoc/Puskesmas/RS)'
+          : 'pengajuan melewati hari H sakit'
+        autoConvertedNote = ` [Otomatis Dialihkan ke Unpaid Leave: ${reason}]`
+      }
+    }
+
+    // Resolve User & Employee records (mendukung baik userId maupun employeeId)
+    let finalUserId = Number(userId)
+    let userRecord = await prisma.user.findUnique({ where: { id: finalUserId } })
+    let employee = await prisma.employee.findUnique({ where: { id: finalUserId } })
+
+    if (!userRecord && employee) {
+      // Cari apakah ada user yang employeeId-nya sama
+      const userByEmp = await prisma.user.findFirst({ where: { employeeId: finalUserId } })
+      if (userByEmp) {
+        finalUserId = userByEmp.id
+        userRecord = userByEmp
+      } else {
+        // Buat user record otomatis jika belum ada agar FK Leave_userId_fkey terpenuhi
+        userRecord = await prisma.user.create({
+          data: {
+            id: finalUserId,
+            username: employee.nik || `user_${finalUserId}`,
+            password: 'defaultPassword123',
+            name: employee.name,
+            role: employee.role || 'employee',
+            dept: employee.dept || '',
+            position: employee.position || '',
+            email: employee.email || '',
+            employeeId: employee.id,
+          },
+        })
+      }
+    } else if (userRecord && !employee && userRecord.employeeId) {
+      employee = await prisma.employee.findUnique({ where: { id: userRecord.employeeId } })
+    }
 
     const days = calcDaysBetween(startDate, endDate)
 
@@ -129,13 +193,13 @@ export async function POST(req) {
     if (app1Id) {
       approver1 = await prisma.employee.findUnique({
         where: { id: app1Id },
-        select: { id: true, name: true, jobPosition: true, role: true },
+        select: { id: true, name: true, jobPosition: true, role: true, nik: true, odoo_id: true },
       })
     }
     if (app2Id) {
       approver2 = await prisma.employee.findUnique({
         where: { id: app2Id },
-        select: { id: true, name: true, jobPosition: true, role: true },
+        select: { id: true, name: true, jobPosition: true, role: true, nik: true, odoo_id: true },
       })
     }
 
@@ -188,31 +252,49 @@ export async function POST(req) {
       }
     }
 
-    // Validasi field dinamis wajib dari Form Builder
+    // Validasi field dinamis dari Form Builder
     const fields = Array.isArray(leaveType.formFields) ? leaveType.formFields : []
+    const filledCustomData = { ...(customData || {}) }
     for (const f of fields) {
       if (f.required) {
-        const val = customData[f.id]
+        let val = filledCustomData[f.id]
         if (val === undefined || val === null || val === '') {
-          return Response.json(
-            { success: false, error: `Kolom '${f.label}' wajib diisi!` },
-            { status: 400 }
-          )
+          // Jika pengajuan dari MSS / HR atau form yang tidak menyediakan input form dinamis,
+          // berikan nilai default yang aman agar proses pengajuan cuti tidak terhambat
+          if (f.id === 'f_handover') {
+            val = 'Handover ke Rekan Tim'
+            filledCustomData[f.id] = val
+          } else if (f.id === 'f_emergency') {
+            val = '-'
+            filledCustomData[f.id] = val
+          } else if (f.id === 'f_wedding_date') {
+            val = startDate
+            filledCustomData[f.id] = val
+          } else if (f.id === 'f_hpl') {
+            val = startDate
+            filledCustomData[f.id] = val
+          } else {
+            return Response.json(
+              { success: false, error: `Kolom '${f.label}' wajib diisi!` },
+              { status: 400 }
+            )
+          }
         }
       }
     }
 
     // Simpan ke database
+    const finalNote = (note || '') + autoConvertedNote
     const created = await prisma.leave.create({
       data: {
-        userId: Number(userId),
-        typeId: Number(typeId),
-        typeName: leaveType.name,
+        userId: finalUserId,
+        typeId: finalTypeId,
+        typeName: finalTypeName,
         startDate,
         endDate,
         days,
-        note,
-        customData,
+        note: finalNote.trim() || null,
+        customData: filledCustomData,
         attachment,
         status: leaveType.autoApprove ? 'Approved' : 'Pending',
         steps,
@@ -224,6 +306,92 @@ export async function POST(req) {
         leaveType: true,
       },
     })
+
+    // Otomatis picu Flowable BPMN Engine untuk persetujuan workflow
+    if (!leaveType.autoApprove) {
+      try {
+        // Resolusi akun approver di tabel User
+        let approverUser = null
+        if (app1Id) {
+          approverUser = await prisma.user.findFirst({
+            where: {
+              OR: [
+                { id: app1Id },
+                { employeeId: app1Id },
+                ...(approver1?.nik ? [{ username: approver1.nik }] : []),
+              ],
+            },
+            select: { id: true, username: true, name: true },
+          })
+        }
+
+        let supervisorUsername = approverUser?.username
+        if (!supervisorUsername && approver1) {
+          if (approver1.odoo_id) supervisorUsername = `ODOO-${approver1.odoo_id}`
+          else if (approver1.nik) supervisorUsername = approver1.nik
+          else supervisorUsername = approver1.name
+        }
+
+        // Jika pemohon adalah koordinator (self approver 1), alihkan ke approval 2 atau HR
+        if (isSelfApprover1 && app2Id) {
+          const approver2User = await prisma.user.findFirst({
+            where: {
+              OR: [
+                { id: app2Id },
+                { employeeId: app2Id },
+                ...(approver2?.nik ? [{ username: approver2.nik }] : []),
+              ],
+            },
+            select: { id: true, username: true },
+          })
+          supervisorUsername =
+            approver2User?.username ||
+            (approver2?.odoo_id ? `ODOO-${approver2.odoo_id}` : approver2?.nik || supervisorUsername)
+        }
+
+        if (!supervisorUsername) {
+          supervisorUsername = 'admin'
+        }
+
+        const flowVariables = [
+          { name: 'leaveId', value: String(created.id), type: 'string' },
+          { name: 'employeeId', value: String(finalUserId), type: 'string' },
+          { name: 'employeeName', value: userRecord?.name || employee?.name || 'Karyawan', type: 'string' },
+          { name: 'employeeNik', value: employee?.nik || userRecord?.username || '', type: 'string' },
+          { name: 'employeeDept', value: employee?.dept || userRecord?.dept || '', type: 'string' },
+          {
+            name: 'employeePosition',
+            value: employee?.jobPosition || employee?.position || userRecord?.position || '',
+            type: 'string',
+          },
+          { name: 'leaveType', value: finalTypeName, type: 'string' },
+          { name: 'startDate', value: startDate, type: 'string' },
+          { name: 'endDate', value: endDate, type: 'string' },
+          { name: 'days', value: String(days), type: 'string' },
+          { name: 'reason', value: finalNote.trim() || 'Pengajuan Cuti', type: 'string' },
+          { name: 'supervisorId', value: String(app1Id || ''), type: 'string' },
+          { name: 'supervisorUsername', value: String(supervisorUsername), type: 'string' },
+          { name: 'attachment', value: String(attachment || ''), type: 'string' },
+        ]
+
+        const procRes = await startProcess('LeaveRequest', flowVariables)
+        if (procRes.success && procRes.data?.id) {
+          const updatedCustom = {
+            ...(customData || {}),
+            flowableProcessInstanceId: procRes.data.id,
+          }
+          await prisma.leave.update({
+            where: { id: created.id },
+            data: { customData: updatedCustom },
+          })
+          created.customData = updatedCustom
+        } else {
+          console.warn('[Flowable BPMN startProcess warning]:', procRes.error)
+        }
+      } catch (flowErr) {
+        console.error('[Flowable BPMN startProcess error]:', flowErr.message)
+      }
+    }
 
     return Response.json({ success: true, data: created }, { status: 201 })
   } catch (error) {

@@ -41,7 +41,7 @@ const LOCATION_BADGE_STYLE = {
   livestream: 'bg-purple-50 text-purple-700 border-purple-200',
 }
 
-export const OFFICIAL_DEPARTMENTS = [
+const OFFICIAL_DEPARTMENTS = [
   'Administration',
   'Brand Marketing',
   'Ecommerce & Ads',
@@ -61,7 +61,7 @@ export const OFFICIAL_DEPARTMENTS = [
 /**
  * Menghitung rentang tanggal cut-off presensi (26 bulan lalu s/d 25 bulan berjalan)
  */
-export function calculateCutoffRange(dateRef) {
+function calculateCutoffRange(dateRef) {
   const d = dateRef ? new Date(dateRef) : new Date()
   const year = d.getFullYear()
   const month = d.getMonth()

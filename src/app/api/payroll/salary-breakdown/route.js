@@ -69,6 +69,7 @@ export async function GET(request) {
     let totalGross = 0
     let totalBasic = 0
     let totalTransport = 0
+    let totalNonPermanent = 0
     let totalKpi = 0
     let withWageCount = 0
 
@@ -87,7 +88,8 @@ export async function GET(request) {
         withWageCount++
         totalBasic += breakdown.basicSalary
         totalTransport += breakdown.transportAllowance
-        totalKpi += breakdown.kpiAllowance
+        totalNonPermanent += breakdown.nonPermanentAllowance
+        totalKpi = totalNonPermanent
         totalGross += breakdown.grossSalary
       }
 
@@ -103,9 +105,11 @@ export async function GET(request) {
         hasOdooWage: basicWage > 0,
         basicSalary: breakdown.basicSalary,
         transportAllowance: breakdown.transportAllowance,
+        nonPermanentAllowance: breakdown.nonPermanentAllowance,
         kpiAllowance: breakdown.kpiAllowance,
         grossSalary: breakdown.grossSalary,
         enableTransport: breakdown.enableTransport,
+        enableNonPermanent: breakdown.enableNonPermanent,
         enableKpi: breakdown.enableKpi,
         isOverridden: breakdown.isOverridden,
         lastSyncAt: emp.last_sync_at,
@@ -127,7 +131,8 @@ export async function GET(request) {
         withoutWageCount: employees.length - withWageCount,
         totalBasic,
         totalTransport,
-        totalKpi,
+        totalNonPermanent,
+        totalKpi: totalNonPermanent,
         totalGross,
       },
       departments: allDepts,
@@ -157,7 +162,7 @@ export async function POST(request) {
 
     // Aksi 2: Update / Koreksi Basic Salary satu karyawan secara langsung
     if (action === 'update_wage') {
-      const { empId, wage, enableTransport, enableKpi } = body
+      const { empId, wage, enableTransport, enableNonPermanent, enableKpi } = body
       if (!empId) {
         return NextResponse.json({ success: false, error: 'empId wajib disertakan' }, { status: 400 })
       }
@@ -171,10 +176,11 @@ export async function POST(request) {
       })
 
       // Jika ada perubahan hak tunjangan karyawan
-      if (typeof enableTransport === 'boolean' || typeof enableKpi === 'boolean') {
+      const hasNP = typeof enableNonPermanent === 'boolean' || typeof enableKpi === 'boolean'
+      if (typeof enableTransport === 'boolean' || hasNP) {
         await saveEmployeeAllowanceOverride(empId, {
           enableTransport: enableTransport ?? true,
-          enableKpi: enableKpi ?? true,
+          enableKpi: enableNonPermanent ?? enableKpi ?? true,
         })
       }
 
@@ -187,11 +193,14 @@ export async function POST(request) {
 
     // Aksi 3: Simpan override hak tunjangan individu karyawan
     if (action === 'update_employee_allowance') {
-      const { empId, enableTransport, enableKpi } = body
+      const { empId, enableTransport, enableNonPermanent, enableKpi } = body
       if (!empId) {
         return NextResponse.json({ success: false, error: 'empId wajib disertakan' }, { status: 400 })
       }
-      const override = await saveEmployeeAllowanceOverride(empId, { enableTransport, enableKpi })
+      const override = await saveEmployeeAllowanceOverride(empId, {
+        enableTransport,
+        enableKpi: enableNonPermanent ?? enableKpi,
+      })
       return NextResponse.json({
         success: true,
         message: 'Hak tunjangan karyawan berhasil diperbarui.',
@@ -215,17 +224,18 @@ export async function POST(request) {
 
     // Aksi 5: Simpan konfigurasi persentase global & aturan pembulatan
     if (action === 'update_config') {
-      const { basicPercent, transportPercent, kpiPercent, roundingStep, locationRules } = body
+      const { basicPercent, transportPercent, nonPermanentPercent, kpiPercent, roundingStep, locationRules } = body
       const newConfig = await saveSalaryBreakdownConfig({
         basicPercent,
         transportPercent,
-        kpiPercent,
+        nonPermanentPercent: nonPermanentPercent ?? kpiPercent,
+        kpiPercent: nonPermanentPercent ?? kpiPercent,
         roundingStep,
         locationRules,
       })
       return NextResponse.json({
         success: true,
-        message: `Konfigurasi berhasil disimpan: Basic ${newConfig.basicPercent}%, Transport ${newConfig.transportPercent}%, KPI ${newConfig.kpiPercent}% (Pembulatan: Rp ${newConfig.roundingStep.toLocaleString('id-ID')})`,
+        message: `Konfigurasi berhasil disimpan: Basic ${newConfig.basicPercent}%, Transport ${newConfig.transportPercent}%, Non Permanent Allowance ${newConfig.nonPermanentPercent}% (Pembulatan: Rp ${newConfig.roundingStep.toLocaleString('id-ID')})`,
         config: newConfig,
       })
     }

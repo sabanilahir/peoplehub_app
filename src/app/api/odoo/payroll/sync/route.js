@@ -48,13 +48,22 @@ export async function GET(request) {
     const withPenaltyCount = enhancedSummary.filter((s) => s.totalPenalty > 0).length
     const withRewardCount = enhancedSummary.filter((s) => s.rewardAmount > 0).length
     const withTransportCount = enhancedSummary.filter((s) => (s.transportAllowance || 0) > 0).length
-    const withKpiCount = enhancedSummary.filter((s) => (s.kpiAllowance || 0) > 0).length
+    const withNonPermanentCount = enhancedSummary.filter((s) => (s.nonPermanentAllowance || s.kpiAllowance || 0) > 0).length
+    const withOvertimeCount = enhancedSummary.filter((s) => (s.overtimeAmount || 0) > 0).length
+    const withLeaveDeductionCount = enhancedSummary.filter((s) => (s.totalLeaveDeductions || 0) > 0).length
+    const withProrateCount = enhancedSummary.filter((s) => s.isProrated).length
 
     const totalPenaltySum = enhancedSummary.reduce((acc, s) => acc + (s.totalPenalty || 0), 0)
     const totalRewardSum = enhancedSummary.reduce((acc, s) => acc + (s.rewardAmount || 0), 0)
     const totalBasicSum = enhancedSummary.reduce((acc, s) => acc + (s.basicSalary || 0), 0)
     const totalTransportSum = enhancedSummary.reduce((acc, s) => acc + (s.transportAllowance || 0), 0)
-    const totalKpiSum = enhancedSummary.reduce((acc, s) => acc + (s.kpiAllowance || 0), 0)
+    const totalNonPermanentSum = enhancedSummary.reduce((acc, s) => acc + (s.nonPermanentAllowance ?? s.kpiAllowance ?? 0), 0)
+    const totalOvertimeSum = enhancedSummary.reduce((acc, s) => acc + (s.overtimeAmount || 0), 0)
+    const totalOvertimeHoursSum = enhancedSummary.reduce((acc, s) => acc + (s.overtimeHours || 0), 0)
+    const totalHalfDayDeductionSum = enhancedSummary.reduce((acc, s) => acc + (s.halfDayDeduction || 0), 0)
+    const totalSickDeductionSum = enhancedSummary.reduce((acc, s) => acc + (s.sickLeaveDeduction || 0), 0)
+    const totalUnpaidDeductionSum = enhancedSummary.reduce((acc, s) => acc + (s.unpaidLeaveDeduction || 0), 0)
+    const totalLeaveDeductionSum = enhancedSummary.reduce((acc, s) => acc + (s.totalLeaveDeductions || 0), 0)
     const totalGrossSum = enhancedSummary.reduce((acc, s) => acc + (s.grossSalary || 0), 0)
 
     return NextResponse.json({
@@ -67,12 +76,23 @@ export async function GET(request) {
         withPenaltyCount,
         withRewardCount,
         withTransportCount,
-        withKpiCount,
+        withNonPermanentCount,
+        withKpiCount: withNonPermanentCount, // alias
+        withOvertimeCount,
+        withLeaveDeductionCount,
+        withProrateCount,
         totalPenaltySum,
         totalRewardSum,
         totalBasicSum,
         totalTransportSum,
-        totalKpiSum,
+        totalNonPermanentSum,
+        totalKpiSum: totalNonPermanentSum, // alias
+        totalOvertimeSum,
+        totalOvertimeHoursSum: Math.round(totalOvertimeHoursSum * 100) / 100,
+        totalHalfDayDeductionSum,
+        totalSickDeductionSum,
+        totalUnpaidDeductionSum,
+        totalLeaveDeductionSum,
         totalGrossSum,
       },
       data: enhancedSummary,

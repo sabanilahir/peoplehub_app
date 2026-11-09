@@ -7,7 +7,31 @@ export const dynamic = 'force-dynamic'
  * Dataset Resmi Hari Libur Nasional & Cuti Bersama Republik Indonesia
  * Sumber acuan: SKB 3 Menteri (Menteri Agama, Menteri Ketenagakerjaan, Menteri PANRB)
  */
-export const OFFICIAL_INDONESIAN_HOLIDAYS = {
+const OFFICIAL_INDONESIAN_HOLIDAYS = {
+  2027: [
+    { name: 'Tahun Baru 2027 Masehi', date: '2027-01-01', type: 'National', recurring: true },
+    { name: 'Isra Miraj Nabi Muhammad SAW', date: '2027-01-05', type: 'National', recurring: false },
+    { name: 'Tahun Baru Imlek 2578 Kongzili', date: '2027-02-06', type: 'National', recurring: false },
+    { name: 'Cuti Bersama Tahun Baru Imlek', date: '2027-02-08', type: 'Cuti Bersama', recurring: false },
+    { name: 'Hari Suci Nyepi Tahun Baru Saka 1949', date: '2027-03-09', type: 'National', recurring: false },
+    { name: 'Cuti Bersama Hari Suci Nyepi', date: '2027-03-08', type: 'Cuti Bersama', recurring: false },
+    { name: 'Hari Raya Idul Fitri 1448 H (Hari 1)', date: '2027-03-10', type: 'National', recurring: false },
+    { name: 'Hari Raya Idul Fitri 1448 H (Hari 2)', date: '2027-03-11', type: 'National', recurring: false },
+    { name: 'Cuti Bersama Hari Raya Idul Fitri', date: '2027-03-12', type: 'Cuti Bersama', recurring: false },
+    { name: 'Cuti Bersama Hari Raya Idul Fitri', date: '2027-03-15', type: 'Cuti Bersama', recurring: false },
+    { name: 'Wafat Yesus Kristus (Jumat Agung)', date: '2027-03-26', type: 'National', recurring: false },
+    { name: 'Hari Buruh Internasional', date: '2027-05-01', type: 'National', recurring: true },
+    { name: 'Kenaikan Yesus Kristus', date: '2027-05-06', type: 'National', recurring: false },
+    { name: 'Hari Raya Idul Adha 1448 H', date: '2027-05-16', type: 'National', recurring: false },
+    { name: 'Cuti Bersama Hari Raya Idul Adha', date: '2027-05-17', type: 'Cuti Bersama', recurring: false },
+    { name: 'Hari Raya Waisak 2571 BE', date: '2027-05-20', type: 'National', recurring: false },
+    { name: 'Hari Lahir Pancasila', date: '2027-06-01', type: 'National', recurring: true },
+    { name: 'Tahun Baru Islam 1449 Hijriyah', date: '2027-06-06', type: 'National', recurring: false },
+    { name: 'Maulid Nabi Muhammad SAW', date: '2027-08-15', type: 'National', recurring: false },
+    { name: 'Hari Kemerdekaan RI ke-82', date: '2027-08-17', type: 'National', recurring: true },
+    { name: 'Cuti Bersama Hari Raya Natal', date: '2027-12-24', type: 'Cuti Bersama', recurring: false },
+    { name: 'Hari Raya Natal', date: '2027-12-25', type: 'National', recurring: true },
+  ],
   2026: [
     { name: 'Tahun Baru 2026 Masehi', date: '2026-01-01', type: 'National', recurring: true },
     { name: 'Isra Miraj Nabi Muhammad SAW', date: '2026-01-16', type: 'National', recurring: false },
@@ -60,14 +84,27 @@ export async function POST(req) {
     const targetYear = Number(body.year) || 2026
     const country = String(body.country || 'ID').toUpperCase()
 
-    const dataset = OFFICIAL_INDONESIAN_HOLIDAYS[targetYear]
+    let dataset = OFFICIAL_INDONESIAN_HOLIDAYS[targetYear]
+    let isRecurringFallback = false
+
     if (!dataset || dataset.length === 0) {
-      return Response.json(
-        {
-          error: `Dataset resmi SKB 3 Menteri belum tersedia untuk tahun ${targetYear}. Silakan tambahkan libur secara manual.`,
-        },
-        { status: 404 }
-      )
+      if (country === 'ID') {
+        isRecurringFallback = true
+        dataset = [
+          { name: `Tahun Baru ${targetYear} Masehi`, date: `${targetYear}-01-01`, type: 'National', recurring: true },
+          { name: 'Hari Buruh Internasional', date: `${targetYear}-05-01`, type: 'National', recurring: true },
+          { name: 'Hari Lahir Pancasila', date: `${targetYear}-06-01`, type: 'National', recurring: true },
+          { name: `Hari Kemerdekaan RI ke-${targetYear - 1945}`, date: `${targetYear}-08-17`, type: 'National', recurring: true },
+          { name: 'Hari Raya Natal', date: `${targetYear}-12-25`, type: 'National', recurring: true },
+        ]
+      } else {
+        return Response.json(
+          {
+            error: `Dataset resmi belum tersedia untuk ${country} ${targetYear}. Silakan tambahkan libur secara manual.`,
+          },
+          { status: 404 }
+        )
+      }
     }
 
     let addedCount = 0
@@ -117,7 +154,9 @@ export async function POST(req) {
       success: true,
       year: targetYear,
       country,
-      message: `Berhasil memuat Libur Nasional & Cuti Bersama SKB 3 Menteri RI tahun ${targetYear}. (${addedCount} baru ditambahkan, ${updatedCount} diperbarui).`,
+      message: isRecurringFallback
+        ? `Berhasil memuat 5 Hari Libur Nasional Tetap tahun ${targetYear}. (${addedCount} baru ditambahkan). Hari libur keagamaan dapat ditambahkan sesuai SKB 3 Menteri resmi.`
+        : `Berhasil memuat Libur Nasional & Cuti Bersama SKB 3 Menteri RI tahun ${targetYear}. (${addedCount} baru ditambahkan, ${updatedCount} diperbarui).`,
       addedCount,
       updatedCount,
       totalCount: allHolidays.length,

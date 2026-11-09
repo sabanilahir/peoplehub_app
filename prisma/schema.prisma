@@ -1,7 +1,8 @@
 // prisma/schema.prisma
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {
@@ -180,6 +181,7 @@ model Employee {
   payroll     Payroll?
   assignments ScheduleAssignment[]
   attendance  Attendance[]
+  overtimes   OvertimeRecord[]
 
   @@index([nik])
   @@index([managerId])
@@ -317,6 +319,27 @@ model Attendance {
   updatedAt     DateTime @updatedAt
 
   @@unique([empId, date])
+}
+
+// --- OVERTIME RECORD --------------------------
+model OvertimeRecord {
+  id           Int       @id @default(autoincrement())
+  empId        Int
+  employee     Employee  @relation(fields: [empId], references: [id])
+  date         String    // YYYY-MM-DD
+  dayName      String?   // "Kamis", "Jumat", dst.
+  startTime    String    // "18:00"
+  endTime      String    // "23:20"
+  totalHours   Float     // 5.33
+  hourlyRate   Int       @default(0) // 31960
+  totalFee     Int       @default(0) // 170455
+  taskNote     String?   // Uraian tugas lembur
+  status       String    @default("Approved") // Pending | Approved | Rejected
+  approvedById Int?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([empId, date])
 }
 
 

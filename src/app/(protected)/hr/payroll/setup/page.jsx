@@ -257,7 +257,7 @@ export default function PayrollSetupPage() {
       'Lokasi Kerja',
       `Basic Salary (${config.basicPercent}%) (Rp)`,
       `Transportation Allowance (${config.transportPercent}%) (Rp)`,
-      `KPI Allowance (${config.kpiPercent}%) (Rp)`,
+      `Non Permanent Allowance (${config.kpiPercent}%) (Rp)`,
       'GROSS SALARY (Rp)',
     ]
 
@@ -313,7 +313,7 @@ export default function PayrollSetupPage() {
       <PageHeader
         icon="🧾"
         title="Payroll Setup: Komponen Gaji Karyawan"
-        subtitle={`Basic Salary (${config.basicPercent}%) bersumber dari Wage Odoo. Tunjangan Transportasi & KPI dapat diatur per Work Location dan per Karyawan Tertentu.`}
+        subtitle={`Basic Salary (${config.basicPercent}%) bersumber dari Wage Odoo. Tunjangan Transportasi & Non Permanent Allowance (NPA) dapat diatur per Work Location dan per Karyawan Tertentu.`}
         actions={
           <div className="flex items-center gap-2">
             <button
@@ -395,7 +395,7 @@ export default function PayrollSetupPage() {
           tone="orange"
         />
         <StatCard
-          title={`KPI (${config.kpiPercent}%)`}
+          title={`NPA (${config.kpiPercent}%)`}
           value={`Rp ${((stats.totalKpi || 0) / 1000000).toFixed(1)}M`}
           icon="🎯"
           tone="teal"
@@ -498,7 +498,7 @@ export default function PayrollSetupPage() {
               { label: 'Divisi & Lokasi Kerja' },
               { label: `Basic Salary (${config.basicPercent}%)`, align: 'right' },
               { label: `Transportation Allowance (${config.transportPercent}%)`, align: 'right' },
-              { label: `KPI Allowance (${config.kpiPercent}%)`, align: 'right' },
+              { label: `Non Permanent / NPA (${config.kpiPercent}%)`, align: 'right' },
               { label: 'GROSS SALARY', align: 'right' },
               { label: 'Aksi', align: 'center', width: '70px' },
             ]}
@@ -739,7 +739,7 @@ export default function PayrollSetupPage() {
                       className="w-4 h-4 text-teal-600 rounded focus:ring-teal-500"
                     />
                     <span>
-                      Dapat <strong>KPI Allowance</strong> ({config.kpiPercent}%)
+                      Dapat <strong>Non Permanent Allowance (NPA)</strong> ({config.kpiPercent}%)
                     </span>
                   </label>
                 </div>
@@ -762,7 +762,7 @@ export default function PayrollSetupPage() {
                     </div>
                   </div>
                   <div className="p-2 bg-white rounded border border-gray-100">
-                    <div className="text-[10px] text-gray-500 font-medium">KPI Allowance</div>
+                    <div className="text-[10px] text-gray-500 font-medium">NPA (10%)</div>
                     <div className={`text-xs font-bold font-mono mt-0.5 ${enableKpiInput ? 'text-teal-700' : 'text-gray-400'}`}>
                       {enableKpiInput ? `Rp ${liveKpi.toLocaleString('id-ID')}` : 'Rp 0'}
                     </div>
@@ -889,7 +889,7 @@ export default function PayrollSetupPage() {
                             }
                             className="w-4 h-4 text-teal-600 rounded"
                           />
-                          <span>Dapat KPI Allowance</span>
+                          <span>Dapat Non Permanent Allowance (NPA)</span>
                         </label>
                       </div>
                     </div>
@@ -935,7 +935,7 @@ export default function PayrollSetupPage() {
                             }
                             className="w-4 h-4 text-teal-600 rounded"
                           />
-                          <span>Dapat KPI Allowance</span>
+                          <span>Dapat Non Permanent Allowance (NPA)</span>
                         </label>
                       </div>
                     </div>
@@ -981,7 +981,7 @@ export default function PayrollSetupPage() {
                             }
                             className="w-4 h-4 text-teal-600 rounded"
                           />
-                          <span>Dapat KPI Allowance</span>
+                          <span>Dapat Non Permanent Allowance (NPA)</span>
                         </label>
                       </div>
                     </div>
@@ -1027,7 +1027,7 @@ export default function PayrollSetupPage() {
                             }
                             className="w-4 h-4 text-teal-600 rounded"
                           />
-                          <span>Dapat KPI Allowance</span>
+                          <span>Dapat Non Permanent Allowance (NPA)</span>
                         </label>
                       </div>
                     </div>
@@ -1074,10 +1074,10 @@ export default function PayrollSetupPage() {
                       />
                     </div>
 
-                    {/* KPI Allowance */}
+                    {/* Non Permanent Allowance */}
                     <div>
                       <label className="block text-xs font-semibold text-gray-700 mb-1">
-                        KPI Allowance (%)
+                        NPA / Non Permanent (%)
                       </label>
                       <input
                         type="number"

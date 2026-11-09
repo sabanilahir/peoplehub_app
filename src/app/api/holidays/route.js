@@ -99,11 +99,23 @@ export async function PUT(req) {
   }
 }
 
-// DELETE: Hapus hari libur
+// DELETE: Hapus satu atau banyak hari libur
 export async function DELETE(req) {
   try {
     const { searchParams } = new URL(req.url)
     const id = searchParams.get('id')
+    const idsParam = searchParams.get('ids')
+
+    // Batch delete
+    if (idsParam) {
+      const ids = idsParam.split(',').map(Number).filter(Boolean)
+      if (ids.length > 0) {
+        await prisma.holiday.deleteMany({
+          where: { id: { in: ids } },
+        })
+        return Response.json({ success: true, message: `${ids.length} hari libur berhasil dihapus.` })
+      }
+    }
 
     if (!id) {
       return Response.json({ error: 'ID hari libur diperlukan.' }, { status: 400 })

@@ -1,24 +1,19 @@
 'use client'
-import { useState }          from 'react'
-import { useStructureStore }  from '@/store/structureStore'
-import { useEmployeeStore }   from '@/store/employeeStore'
-import { useUserlistStore }   from '@/store/userlistStore'
-import { useT } from '@/store/languageStore'
+import { useState, useEffect }   from 'react'
+import Link                      from 'next/link'
+import { useStructureStore }     from '@/store/structureStore'
+import { useEmployeeStore }      from '@/store/employeeStore'
+import { useUserlistStore }      from '@/store/userlistStore'
+import { useRoleStore, DEFAULT_ROLES } from '@/store/roleStore'
+import { useT }                  from '@/store/languageStore'
 import {
   PageHeader, StatCard, ActionButton, FormField, Input,
 } from '@/components/ui'
 import Icon from '@/components/ui/Icon'
 
-const SYSTEM_ROLES = [
-  { value: 'employee',   label: 'Employee',        icon: '👤' },
-  { value: 'manager',    label: 'Manager',          icon: '👥' },
-  { value: 'hr',         label: 'HR',               icon: '🗂️' },
-  { value: 'superadmin', label: 'Superadmin',       icon: '⚙️' },
-]
-
 const TYPE_META = {
   position: { label: 'By Position',    icon: '📌', desc: 'Semua karyawan dengan jabatan tertentu' },
-  role:     { label: 'By Role',        icon: '🎭', desc: 'Berdasarkan role sistem (Manager, HR, dll)' },
+  role:     { label: 'By Role',        icon: '🎭', desc: 'Berdasarkan role sistem dari Role Management' },
   employee: { label: 'By Employee ID', icon: '👤', desc: 'Pilih karyawan secara spesifik' },
   sql:      { label: 'By SQL Query',   icon: '🗄️', desc: 'Query SELECT kustom untuk menentukan user' },
 }
@@ -28,28 +23,32 @@ export default function UserlistsPage() {
   const { positions }  = useStructureStore()
   const { employees }  = useEmployeeStore()
   const { userlists, addUserlist, updateUserlist, deleteUserlist } = useUserlistStore()
+  const { roles: storeRoles, fetchRoles } = useRoleStore()
 
   const [selected,  setSelected ] = useState(userlists[0]?.id ?? null)
   const [empSearch, setEmpSearch] = useState('')
   const [msg,       setMsg      ] = useState(null)
+
+  useEffect(() => {
+    fetchRoles()
+  }, [fetchRoles])
 
   const flash = (text, type = 'success') => {
     setMsg({ text, type })
     setTimeout(() => setMsg(null), 3000)
   }
 
-  const ul     = userlists.find(l => l.id === selected)
+  const ul = userlists.find(l => l.id === selected)
   const update = (key, val) => updateUserlist(selected, { [key]: val })
 
   const toggleArr = (key, val) => {
-    const arr = ul[key]
+    const arr = ul[key] || []
     update(key, arr.includes(val) ? arr.filter(v => v !== val) : [...arr, val])
   }
 
   const addList = () => {
     const newList = { name: `Userlist ${Date.now()}`, type: 'role', roles: [], positionIds: [], employeeIds: [], sql: '' }
     addUserlist(newList)
-    // select the newly added one
     setTimeout(() => {
       const store = useUserlistStore.getState()
       const last  = store.userlists[store.userlists.length - 1]
@@ -71,15 +70,26 @@ export default function UserlistsPage() {
     e.nik.toLowerCase().includes(empSearch.toLowerCase())
   ).slice(0, 50)
 
+  // Helper pencocokan role karyawan dengan role yang dipilih
+  const matchesRole = (empRole, selectedRoles) => {
+    if (!empRole || !selectedRoles || selectedRoles.length === 0) return false
+    const r = String(empRole).toLowerCase().trim()
+    if (selectedRoles.includes(r)) return true
+    // Fallback kecocokan: jika memilih 'hr', otomatis mencakup hr_officer, hr_manager, dll
+    if (selectedRoles.includes('hr') && (r.startsWith('hr') || r.includes('hr_'))) return true
+    return false
+  }
+
   const resolvedCount = () => {
     if (!ul) return 0
-    if (ul.type === 'role')     return employees.filter(e => ul.roles.includes(e.role ?? '')).length
+    if (ul.type === 'role')     return employees.filter(e => matchesRole(e.role, ul.roles)).length
     if (ul.type === 'position') return employees.filter(e => ul.positionIds.includes(+e.positionId)).length
     if (ul.type === 'employee') return ul.employeeIds.length
     return null
   }
 
   const count = resolvedCount()
+  const effectiveRoles = (storeRoles && storeRoles.length > 0) ? storeRoles : DEFAULT_ROLES
 
   return (
     <div>
@@ -125,12 +135,12 @@ export default function UserlistsPage() {
                     : 'border-transparent hover:bg-gray-50'
                 }`}
                 onClick={() => setSelected(l.id)}>
-                <span className='flex-shrink-0 text-gray-500'><Icon e={TYPE_META[l.type].icon} size={16} /></span>
+                <span className='flex-shrink-0 text-gray-500'><Icon e={TYPE_META[l.type]?.icon || '👥'} size={16} /></span>
                 <div className='flex-1 min-w-0'>
                   <div className={`text-sm font-semibold truncate ${selected === l.id ? 'text-red-700' : 'text-gray-700'}`}>
                     {l.name}
                   </div>
-                  <div className='text-xs text-gray-400 mt-0.5'>{TYPE_META[l.type].label}</div>
+                  <div className='text-xs text-gray-400 mt-0.5'>{TYPE_META[l.type]?.label || l.type}</div>
                 </div>
                 {userlists.length > 1 && (
                   <button
@@ -168,9 +178,9 @@ export default function UserlistsPage() {
               </div>
 
               {/* Type selector */}
-              <div className='mt-4'>
-                <label className='block text-xs font-bold text-gray-500 uppercase tracking-wide mb-2'>Metode Definisi</label>
-                <div className='grid grid-cols-2 gap-2 sm:grid-cols-4'>
+              <div className='mt-5'>
+                <label className='block text-xs font-bold text-gray-500 uppercase tracking-wide mb-2'>Tipe Resolusi User</label>
+                <div className='grid grid-cols-2 sm:grid-cols-4 gap-3'>
                   {Object.entries(TYPE_META).map(([key, meta]) => (
                     <button key={key} onClick={() => update('type', key)}
                       className={`flex flex-col items-center gap-1.5 px-3 py-3 rounded-xl border-2 text-center transition ${
@@ -218,41 +228,75 @@ export default function UserlistsPage() {
               </div>
             )}
 
-            {/* ── By Role ── */}
+            {/* ── By Role (Dynamic from Role Management) ── */}
             {ul.type === 'role' && (
               <div className='bg-white rounded-2xl p-5 shadow-sm ring-1 ring-gray-100'>
-                <h3 className='text-sm font-bold text-gray-700 mb-3'>
-                  <Icon name='role' size={13} className='inline align-[-2px]' /> Pilih Role Sistem
-                  <span className='ml-2 text-xs font-normal text-gray-400'>{ul.roles.length} dipilih</span>
-                </h3>
-                <div className='flex flex-wrap gap-3'>
-                  {SYSTEM_ROLES.map(r => {
-                    const checked = ul.roles.includes(r.value)
+                <div className='flex items-center justify-between mb-3.5 flex-wrap gap-2'>
+                  <h3 className='text-sm font-bold text-gray-800 flex items-center gap-2'>
+                    <Icon name='role' size={14} className='inline align-[-2px] text-red-600' />
+                    Pilih Role Sistem
+                    <span className='ml-1 text-xs font-normal text-gray-400'>({ul.roles.length} dipilih)</span>
+                  </h3>
+                  <Link
+                    href="/sysadmin/role"
+                    className="text-xs text-red-600 hover:text-red-700 font-semibold flex items-center gap-1 transition px-2.5 py-1 rounded-lg hover:bg-red-50 border border-transparent hover:border-red-100"
+                  >
+                    <span>⚙️ Kelola di Role Management</span>
+                    <span aria-hidden="true">&rarr;</span>
+                  </Link>
+                </div>
+
+                {/* Role Buttons List */}
+                <div className='flex flex-wrap gap-2.5'>
+                  {effectiveRoles.map(r => {
+                    const roleKey = r.key || r.name
+                    const checked = ul.roles.includes(roleKey)
                     return (
-                      <button key={r.value} onClick={() => toggleArr('roles', r.value)}
-                        className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 font-semibold text-sm transition ${
+                      <button
+                        key={roleKey}
+                        onClick={() => toggleArr('roles', roleKey)}
+                        className={`flex items-center gap-2 px-3.5 py-2 rounded-xl border-2 font-semibold text-xs transition ${
                           checked
-                            ? 'border-red-400 bg-red-50 text-red-700'
-                            : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-red-200'
-                        }`}>
-                        <span className='text-gray-500'><Icon e={r.icon} size={15} /></span>
-                        {r.label}
-                        {checked && <Icon name='checkSmall' size={12} className='text-red-500' />}
+                            ? 'border-red-400 bg-red-50 text-red-700 shadow-xs'
+                            : 'border-gray-200 bg-gray-50 text-gray-700 hover:border-gray-300 hover:bg-white'
+                        }`}
+                      >
+                        <span
+                          className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: r.color || '#666666' }}
+                        />
+                        <span>{r.icon || '🛡️'}</span>
+                        <span>{r.label}</span>
+                        <span className="text-[10px] text-gray-400 font-mono font-normal">({roleKey})</span>
+                        {checked && <Icon name='checkSmall' size={13} className='text-red-600 ml-0.5' />}
                       </button>
                     )
                   })}
                 </div>
+
+                {/* Employee Preview */}
                 {ul.roles.length > 0 && (
-                  <div className='mt-3 p-3 bg-gray-50 rounded-lg'>
-                    <p className='text-xs text-gray-500 font-semibold mb-1'>Preview karyawan yang termasuk:</p>
-                    <div className='flex flex-wrap gap-1'>
-                      {employees.filter(e => ul.roles.includes(e.role ?? '')).slice(0, 10).map(e => (
-                        <span key={e.id} className='text-xs bg-white border border-gray-200 px-2 py-0.5 rounded-full text-gray-600'>
-                          {e.name.split(' ')[0]}
+                  <div className='mt-4 p-3.5 bg-gray-50 rounded-xl border border-gray-100'>
+                    <div className='flex items-center justify-between mb-2'>
+                      <p className='text-xs text-gray-600 font-bold'>Preview karyawan yang termasuk:</p>
+                      <span className='text-[11px] text-gray-500 font-medium'>
+                        {employees.filter(e => matchesRole(e.role, ul.roles)).length} orang cocok
+                      </span>
+                    </div>
+                    <div className='flex flex-wrap gap-1.5'>
+                      {employees.filter(e => matchesRole(e.role, ul.roles)).slice(0, 15).map(e => (
+                        <span key={e.id} className='inline-flex items-center gap-1 text-xs bg-white border border-gray-200 px-2.5 py-1 rounded-full text-gray-700 shadow-2xs'>
+                          <span className='font-medium'>{e.name}</span>
+                          <span className='text-[10px] text-gray-400 font-mono'>[{e.role || 'no-role'}]</span>
                         </span>
                       ))}
-                      {employees.filter(e => ul.roles.includes(e.role ?? '')).length > 10 && (
-                        <span className='text-xs text-gray-400 px-1'>+{employees.filter(e => ul.roles.includes(e.role ?? '')).length - 10} lainnya</span>
+                      {employees.filter(e => matchesRole(e.role, ul.roles)).length > 15 && (
+                        <span className='text-xs text-gray-400 px-1.5 py-1'>
+                          +{employees.filter(e => matchesRole(e.role, ul.roles)).length - 15} lainnya
+                        </span>
+                      )}
+                      {employees.filter(e => matchesRole(e.role, ul.roles)).length === 0 && (
+                        <p className='text-xs text-gray-400 italic py-1'>Belum ada karyawan dengan role yang dipilih.</p>
                       )}
                     </div>
                   </div>

@@ -199,6 +199,48 @@ export const unclaimTask = async (taskId) => {
   }
 }
 
+export const getTaskIdentityLinks = async (taskId) => {
+  try {
+    const response = await flowableClient.get(`/runtime/tasks/${taskId}/identitylinks`)
+    return { success: true, data: response.data }
+  } catch (error) {
+    return { success: false, error: error.message, data: [] }
+  }
+}
+
+export const getTasksWithIdentityLinks = async (params = {}) => {
+  const result = await getTasks(params)
+  if (!result.success || !Array.isArray(result.data?.data)) {
+    return result
+  }
+  const tasks = result.data.data
+  const tasksWithLinks = await Promise.all(
+    tasks.map(async (task) => {
+      try {
+        const linksRes = await getTaskIdentityLinks(task.id)
+        const links = linksRes.success && Array.isArray(linksRes.data) ? linksRes.data : []
+        const candidateGroups = links.filter((l) => l.type === 'candidate' && l.group).map((l) => l.group)
+        const candidateUsers = links.filter((l) => l.type === 'candidate' && l.user).map((l) => l.user)
+        return {
+          ...task,
+          candidateGroups,
+          candidateUsers,
+          identityLinks: links,
+        }
+      } catch {
+        return { ...task, candidateGroups: [], candidateUsers: [], identityLinks: [] }
+      }
+    })
+  )
+  return {
+    success: true,
+    data: {
+      ...result.data,
+      data: tasksWithLinks,
+    },
+  }
+}
+
 // -- History ------------------------------------------------------------------
 
 export const getHistoricProcessInstances = async (params = {}) => {

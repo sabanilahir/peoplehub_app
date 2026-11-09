@@ -5,6 +5,8 @@ import {
   getEmployeeAllowanceOverrides,
   calculateSalaryBreakdown,
 } from './odooWageService.js'
+import { getWorkingDaysFromDb, calculateWorkingDays } from './workdayCalculator.js'
+import { resolveEmployeeOvertimeRate } from './hoPayrollEngine.js'
 
 /**
  * Menghitung rentang tanggal cut-off presensi (26 bulan lalu s/d 25 bulan berjalan)
@@ -53,7 +55,7 @@ export function getCutoffDateRange(dateRef) {
  * Mengambil dan mengagregasi data presensi cut-off untuk seluruh karyawan
  */
 export async function aggregateCutoffAttendance({ dateFrom, dateTo }) {
-  // 1. Ambil seluruh karyawan aktif
+  // 1. Ambil seluruh karyawan aktif (termasuk joinDate & endDate untuk prorata)
   const employees = await prisma.employee.findMany({
     where: { status: 'Active' },
     select: {
@@ -65,11 +67,21 @@ export async function aggregateCutoffAttendance({ dateFrom, dateTo }) {
       location: true,
       workLocationCode: true,
       salary: true,
+      joinDate: true,
+      endDate: true,
     },
     orderBy: { name: 'asc' },
   })
 
-  // 2. Ambil seluruh record presensi dalam rentang tanggal cut-off
+  // 2. Hitung hari kerja efektif cut-off untuk HO (default)
+  const hoWorkDayInfo = await getWorkingDaysFromDb({
+    startDate: dateFrom,
+    endDate: dateTo,
+    workLocationCode: 'ho',
+  }).catch(() => ({ workingDays: 22, holidays: [] }))
+  const defaultWorkingDays = hoWorkDayInfo.workingDays || 22
+
+  // 3. Ambil seluruh record presensi dalam rentang tanggal cut-off
   const attendances = await prisma.attendance.findMany({
     where: {
       date: {
@@ -80,12 +92,34 @@ export async function aggregateCutoffAttendance({ dateFrom, dateTo }) {
     orderBy: { date: 'asc' },
   })
 
-  // 3. Ambil konfigurasi reward per lokasi dari workLocationConfig
+  // 4. Ambil seluruh record lembur yang Approved dalam periode cut-off
+  const overtimes = await prisma.overtimeRecord.findMany({
+    where: {
+      date: { gte: dateFrom, lte: dateTo },
+      status: 'Approved',
+    },
+    orderBy: [{ date: 'asc' }, { startTime: 'asc' }],
+  }).catch(() => [])
+
+  // 5. Ambil seluruh permohonan cuti / izin yang Approved yang beririsan dengan periode cut-off
+  const leaves = await prisma.leave.findMany({
+    where: {
+      status: 'Approved',
+      startDate: { lte: dateTo },
+      endDate: { gte: dateFrom },
+    },
+    include: {
+      user: { select: { id: true, employeeId: true } },
+      leaveType: true,
+    },
+  }).catch(() => [])
+
+  // 6. Ambil konfigurasi reward per lokasi dari workLocationConfig
   const configs = await prisma.workLocationConfig.findMany({ where: { active: true } })
   const configMap = new Map(configs.map((c) => [c.locationCode, c]))
   const hoConfig = configs.find((c) => c.locationCode === 'ho') || configs[0]
 
-  // 3b. Ambil konfigurasi rasio gaji dan override tunjangan per karyawan
+  // 6b. Ambil konfigurasi rasio gaji dan override tunjangan per karyawan
   const salaryConfig = await getSalaryBreakdownConfig()
   const overrides = await getEmployeeAllowanceOverrides() || {}
 
@@ -98,7 +132,26 @@ export async function aggregateCutoffAttendance({ dateFrom, dateTo }) {
     attByEmp.get(att.empId).push(att)
   }
 
-  // 4. Hitung rekap per karyawan
+  // Kelompokkan lembur per empId
+  const otByEmp = new Map()
+  for (const ot of overtimes) {
+    if (!otByEmp.has(ot.empId)) {
+      otByEmp.set(ot.empId, [])
+    }
+    otByEmp.get(ot.empId).push(ot)
+  }
+
+  // Kelompokkan leave per empId (link melalui userId atau user.employeeId)
+  const leavesByEmp = new Map()
+  for (const lv of leaves) {
+    const eId = lv.user?.employeeId || lv.userId
+    if (!leavesByEmp.has(eId)) {
+      leavesByEmp.set(eId, [])
+    }
+    leavesByEmp.get(eId).push(lv)
+  }
+
+  // 7. Hitung rekap komprehensif per karyawan
   const summaryList = employees.map((emp) => {
     const records = attByEmp.get(emp.id) || []
     let presentDays = 0
@@ -136,16 +189,116 @@ export async function aggregateCutoffAttendance({ dateFrom, dateTo }) {
       }
     }
 
-    // Hitung breakdown komponen gaji (Basic 75%, Transport 15%, KPI 10%)
+    // Hitung breakdown komponen gaji (Basic 75%, Transport 15%, NPA 10%)
     const empOverride = overrides[emp.id] || overrides[String(emp.id)] || null
+    const wageInput = emp.salary
     const breakdown = calculateSalaryBreakdown(
-      emp.salary,
+      wageInput,
       salaryConfig,
       {
         locationCode: locCode,
         employeeOverride: empOverride,
       }
     )
+
+    const workingDays = defaultWorkingDays
+
+    // A. Hitung Lembur (Overtime)
+    const empOts = otByEmp.get(emp.id) || []
+    let overtimeHours = 0
+    let overtimeAmount = 0
+    for (const ot of empOts) {
+      const hours = Number(ot.totalHours) || 0
+      overtimeHours += hours
+      if (ot.totalFee && ot.totalFee > 0) {
+        overtimeAmount += ot.totalFee
+      } else {
+        const rateInfo = resolveEmployeeOvertimeRate({
+          employee: emp,
+          date: ot.date,
+          workingDays,
+        })
+        overtimeAmount += Math.round((rateInfo.exactHourlyRate || rateInfo.hourlyRate) * hours)
+      }
+    }
+
+    // B. Hitung Cuti & Potongan Absen Sesuai Aturan HO / Kalkulator
+    const empLvs = leavesByEmp.get(emp.id) || []
+    let halfDayCount = 0
+    let sickDays = 0
+    let unpaidDays = 0
+
+    empLvs.forEach((lv) => {
+      const typeLower = (lv.typeName || lv.leaveType?.name || '').toLowerCase()
+      const days = Number(lv.days) || 1
+      if (typeLower.includes('setengah')) {
+        halfDayCount += days
+      } else if (typeLower.includes('sakit')) {
+        const hasDoc = Boolean(lv.attachment && String(lv.attachment).trim().length > 0)
+        if (hasDoc) {
+          sickDays += days
+        } else {
+          // Sakit tanpa surat dokter yang sah dialihkan jadi Unpaid Leave
+          unpaidDays += days
+        }
+      } else if (typeLower.includes('unpaid') || typeLower.includes('potong gaji')) {
+        unpaidDays += days
+      }
+    })
+
+    // Pertimbangkan potongan setengah hari dari catatan presensi jika lebih besar
+    if (halfDayCutCount > halfDayCount) {
+      halfDayCount = halfDayCutCount
+    }
+
+    // Aturan 2: Potongan Setengah Hari = (Gross / workingDays) / 2
+    const halfDayDeduction = workingDays > 0 ? Math.round(((breakdown.grossSalary / workingDays) / 2) * halfDayCount) : 0
+
+    // Aturan 3: Potongan Cuti Sakit = HANYA memotong prorata Tunjangan Transport / workingDays
+    const sickLeaveDeduction = workingDays > 0 ? Math.round((breakdown.transportAllowance / workingDays) * sickDays) : 0
+
+    // Aturan 4: Potongan Unpaid Leave = Gross / workingDays
+    const unpaidLeaveDeduction = workingDays > 0 ? Math.round((breakdown.grossSalary / workingDays) * unpaidDays) : 0
+
+    const totalLeaveDeductions = halfDayDeduction + sickLeaveDeduction + unpaidLeaveDeduction
+
+    // C. Aturan 5 & 6: Prorata Join / Resign Tengah Bulan
+    let isProrated = false
+    let prorateReason = null
+    let activeWorkingDays = workingDays
+    let proratedBaseGross = breakdown.grossSalary
+
+    if (emp.joinDate && emp.joinDate >= dateFrom && emp.joinDate <= dateTo) {
+      isProrated = true
+      prorateReason = 'New Joiner (Join Tengah Bulan)'
+      const joinDaysInfo = calculateWorkingDays({
+        startDate: emp.joinDate,
+        endDate: dateTo,
+        workLocationCode: locCode,
+        holidays: hoWorkDayInfo.holidays || [],
+      })
+      activeWorkingDays = joinDaysInfo.workingDays || 0
+      if (workingDays > 0) {
+        proratedBaseGross = Math.round((breakdown.grossSalary / workingDays) * activeWorkingDays)
+      }
+    } else if (emp.endDate && emp.endDate >= dateFrom && emp.endDate <= dateTo) {
+      isProrated = true
+      prorateReason = 'Resignation (Resign Tengah Bulan)'
+      const resignDaysInfo = calculateWorkingDays({
+        startDate: dateFrom,
+        endDate: emp.endDate,
+        workLocationCode: locCode,
+        holidays: hoWorkDayInfo.holidays || [],
+      })
+      activeWorkingDays = resignDaysInfo.workingDays || 0
+      if (workingDays > 0) {
+        proratedBaseGross = Math.round((breakdown.grossSalary / workingDays) * activeWorkingDays)
+      }
+    }
+
+    // D. Estimasi Take Home Pay / Gaji Bersih
+    const baseSalaryForNet = isProrated ? proratedBaseGross : breakdown.grossSalary
+    const netSalaryEstimate = Math.max(0, baseSalaryForNet + overtimeAmount + rewardAmount - totalPenalty - totalLeaveDeductions)
 
     return {
       empId: emp.id,
@@ -158,16 +311,24 @@ export async function aggregateCutoffAttendance({ dateFrom, dateTo }) {
       locationCode: locCode,
       dateFrom,
       dateTo,
+      workingDays,
       // Gaji & Tunjangan
       salary: Number(emp.salary) || 0,
       basicSalary: breakdown.basicSalary,
       transportAllowance: breakdown.transportAllowance,
-      kpiAllowance: breakdown.kpiAllowance,
+      nonPermanentAllowance: breakdown.nonPermanentAllowance,
+      kpiAllowance: breakdown.kpiAllowance, // alias
       grossSalary: breakdown.grossSalary,
       enableTransport: breakdown.enableTransport,
-      enableKpi: breakdown.enableKpi,
+      enableNonPermanent: breakdown.enableNonPermanent,
+      enableKpi: breakdown.enableKpi, // alias
       isOverridden: breakdown.isOverridden,
-      // Presensi
+      // Prorata
+      isProrated,
+      prorateReason,
+      activeWorkingDays,
+      proratedBaseGross,
+      // Presensi & Denda
       attendanceCount: records.length,
       presentDays,
       lateDays,
@@ -178,6 +339,19 @@ export async function aggregateCutoffAttendance({ dateFrom, dateTo }) {
       leaveDays,
       isEligibleReward,
       rewardAmount,
+      // Lembur (Overtime)
+      overtimeHours: Math.round(overtimeHours * 100) / 100,
+      overtimeAmount,
+      // Potongan Cuti / Absen
+      halfDayCount,
+      halfDayDeduction,
+      sickDays,
+      sickLeaveDeduction,
+      unpaidDays,
+      unpaidLeaveDeduction,
+      totalLeaveDeductions,
+      // Estimasi Gaji Bersih
+      netSalaryEstimate,
     }
   })
 
@@ -271,32 +445,41 @@ export async function syncCutoffToOdoo({
   if (!reimbType) reimbType = inputTypes.find((t) => t.code?.toLowerCase() === 'reimbursement')
   const reimbTypeId = reimbType ? reimbType.id : 20
 
-  // ID Input Type untuk Potongan Cuti & Izin:
-  const sickLeaveType = inputTypes.find((t) => t.code?.toLowerCase() === 'sick leave')
-  const sickLeaveTypeId = sickLeaveType ? sickLeaveType.id : 24
-
-  const leaveType = inputTypes.find((t) => t.code?.toLowerCase() === 'leave')
-  const leaveTypeId = leaveType ? leaveType.id : 25
-
-  const halfLeaveType = inputTypes.find((t) => t.code?.toLowerCase() === 'half leave')
-  const halfLeaveTypeId = halfLeaveType ? halfLeaveType.id : 26
-
-  // ID Input Type untuk Tunjangan Transport & KPI (Insentif)
+  // ID Input Type untuk Tunjangan Transport (TRANSPORT)
   let transportType = inputTypes.find((t) => t.code?.toLowerCase() === 'transport')
   const transportTypeId = transportType ? transportType.id : 12
 
-  let kpiType = inputTypes.find((t) => t.code?.toLowerCase() === 'kpi' || t.name?.toLowerCase().includes('kpi'))
-  if (!kpiType) kpiType = inputTypes.find((t) => t.code?.toLowerCase() === 'insentif')
-  const kpiTypeId = kpiType ? kpiType.id : 13
+  // ID Input Type untuk Non Permanent Allowance (NPA)
+  let npaType = inputTypes.find((t) => t.code === 'NPA' || t.name?.toLowerCase().includes('non permanent'))
+  const npaTypeId = npaType ? npaType.id : 19
 
+  // ID Input Type untuk Lembur (Overtime)
+  let overtimeType = inputTypes.find((t) => t.code?.toLowerCase() === 'overtime')
+  const overtimeTypeId = overtimeType ? overtimeType.id : 22
+
+  // ID Input Type untuk Potongan Cuti Setengah Hari (Half Leave)
+  const halfLeaveType = inputTypes.find((t) => t.code?.toLowerCase() === 'half leave')
+  const halfLeaveTypeId = halfLeaveType ? halfLeaveType.id : 26
+
+  // ID Input Type untuk Potongan Cuti Sakit (Sick Leave)
+  const sickLeaveType = inputTypes.find((t) => t.code?.toLowerCase() === 'sick leave')
+  const sickLeaveTypeId = sickLeaveType ? sickLeaveType.id : 24
+
+  // ID Input Type untuk Potongan Unpaid Leave / Mangkir (Leave)
+  const leaveType = inputTypes.find((t) => t.code?.toLowerCase() === 'leave')
+  const leaveTypeId = leaveType ? leaveType.id : 25
+
+  // List ID tipe input yang dikelola PeopleHub
   const managedInputTypeIds = [
     dedTypeId,
     reimbTypeId,
     transportTypeId,
-    kpiTypeId,
+    npaTypeId,
+    overtimeTypeId,
+    halfLeaveTypeId,
     sickLeaveTypeId,
     leaveTypeId,
-    halfLeaveTypeId,
+    13, // legacy KPI id
   ]
 
   // 5. Pay Run Batch (hr.payslip.run) - dibuat jika ada slip baru yang perlu dibuat
@@ -513,8 +696,8 @@ export async function syncCutoffToOdoo({
       // Masukkan item payroll baru ke hr.payslip.input
       const newInputs = []
 
-      // 1. Denda Keterlambatan Presensi
-      if (hasDenda) {
+      // 1. Denda Keterlambatan Presensi (Late)
+      if (emp.totalPenalty > 0) {
         newInputs.push({
           payslip_id: payslipId,
           input_type_id: dedTypeId,
@@ -523,8 +706,8 @@ export async function syncCutoffToOdoo({
         })
       }
 
-      // 2. Reward Kehadiran Penuh
-      if (hasReward) {
+      // 2. Reward Kehadiran Penuh (Attendance Reward)
+      if (emp.rewardAmount > 0) {
         newInputs.push({
           payslip_id: payslipId,
           input_type_id: reimbTypeId,
@@ -543,13 +726,55 @@ export async function syncCutoffToOdoo({
         })
       }
 
-      // 4. Tunjangan KPI (INSENTIF / KPI)
-      if (emp.enableKpi && emp.kpiAllowance > 0) {
+      // 4. Non Permanent Allowance (NPA)
+      const npAllowance = emp.nonPermanentAllowance ?? emp.kpiAllowance ?? 0
+      const isNpEnabled = emp.enableNonPermanent ?? emp.enableKpi ?? true
+      if (isNpEnabled && npAllowance > 0) {
         newInputs.push({
           payslip_id: payslipId,
-          input_type_id: kpiTypeId,
-          name: 'KPI Allowance',
-          amount: emp.kpiAllowance,
+          input_type_id: npaTypeId,
+          name: 'Non Permanent Allowance',
+          amount: npAllowance,
+        })
+      }
+
+      // 5. Lembur (Overtime)
+      if (emp.overtimeAmount > 0) {
+        newInputs.push({
+          payslip_id: payslipId,
+          input_type_id: overtimeTypeId,
+          name: 'Overtime',
+          amount: emp.overtimeAmount,
+        })
+      }
+
+      // 6. Potongan Setengah Hari (Half Leave)
+      if (emp.halfDayDeduction > 0) {
+        newInputs.push({
+          payslip_id: payslipId,
+          input_type_id: halfLeaveTypeId,
+          name: 'Half Leave',
+          amount: emp.halfDayDeduction,
+        })
+      }
+
+      // 7. Potongan Cuti Sakit (Sick Leave)
+      if (emp.sickLeaveDeduction > 0) {
+        newInputs.push({
+          payslip_id: payslipId,
+          input_type_id: sickLeaveTypeId,
+          name: 'Sick Leave',
+          amount: emp.sickLeaveDeduction,
+        })
+      }
+
+      // 8. Potongan Unpaid Leave / Mangkir (Leave)
+      if (emp.unpaidLeaveDeduction > 0) {
+        newInputs.push({
+          payslip_id: payslipId,
+          input_type_id: leaveTypeId,
+          name: 'Leave',
+          amount: emp.unpaidLeaveDeduction,
         })
       }
 
@@ -600,9 +825,16 @@ export async function syncCutoffToOdoo({
         penaltyAmount: emp.totalPenalty,
         rewardAmount: emp.rewardAmount,
         transportAmount: emp.enableTransport ? emp.transportAllowance : 0,
-        kpiAmount: emp.enableKpi ? emp.kpiAllowance : 0,
+        nonPermanentAmount: isNpEnabled ? npAllowance : 0,
+        kpiAmount: isNpEnabled ? npAllowance : 0, // alias
+        overtimeHours: emp.overtimeHours,
+        overtimeAmount: emp.overtimeAmount,
+        halfDayDeduction: emp.halfDayDeduction,
+        sickLeaveDeduction: emp.sickLeaveDeduction,
+        unpaidLeaveDeduction: emp.unpaidLeaveDeduction,
+        totalLeaveDeductions: emp.totalLeaveDeductions,
         status: 'synced',
-        message: `Berhasil diupdate ke Draft Slip #${payslipId} (${targetSlip.name}). Denda: Rp ${emp.totalPenalty.toLocaleString('id-ID')}, Reward: Rp ${emp.rewardAmount.toLocaleString('id-ID')}, Transport: Rp ${(emp.enableTransport ? emp.transportAllowance : 0).toLocaleString('id-ID')}, KPI: Rp ${(emp.enableKpi ? emp.kpiAllowance : 0).toLocaleString('id-ID')}`,
+        message: `Berhasil diupdate ke Draft Slip #${payslipId} (${targetSlip.name}). Lembur: Rp ${emp.overtimeAmount.toLocaleString('id-ID')}, NPA: Rp ${(isNpEnabled ? npAllowance : 0).toLocaleString('id-ID')}, Denda: Rp ${emp.totalPenalty.toLocaleString('id-ID')}, Reward: Rp ${emp.rewardAmount.toLocaleString('id-ID')}, Potongan Cuti: Rp ${emp.totalLeaveDeductions.toLocaleString('id-ID')}`,
       })
     } catch (empErr) {
       failedCount++

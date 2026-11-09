@@ -237,6 +237,7 @@ const HR_GROUPS = [
     { label: 'Hasil Psychotest',  href: '/hr/recruitment/psychotest/results',icon: ic('chart') },
   ]},
   { title: 'Payroll', icon: ic('money'), items: [
+    { label: 'Kalkulator Payroll HO', href: '/hr/payroll/ho-calculator', icon: ic('calculator') },
     { label: 'Integrasi Odoo Payroll', href: '/hr/payroll/odoo-sync', icon: ic('zap') },
     { label: 'Payroll Run',      href: '/hr/payroll/run',      icon: ic('money') },
     { label: 'Payroll Setup',    href: '/hr/payroll/setup',    icon: ic('list') },
@@ -317,7 +318,7 @@ const SA_GROUPS = [
     { label: 'Definitions',         href: '/sysadmin/workflow/definitions',         icon: ic('list') },
     { label: 'Flowable Settings',   href: '/sysadmin/workflow/flowable-settings',   icon: ic('settings') },
     { label: 'Workflow Settings',   href: '/sysadmin/workflow/settings',            icon: ic('settings') },
-    { label: 'Userlists',           href: '/sysadmin/workflow/userlists',           icon: ic('users') },
+    { label: 'Userlists (Grup Penyetuju)', href: '/sysadmin/workflow/userlists', icon: ic('users') },
     { label: 'Transaction Manager', href: '/sysadmin/workflow/transaction-manager', icon: ic('cpu') },
   ]},
   { title: 'Branding', icon: ic('paint'), items: [

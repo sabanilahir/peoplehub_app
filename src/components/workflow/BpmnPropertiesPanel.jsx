@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useUserlistStore } from '@/store/userlistStore'
 import TaskFormBuilderModal from './TaskFormBuilderModal'
 
 export const FORM_TEMPLATES = [
@@ -60,6 +61,8 @@ export default function BpmnPropertiesPanel({
   forms = {},
   onUpdateForm,
 }) {
+  const { userlists } = useUserlistStore()
+  const [dbUserlists, setDbUserlists] = useState(userlists || [])
   const [formData, setFormData] = useState({
     name: '',
     candidateGroups: '',
@@ -71,6 +74,29 @@ export default function BpmnPropertiesPanel({
   const [selectedTemplate, setSelectedTemplate] = useState('custom')
   const [savedBadge, setSavedBadge] = useState(false)
   const [showFormBuilder, setShowFormBuilder] = useState(false)
+
+  // Ambil data Userlists terbaru langsung dari database saat komponen dimuat
+  useEffect(() => {
+    async function loadFreshUserlists() {
+      try {
+        const res = await fetch('/api/state/hcm-userlists')
+        if (res.ok) {
+          const json = await res.json()
+          if (json?.value) {
+            const parsed = JSON.parse(json.value)
+            const lists = parsed.state?.userlists
+            if (Array.isArray(lists) && lists.length > 0) {
+              setDbUserlists(lists)
+              useUserlistStore.setState({ userlists: lists })
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[BpmnPropertiesPanel] Gagal memuat userlists segar:', err)
+      }
+    }
+    loadFreshUserlists()
+  }, [])
 
   const handleOpenBuilder = () => {
     try {
@@ -217,6 +243,54 @@ export default function BpmnPropertiesPanel({
 
   const activeTemplateObj = FORM_TEMPLATES.find((t) => t.key === selectedTemplate)
 
+  const effectiveUserlists = (dbUserlists && dbUserlists.length > 0 ? dbUserlists : userlists) || []
+
+  const getUserlistSlug = (ul) => (ul.name || '').toLowerCase().replace(/[^a-z0-9_-]/g, '_')
+
+  const getUserlistAlias = (ul) => {
+    const lower = (ul.name || '').toLowerCase()
+    if (lower.includes('hr')) return 'hr'
+    if (lower.includes('manager')) return 'managers'
+    if (lower.includes('finance')) return 'finance'
+    if (lower.includes('supervisor')) return 'supervisors'
+    return getUserlistSlug(ul)
+  }
+
+  const isUserlistActive = (ul) => {
+    const current = formData.candidateGroups
+      .split(',')
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean)
+    const slug = getUserlistSlug(ul)
+    const alias = getUserlistAlias(ul)
+    const nameLower = (ul.name || '').toLowerCase().trim()
+    return current.includes(slug) || current.includes(alias) || current.includes(nameLower)
+  }
+
+  const toggleUserlist = (ul) => {
+    const current = formData.candidateGroups
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+    const slug = getUserlistSlug(ul)
+    const alias = getUserlistAlias(ul)
+    const nameLower = (ul.name || '').toLowerCase().trim()
+
+    const active = isUserlistActive(ul)
+    let updated
+    if (active) {
+      updated = current.filter((c) => {
+        const l = c.toLowerCase()
+        return l !== slug && l !== alias && l !== nameLower
+      })
+    } else {
+      const toAdd = alias !== slug ? [alias, slug] : [slug]
+      const set = new Set([...current, ...toAdd])
+      updated = Array.from(set)
+    }
+    setFormData({ ...formData, candidateGroups: updated.join(', ') })
+  }
+
   return (
     <div className="w-80 sm:w-96 bg-white border-l border-gray-200 flex flex-col h-full text-sm shadow-lg overflow-hidden">
       {/* Header */}
@@ -351,22 +425,97 @@ export default function BpmnPropertiesPanel({
         {isAnyTask && (
           <>
             {/* Assignment Section */}
-            <div className="border border-gray-200 rounded-lg p-3 space-y-2.5 bg-gray-50/60">
-              <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-800">
-                <span>👥</span> Penugasan (Approver / Pelaksana)
+            <div className="border border-gray-200 rounded-lg p-3 space-y-3 bg-gray-50/60">
+              <div className="flex items-center justify-between text-xs font-semibold text-gray-800">
+                <span className="flex items-center gap-1.5">
+                  <span>👥</span> Penugasan (Approver / Pelaksana)
+                </span>
+                <a
+                  href="/sysadmin/workflow/userlists"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-[11px] text-teal-600 hover:text-teal-700 hover:underline font-semibold flex items-center gap-1 transition"
+                  title="Buka menu Kelola Anggota Grup di tab baru"
+                >
+                  <span>⚙️</span>
+                  <span>Kelola Anggota Grup</span>
+                </a>
               </div>
 
-              {/* Candidate Groups */}
+              {/* 1. SELEKTOR USERLISTS (DAFTAR KELOMPOK PENYETUJU NYATA DARI DATABASE) */}
+              <div className="p-2.5 bg-teal-50/70 border border-teal-200 rounded-lg space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-[11px] font-bold text-teal-900 flex items-center gap-1">
+                    <span>📋</span> Kelompok Penyetuju (Userlists):
+                  </label>
+                  <span className="text-[10px] text-teal-700 font-semibold bg-teal-100/70 px-1.5 py-0.5 rounded">
+                    {effectiveUserlists.length} grup di DB
+                  </span>
+                </div>
+
+                {/* Dropdown pemilih cepat Userlists */}
+                <select
+                  value=""
+                  onChange={(e) => {
+                    const id = Number(e.target.value)
+                    const found = effectiveUserlists.find((u) => u.id === id)
+                    if (found) {
+                      toggleUserlist(found)
+                    }
+                  }}
+                  className="w-full px-2.5 py-1.5 bg-white border border-teal-300 rounded text-xs text-gray-700 outline-none focus:ring-2 focus:ring-teal-500 font-medium"
+                >
+                  <option value="" disabled>
+                    + Tambahkan dari Userlist (Pilih Kelompok)...
+                  </option>
+                  {effectiveUserlists.map((u) => {
+                    const active = isUserlistActive(u)
+                    const typeLabel = u.type === 'role' ? 'By Role' : u.type === 'position' ? 'By Position' : 'By Employee'
+                    return (
+                      <option key={u.id} value={u.id}>
+                        {active ? '✓ ' : '+ '} {u.name} ({typeLabel})
+                      </option>
+                    )
+                  })}
+                </select>
+
+                {/* Chips tombol Userlists nyata */}
+                <div className="flex flex-wrap gap-1.5 pt-0.5">
+                  {effectiveUserlists.map((ul) => {
+                    const active = isUserlistActive(ul)
+                    const icon = ul.type === 'role' ? '🎭' : ul.type === 'position' ? '📌' : '👤'
+                    return (
+                      <button
+                        key={ul.id}
+                        type="button"
+                        onClick={() => toggleUserlist(ul)}
+                        className={`text-[11px] px-2.5 py-1 rounded-md border flex items-center gap-1.5 transition font-medium ${
+                          active
+                            ? 'bg-teal-600 text-white border-teal-600 shadow-xs font-semibold'
+                            : 'bg-white text-teal-900 border-teal-300 hover:bg-teal-100/70'
+                        }`}
+                        title={`Klik untuk mengaktifkan / menonaktifkan grup ${ul.name}`}
+                      >
+                        <span className="font-bold">{active ? '✓' : '+'}</span>
+                        <span>{icon}</span>
+                        <span>{ul.name}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* 2. PRESET PERAN UMUM (CANDIDATE GROUPS) */}
               <div>
                 <label className="block text-[11px] font-medium text-gray-600 mb-1">
-                  Candidate Groups (Grup Peran)
+                  Preset Peran Umum (Candidate Groups):
                 </label>
                 <div className="flex flex-wrap gap-1 mb-1.5">
                   {COMMON_GROUPS.map((grp) => {
                     const active = formData.candidateGroups
                       .split(',')
-                      .map((s) => s.trim())
-                      .includes(grp)
+                      .map((s) => s.trim().toLowerCase())
+                      .includes(grp.toLowerCase())
                     return (
                       <button
                         key={grp}
@@ -374,7 +523,7 @@ export default function BpmnPropertiesPanel({
                         onClick={() => toggleGroup(grp)}
                         className={`text-[10px] px-2 py-0.5 rounded-full border transition ${
                           active
-                            ? 'bg-blue-600 text-white border-blue-600 font-semibold'
+                            ? 'bg-blue-600 text-white border-blue-600 font-semibold shadow-xs'
                             : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-100'
                         }`}
                       >
@@ -387,9 +536,12 @@ export default function BpmnPropertiesPanel({
                   type="text"
                   value={formData.candidateGroups}
                   onChange={(e) => setFormData({ ...formData, candidateGroups: e.target.value })}
-                  placeholder="managers, hr (pisahkan dengan koma)"
+                  placeholder="hr, managers, hr_team (pisahkan dengan koma)"
                   className="w-full px-2.5 py-1.5 bg-white border border-gray-300 rounded text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none"
                 />
+                <p className="text-[10px] text-gray-500 mt-1 leading-tight">
+                  Tugas akan didistribusikan ke inbox approver anggota Userlist / peran di atas.
+                </p>
               </div>
 
               {/* Assignee */}

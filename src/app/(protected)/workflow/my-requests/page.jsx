@@ -2,30 +2,23 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { useAuthStore } from '@/store/authStore'
 
 export default function MyRequestsPage() {
+  const { currentUser } = useAuthStore()
   const [requests, setRequests] = useState([])
-  const [definitions, setDefinitions] = useState([])
   const [loading, setLoading] = useState(true)
-  const [showModal, setShowModal] = useState(false)
-  const [startingProcess, setStartingProcess] = useState(false)
-  const [selectedKey, setSelectedKey] = useState('')
-  const [reason, setReason] = useState('')
-  const [message, setMessage] = useState(null)
-
-  useEffect(() => {
-    fetchMyRequests()
-    fetchDefinitions()
-  }, [])
+  const [filterCategory, setFilterCategory] = useState('all') // all, leave, overtime
+  const [filterStatus, setFilterStatus] = useState('all') // all, Pending, Approved, Rejected
 
   const fetchMyRequests = async () => {
+    if (!currentUser?.id) return
     setLoading(true)
     try {
-      const res = await fetch('/api/flowable/processes?size=50')
+      const res = await fetch(`/api/workflow/my-requests?userId=${currentUser.id}`)
       const result = await res.json()
       if (result.success) {
-        const list = result.data?.data || result.data || []
-        setRequests(Array.isArray(list) ? list : [])
+        setRequests(result.data || [])
       }
     } catch (error) {
       console.error('Failed to fetch requests:', error)
@@ -34,250 +27,197 @@ export default function MyRequestsPage() {
     }
   }
 
-  const fetchDefinitions = async () => {
-    try {
-      const res = await fetch('/api/flowable/process-definitions')
-      const result = await res.json()
-      if (result.success) {
-        const defs = result.data?.data || result.data || []
-        setDefinitions(Array.isArray(defs) ? defs : [])
-        if (defs.length > 0 && !selectedKey) {
-          setSelectedKey(defs[0].key)
-        }
-      }
-    } catch (err) {
-      console.error('Failed to fetch definitions:', err)
-    }
-  }
+  useEffect(() => {
+    fetchMyRequests()
+  }, [currentUser])
 
-  const handleStartProcess = async (e) => {
-    e.preventDefault()
-    if (!selectedKey) return
-    setStartingProcess(true)
-    setMessage(null)
-    try {
-      const res = await fetch('/api/flowable/processes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          processDefinitionKey: selectedKey,
-          variables: [
-            { name: 'reason', value: reason || 'Pengajuan Workflow' },
-            { name: 'initiator', value: 'admin' },
-          ],
-        }),
-      })
-      const result = await res.json()
-      if (result.success) {
-        setMessage({ type: 'success', text: 'Permohonan alur proses berhasil diajukan!' })
-        setShowModal(false)
-        setReason('')
-        fetchMyRequests()
-      } else {
-        setMessage({ type: 'error', text: result.error || 'Gagal mengajukan proses' })
-      }
-    } catch (err) {
-      setMessage({ type: 'error', text: err.message })
-    } finally {
-      setStartingProcess(false)
-    }
-  }
-
-  const getStatusColor = (status) => {
-    switch (status?.toLowerCase()) {
-      case 'completed':
-        return 'bg-emerald-100 text-emerald-800'
-      case 'active':
-        return 'bg-blue-100 text-blue-800'
-      case 'suspended':
-        return 'bg-amber-100 text-amber-800'
-      case 'cancelled':
-        return 'bg-red-100 text-red-800'
-      default:
-        return 'bg-gray-100 text-gray-700'
-    }
-  }
+  const filtered = requests.filter((r) => {
+    if (filterCategory !== 'all' && r.category !== filterCategory) return false
+    if (filterStatus !== 'all' && r.status !== filterStatus) return false
+    return true
+  })
 
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Permohonan Saya (My Requests)</h1>
-          <p className="text-sm text-gray-600 mt-1">Lacak status dan progres permohonan alur kerja yang Anda ajukan</p>
+          <div className="flex items-center gap-2">
+            <span className="text-3xl">📤</span>
+            <h1 className="text-2xl font-bold text-gray-900">My Requests</h1>
+          </div>
+          <p className="text-gray-500 text-sm mt-1">
+            Tracking status, alur approval, dan riwayat permohonan yang Anda ajukan
+          </p>
         </div>
         <div className="flex items-center gap-3">
-          <button
-            onClick={fetchMyRequests}
-            className="px-3.5 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 shadow-sm flex items-center gap-1.5 transition"
+          <Link
+            href="/mss/apply-leave-team"
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center gap-2"
           >
-            🔄 Refresh
-          </button>
-          <button
-            onClick={() => setShowModal(true)}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold shadow-sm flex items-center gap-1.5 transition"
+            <span>+</span> Ajukan Cuti Tim
+          </Link>
+          <Link
+            href="/workflow"
+            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl text-xs font-semibold hover:bg-gray-200 transition"
           >
-            ➕ Ajukan Permohonan Baru
-          </button>
+            ← Kembali
+          </Link>
         </div>
       </div>
 
-      {message && (
-        <div
-          className={`p-3.5 rounded-xl border text-sm flex items-center justify-between ${
-            message.type === 'error'
-              ? 'bg-red-50 border-red-200 text-red-700'
-              : 'bg-emerald-50 border-emerald-200 text-emerald-800'
-          }`}
-        >
-          <span>{message.text}</span>
-          <button onClick={() => setMessage(null)} className="text-gray-400 hover:text-gray-600">
-            ✕
-          </button>
+      {/* Filter Tabs */}
+      <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm flex flex-wrap items-center justify-between gap-3">
+        {/* Category Filters */}
+        <div className="flex items-center gap-2">
+          {['all', 'leave', 'overtime'].map((cat) => (
+            <button
+              key={cat}
+              onClick={() => setFilterCategory(cat)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
+                filterCategory === cat
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              {cat === 'all' ? 'Semua Kategori' : cat === 'leave' ? 'Cuti / Izin' : 'Lembur'}
+            </button>
+          ))}
         </div>
-      )}
 
-      {loading ? (
-        <div className="text-center py-16 bg-white border border-gray-200 rounded-2xl shadow-sm">
-          <div className="animate-spin text-3xl mb-2">⏳</div>
-          <p className="text-gray-500 font-medium text-sm">Memuat daftar permohonan...</p>
+        {/* Status Filters */}
+        <div className="flex items-center gap-2">
+          {['all', 'Pending', 'Approved', 'Rejected'].map((st) => (
+            <button
+              key={st}
+              onClick={() => setFilterStatus(st)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition ${
+                filterStatus === st
+                  ? 'bg-gray-900 text-white'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              {st === 'all' ? 'Semua Status' : st}
+            </button>
+          ))}
         </div>
-      ) : requests.length === 0 ? (
-        <div className="text-center py-16 bg-white border border-gray-200 rounded-2xl shadow-sm space-y-3">
-          <div className="text-5xl">📋</div>
-          <h3 className="text-lg font-semibold text-gray-800">Belum ada permohonan</h3>
-          <p className="text-sm text-gray-500 max-w-sm mx-auto">
-            Anda belum memiliki pengajuan alur kerja aktif di Flowable Engine.
+      </div>
+
+      {/* Request List */}
+      {loading ? (
+        <div className="bg-white border border-gray-200 rounded-2xl p-12 text-center text-gray-500">
+          <div className="animate-spin text-3xl mb-3">⏳</div>
+          <p className="text-sm font-semibold">Memuat permohonan Anda...</p>
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="bg-white border border-gray-200 rounded-2xl p-16 text-center shadow-sm">
+          <div className="text-5xl mb-4">📝</div>
+          <h3 className="text-lg font-bold text-gray-900">Belum ada pengajuan</h3>
+          <p className="text-gray-500 text-sm mt-1 max-w-md mx-auto">
+            Anda belum memiliki riwayat pengajuan cuti atau lembur pada filter yang dipilih.
           </p>
-          <button
-            onClick={() => setShowModal(true)}
-            className="mt-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition"
-          >
-            Mulai Ajukan Sekarang
-          </button>
         </div>
       ) : (
-        <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200 text-gray-600 font-semibold text-xs uppercase">
-              <tr>
-                <th className="px-5 py-3.5">Nama Alur Kerja</th>
-                <th className="px-4 py-3.5">Status</th>
-                <th className="px-4 py-3.5">Diajukan</th>
-                <th className="px-4 py-3.5">Selesai</th>
-                <th className="px-5 py-3.5 text-right">Aksi</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {requests.map((req) => {
-                const status = req.status || (req.ended ? 'Completed' : req.suspended ? 'Suspended' : 'Active')
-                const start = req.startTime || req.startedAt
-                const end = req.endTime || req.endedAt
+        <div className="grid gap-4">
+          {filtered.map((req) => {
+            const isApproved = req.status === 'Approved'
+            const isRejected = req.status === 'Rejected'
+            const isPending = req.status === 'Pending'
 
-                return (
-                  <tr key={req.id} className="hover:bg-gray-50 transition">
-                    <td className="px-5 py-4">
-                      <div className="font-semibold text-gray-900">
-                        {req.processDefinitionName || req.processDefinitionKey || 'Permohonan Workflow'}
-                      </div>
-                      <div className="text-xs text-gray-500 font-mono mt-0.5">ID: {req.id}</div>
-                    </td>
-                    <td className="px-4 py-4">
-                      <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${getStatusColor(status)}`}>
-                        {status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-4 text-gray-600 text-xs">
-                      {start ? new Date(start).toLocaleString() : '-'}
-                    </td>
-                    <td className="px-4 py-4 text-gray-600 text-xs">
-                      {end ? new Date(end).toLocaleString() : '-'}
-                    </td>
-                    <td className="px-5 py-4 text-right">
-                      <Link
-                        href={`/workflow/tasks?process=${req.id}`}
-                        className="text-xs font-semibold text-blue-600 hover:text-blue-800 hover:underline"
-                      >
-                        Lihat Task Approval →
-                      </Link>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+            return (
+              <div
+                key={req.id}
+                className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm hover:shadow-md transition space-y-4"
+              >
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b pb-3">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider ${
+                        req.category === 'leave' ? 'bg-blue-100 text-blue-800' : 'bg-emerald-100 text-emerald-800'
+                      }`}
+                    >
+                      {req.category === 'leave' ? '🏖️ Cuti' : '⚡ Lembur'}
+                    </span>
+                    <h3 className="font-bold text-gray-900 text-base">{req.title}</h3>
+                  </div>
+
+                  <span
+                    className={`px-3 py-1 rounded-full text-xs font-bold inline-block self-start sm:self-auto ${
+                      isApproved
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : isRejected
+                        ? 'bg-rose-100 text-rose-800'
+                        : 'bg-amber-100 text-amber-800'
+                    }`}
+                  >
+                    {req.status}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                  <div>
+                    <span className="text-gray-400 block mb-0.5">Rentang Tanggal</span>
+                    <span className="font-semibold text-gray-800">
+                      {req.startDate} {req.startDate !== req.endDate ? `s/d ${req.endDate}` : ''}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400 block mb-0.5">Durasi</span>
+                    <span className="font-bold text-gray-900">{req.duration}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400 block mb-0.5">Waktu Pengajuan</span>
+                    <span className="text-gray-600">
+                      {new Date(req.createdAt).toLocaleDateString('id-ID', { dateStyle: 'medium' })}
+                    </span>
+                  </div>
+                </div>
+
+                {req.note && (
+                  <div className="text-xs text-gray-600 bg-gray-50 p-2.5 rounded-xl italic">
+                    &ldquo;{req.note}&rdquo;
+                  </div>
+                )}
+
+                {/* Progress Stepper Mini */}
+                {req.steps && req.steps.length > 0 && (
+                  <div className="pt-2 border-t">
+                    <span className="text-[11px] font-bold text-gray-400 block mb-2 uppercase tracking-wider">
+                      Status Tahapan Persetujuan
+                    </span>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {req.steps.map((st, i) => {
+                        const isStApproved = st.status === 'Approved'
+                        const isStPending = st.status === 'Pending'
+                        const isStRejected = st.status === 'Rejected'
+
+                        return (
+                          <div
+                            key={i}
+                            className={`px-3 py-1.5 rounded-xl border text-xs flex items-center gap-2 ${
+                              isStApproved
+                                ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                                : isStRejected
+                                ? 'bg-rose-50 border-rose-200 text-rose-900'
+                                : isStPending
+                                ? 'bg-amber-50 border-amber-300 text-amber-900 font-bold ring-1 ring-amber-300'
+                                : 'bg-gray-50 border-gray-200 text-gray-400'
+                            }`}
+                          >
+                            <span>{isStApproved ? '✓' : isStRejected ? '✕' : `${i + 1}`}</span>
+                            <span>{st.label || `Level ${i + 1}`}</span>
+                            <span className="text-[10px] opacity-75">({st.status || 'Waiting'})</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </div>
       )}
-
-      {/* Modal Ajukan Permohonan Baru */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4">
-            <div className="flex items-center justify-between border-b pb-3">
-              <h3 className="font-bold text-gray-900 text-lg">Ajukan Permohonan Baru</h3>
-              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600">
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleStartProcess} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Pilih Alur Kerja *</label>
-                <select
-                  value={selectedKey}
-                  onChange={(e) => setSelectedKey(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  required
-                >
-                  {definitions.length === 0 ? (
-                    <option value="leave-test-process">Pengajuan Cuti (Demo Process)</option>
-                  ) : (
-                    definitions.map((def) => (
-                      <option key={def.key || def.id} value={def.key}>
-                        {def.name || def.key} ({def.key})
-                      </option>
-                    ))
-                  )}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Keterangan / Keperluan</label>
-                <textarea
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                  placeholder="Contoh: Pengajuan cuti tahunan selama 3 hari"
-                  className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  rows={3}
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2 border-t">
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="px-4 py-2 border rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  disabled={startingProcess}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold disabled:opacity-50"
-                >
-                  {startingProcess ? 'Mengirim...' : 'Kirim Pengajuan'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      <div className="pt-2">
-        <Link href="/workflow" className="text-sm font-medium text-gray-600 hover:text-gray-900">
-          ← Kembali ke Portal Workflow
-        </Link>
-      </div>
     </div>
   )
 }

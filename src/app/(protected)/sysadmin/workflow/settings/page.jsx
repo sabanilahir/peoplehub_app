@@ -1,9 +1,10 @@
-﻿'use client'
+'use client'
 import { useState }         from 'react'
 import { useUserlistStore }  from '@/store/userlistStore'
 import { useStructureStore } from '@/store/structureStore'
 import { useEmployeeStore }  from '@/store/employeeStore'
 import { useWorkflowStore }  from '@/store/workflowStore'
+import { useRoleStore, DEFAULT_ROLES } from '@/store/roleStore'
 import { useT } from '@/store/languageStore'
 import { PageHeader, StatCard, ActionButton } from '@/components/ui'
 import Icon from '@/components/ui/Icon'
@@ -235,14 +236,22 @@ function SubSelector({ item, onChange, positions, companies, departments, employ
 
   const maxH = compact ? 'max-h-28' : 'max-h-36'
 
+  const { roles: storeRoles } = useRoleStore()
+  const effectiveRoles = (storeRoles && storeRoles.length > 0) ? storeRoles : DEFAULT_ROLES
+
   if (item.type === 'role') return (
     <div className='flex flex-wrap gap-1.5'>
-      {SYSTEM_ROLES.map(r => (
-        <button key={r.value} onClick={() => tog('roles', r.value)}
-          className={`flex items-center gap-1 px-2.5 py-1 rounded-lg border text-xs font-semibold transition ${item.roles.includes(r.value) ? 'border-red-400 bg-red-50 text-red-700' : 'border-gray-200 bg-white text-gray-600 hover:border-red-200'}`}>
-          <Icon e={r.icon} size={13} /> {r.label}{item.roles.includes(r.value) && <Icon name='checkSmall' size={12} className='ml-0.5' />}
-        </button>
-      ))}
+      {effectiveRoles.map(r => {
+        const roleKey = r.key || r.name
+        const checked = item.roles.includes(roleKey)
+        return (
+          <button key={roleKey} onClick={() => tog('roles', roleKey)}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold transition ${checked ? 'border-red-400 bg-red-50 text-red-700' : 'border-gray-200 bg-white text-gray-600 hover:border-red-200'}`}>
+            <span className='w-2 h-2 rounded-full flex-shrink-0' style={{ backgroundColor: r.color || '#666666' }} />
+            <Icon e={r.icon || '🛡️'} size={13} /> {r.label}{checked && <Icon name='checkSmall' size={12} className='ml-0.5 text-red-600' />}
+          </button>
+        )
+      })}
     </div>
   )
 

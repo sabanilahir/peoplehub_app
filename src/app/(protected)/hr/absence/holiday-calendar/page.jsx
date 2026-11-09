@@ -41,6 +41,16 @@ export default function HolidayCalendarPage() {
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState(null)
 
+  // Selection & Copy Modal State
+  const [selectedIds, setSelectedIds] = useState([])
+  const [showCopyModal, setShowCopyModal] = useState(false)
+  const [copying, setCopying] = useState(false)
+  const [copyConfig, setCopyConfig] = useState({
+    sourceYear: 2026,
+    targetYear: 2027,
+    mode: 'all', // 'all' | 'recurring' | 'selected'
+  })
+
   // Calculator State
   const [calcLocation, setCalcLocation] = useState('ho')
   const [calcStartDate, setCalcStartDate] = useState('2026-10-26')
@@ -72,8 +82,125 @@ export default function HolidayCalendarPage() {
   }
 
   useEffect(() => {
+    setSelectedIds([])
     fetchHolidays(year, country)
   }, [year, country])
+
+  // Select All & Checkbox Handlers
+  const allSelected = holidays.length > 0 && selectedIds.length === holidays.length
+
+  const handleToggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedIds([])
+    } else {
+      setSelectedIds(holidays.map((h) => h.id))
+    }
+  }
+
+  const handleToggleSelectOne = (id) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    )
+  }
+
+  const getMonthYearText = (dateStr) => {
+    if (!dateStr) return ''
+    try {
+      const parts = dateStr.split('-')
+      if (parts.length < 2) return dateStr
+      const m = Number(parts[1])
+      const y = parts[0]
+      const months = [
+        'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+        'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+      ]
+      return `${months[m - 1] || ''} ${y}`
+    } catch {
+      return dateStr
+    }
+  }
+
+  const handleBatchDelete = async () => {
+    if (selectedIds.length === 0) return
+    const confirmMsg =
+      `⚠️ PERINGATAN PENTING:\n\n` +
+      `Menghapus ${selectedIds.length} hari libur terpilih akan mengubah parameter jumlah hari kerja efektif pada bulan-bulan terkait dan dapat berdampak langsung pada kalkulasi absensi & cut-off payroll.\n\n` +
+      `Apakah Anda yakin ingin menghapus seluruh ${selectedIds.length} hari libur yang dipilih?`
+    if (!confirm(confirmMsg)) return
+
+    try {
+      setLoading(true)
+      const res = await fetch(`/api/holidays?ids=${selectedIds.join(',')}`, {
+        method: 'DELETE',
+      })
+      const json = await res.json()
+      if (json.success) {
+        flash(`${selectedIds.length} hari libur berhasil dihapus. Parameter hari kerja telah disesuaikan.`)
+        setSelectedIds([])
+        fetchHolidays(year, country)
+      } else {
+        flash(json.error || 'Gagal menghapus.', 'error')
+      }
+    } catch (err) {
+      flash('Gagal menghapus hari libur terpilih.', 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleOpenCopyModal = (isFromSelected = false) => {
+    if (isFromSelected && selectedIds.length > 0) {
+      setCopyConfig({
+        sourceYear: year,
+        targetYear: year + 1,
+        mode: 'selected',
+      })
+    } else {
+      setCopyConfig({
+        sourceYear: year - 1,
+        targetYear: year,
+        mode: 'all',
+      })
+    }
+    setShowCopyModal(true)
+  }
+
+  const handleExecuteCopy = async () => {
+    try {
+      setCopying(true)
+      const payload = {
+        sourceYear: Number(copyConfig.sourceYear),
+        targetYear: Number(copyConfig.targetYear),
+        country,
+        recurringOnly: copyConfig.mode === 'recurring',
+        selectedIds: copyConfig.mode === 'selected' ? selectedIds : [],
+      }
+
+      const res = await fetch('/api/holidays/copy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const json = await res.json()
+
+      if (json.success) {
+        flash(json.message, 'success')
+        setShowCopyModal(false)
+        setSelectedIds([])
+        if (Number(copyConfig.targetYear) === year) {
+          fetchHolidays(year, country)
+        } else {
+          setYear(Number(copyConfig.targetYear))
+        }
+      } else {
+        flash(json.error || 'Gagal menyalin hari libur.', 'error')
+      }
+    } catch (err) {
+      flash('Terjadi kesalahan saat menyalin hari libur.', 'error')
+    } finally {
+      setCopying(false)
+    }
+  }
 
   // Seed / Muat Libur Resmi SKB 3 Menteri
   const handleSeedHolidays = async () => {
@@ -122,6 +249,18 @@ export default function HolidayCalendarPage() {
       return flash('Nama dan tanggal hari libur wajib diisi.', 'error')
     }
 
+    const monthYear = getMonthYearText(form.date)
+
+    // Peringatan konfirmasi keamanan sebelum simpan
+    if (editingId) {
+      const confirmText =
+        `⚠️ PERINGATAN PENTING:\n\n` +
+        `Menyimpan perubahan hari libur "${form.name}" (${form.date}) akan mengubah parameter jumlah hari kerja efektif pada bulan ${monthYear}.\n\n` +
+        `Perubahan ini dapat mempengaruhi kalkulasi absensi dan cut-off payroll karyawan.\n\n` +
+        `Apakah Anda yakin ingin menyimpan perubahan ini?`
+      if (!confirm(confirmText)) return
+    }
+
     try {
       setSaving(true)
       if (editingId) {
@@ -132,7 +271,7 @@ export default function HolidayCalendarPage() {
         })
         const json = await res.json()
         if (json.success) {
-          flash('Hari libur berhasil diperbarui.')
+          flash(`Hari libur berhasil diperbarui. Parameter hari kerja efektif bulan ${monthYear} telah disesuaikan.`, 'success')
           fetchHolidays(year, country)
           closeModal()
         } else {
@@ -146,7 +285,7 @@ export default function HolidayCalendarPage() {
         })
         const json = await res.json()
         if (json.success) {
-          flash('Hari libur berhasil ditambahkan.')
+          flash(`Hari libur baru berhasil ditambahkan. Parameter hari kerja efektif bulan ${monthYear} telah disesuaikan.`, 'success')
           fetchHolidays(year, country)
           closeModal()
         } else {
@@ -160,14 +299,20 @@ export default function HolidayCalendarPage() {
     }
   }
 
-  const handleDelete = async (id, name) => {
-    if (!confirm(`Hapus hari libur "${name}"?`)) return
+  const handleDelete = async (id, name, date) => {
+    const monthYear = date ? getMonthYearText(date) : ''
+    const confirmMsg =
+      `⚠️ PERINGATAN PENTING:\n\n` +
+      `Menghapus hari libur "${name}"${date ? ` (${date})` : ''} akan menambah 1 hari kerja efektif pada bulan ${monthYear}.\n\n` +
+      `Hal ini dapat mengubah parameter perhitungan absensi & cut-off payroll karyawan.\n\n` +
+      `Apakah Anda yakin ingin menghapus hari libur ini?`
+    if (!confirm(confirmMsg)) return
 
     try {
       const res = await fetch(`/api/holidays?id=${id}`, { method: 'DELETE' })
       const json = await res.json()
       if (json.success) {
-        flash('Hari libur berhasil dihapus.')
+        flash(`Hari libur berhasil dihapus. Parameter hari kerja efektif bulan ${monthYear} telah disesuaikan.`, 'success')
         fetchHolidays(year, country)
       } else {
         flash(json.error || 'Gagal menghapus.', 'error')
@@ -232,7 +377,16 @@ export default function HolidayCalendarPage() {
         title="Kalender Hari Libur & Hari Kerja"
         subtitle="Kelola master hari libur nasional (SKB 3 Menteri) dan libur perusahaan, serta simulasi perhitungan hari kerja efektif bulanan."
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => handleOpenCopyModal(false)}
+              disabled={loading || copying}
+              className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 transition shadow-sm cursor-pointer disabled:opacity-50"
+              title={`Salin daftar hari libur dari tahun ${year - 1} ke tahun ${year}`}
+            >
+              <Icon e="📋" size={14} />
+              <span>Salin dari Tahun {year - 1}</span>
+            </button>
             <button
               onClick={handleSeedHolidays}
               disabled={seeding || loading}
@@ -281,21 +435,37 @@ export default function HolidayCalendarPage() {
         </div>
 
         {/* Year & Country Selector */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-1 text-xs text-gray-500">
-            <span className="font-medium">Tahun:</span>
-            {[2025, 2026, 2027].map((y) => (
-              <button
-                key={y}
-                onClick={() => setYear(y)}
-                className={`px-2.5 py-1 rounded text-xs font-semibold transition cursor-pointer ${
-                  year === y ? 'text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-                style={year === y ? { background: BRAND } : undefined}
-              >
-                {y}
-              </button>
-            ))}
+            <span className="font-medium mr-0.5">Tahun:</span>
+            <button
+              onClick={() => setYear((y) => y - 1)}
+              className="px-1.5 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold transition cursor-pointer"
+              title="Tahun Sebelumnya"
+            >
+              ◀
+            </button>
+            {Array.from(new Set([2025, 2026, 2027, 2028, year]))
+              .sort((a, b) => a - b)
+              .map((y) => (
+                <button
+                  key={y}
+                  onClick={() => setYear(y)}
+                  className={`px-2.5 py-1 rounded text-xs font-semibold transition cursor-pointer ${
+                    year === y ? 'text-white shadow-xs' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                  style={year === y ? { background: BRAND } : undefined}
+                >
+                  {y}
+                </button>
+              ))}
+            <button
+              onClick={() => setYear((y) => y + 1)}
+              className="px-1.5 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold transition cursor-pointer"
+              title="Tahun Berikutnya"
+            >
+              ▶
+            </button>
           </div>
 
           <div className="flex items-center gap-1 text-xs text-gray-500 border-l border-gray-200 pl-3">
@@ -333,79 +503,149 @@ export default function HolidayCalendarPage() {
               <EmptyState
                 icon="🗓️"
                 title={`Belum ada hari libur untuk ${country} ${year}`}
-                description="Klik tombol 'Muat Libur SKB 3 Menteri' di atas untuk mengimpor otomatis seluruh libur nasional resmi RI, atau klik 'Tambah Hari Libur' untuk mengisi manual."
+                description="Klik tombol 'Muat Libur SKB 3 Menteri' untuk mengimpor otomatis seluruh libur nasional resmi RI, atau salin seluruh libur dari tahun sebelumnya."
               />
-              <button
-                onClick={handleSeedHolidays}
-                disabled={seeding}
-                className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white rounded-lg shadow-sm hover:opacity-90 transition cursor-pointer"
-                style={{ background: BRAND }}
-              >
-                <Icon e="⚡" size={14} />
-                <span>Muat Otomatis Libur Nasional {year} Sekarang</span>
-              </button>
+              <div className="mt-4 flex items-center justify-center gap-3 flex-wrap">
+                <button
+                  onClick={handleSeedHolidays}
+                  disabled={seeding}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white rounded-lg shadow-sm hover:opacity-90 transition cursor-pointer"
+                  style={{ background: BRAND }}
+                >
+                  <Icon e="⚡" size={14} />
+                  <span>Muat Otomatis Libur Nasional {year} Sekarang</span>
+                </button>
+                <button
+                  onClick={() => handleOpenCopyModal(false)}
+                  disabled={copying}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg shadow-sm transition cursor-pointer"
+                >
+                  <Icon e="📋" size={14} />
+                  <span>Salin Libur dari Tahun {year - 1}</span>
+                </button>
+              </div>
             </div>
           ) : (
-            <DataTable
-              columns={[
-                { label: 'Tanggal', width: '15%' },
-                { label: 'Nama Hari Libur', width: '38%' },
-                { label: 'Kategori / Tipe', width: '20%' },
-                { label: 'Berulang Tahunan', align: 'center', width: '12%' },
-                { label: 'Aksi', align: 'right', width: '15%' },
-              ]}
-              className="ring-0 shadow-none rounded-none"
-            >
-              {holidays.map((h) => {
-                const d = new Date(h.date + 'T00:00:00')
-                const dayName = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'][d.getDay()]
-                const isCutiBersama = h.type === 'Cuti Bersama'
-                const isCompany = h.type === 'Company'
+            <>
+              {/* Floating Batch Selection Bar */}
+              {selectedIds.length > 0 && (
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-gradient-to-r from-teal-50 to-blue-50 border-b border-teal-200 px-5 py-3 text-xs font-semibold text-teal-950 shadow-inner">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">☑️</span>
+                    <span>
+                      <strong>{selectedIds.length}</strong> dari <strong>{holidays.length}</strong> hari libur terpilih
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      onClick={() => handleOpenCopyModal(true)}
+                      className="px-3.5 py-1.5 rounded-lg bg-teal-700 hover:bg-teal-800 text-white transition flex items-center gap-1.5 shadow-sm cursor-pointer"
+                    >
+                      <Icon e="📋" size={13} />
+                      <span>Salin Terpilih ke Tahun Lain...</span>
+                    </button>
+                    <button
+                      onClick={handleBatchDelete}
+                      className="px-3.5 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white transition flex items-center gap-1.5 shadow-sm cursor-pointer"
+                    >
+                      <Icon e="🗑️" size={13} />
+                      <span>Hapus Terpilih ({selectedIds.length})</span>
+                    </button>
+                    <button
+                      onClick={() => setSelectedIds([])}
+                      className="px-3 py-1.5 text-gray-600 hover:text-gray-900 bg-white border border-gray-200 rounded-lg transition cursor-pointer"
+                    >
+                      Batal
+                    </button>
+                  </div>
+                </div>
+              )}
 
-                return (
-                  <Tr key={h.id}>
-                    <Td className="text-gray-800 font-mono text-xs">
-                      <div>
-                        <strong className="text-gray-900">{h.date}</strong>
-                        <p className="text-[10px] text-gray-400 font-sans">{dayName}</p>
+              <DataTable
+                columns={[
+                  {
+                    label: (
+                      <div className="flex items-center justify-center">
+                        <input
+                          type="checkbox"
+                          checked={allSelected}
+                          onChange={handleToggleSelectAll}
+                          className="w-4 h-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500 accent-teal-600 cursor-pointer"
+                          title={allSelected ? 'Batalkan pilihan semua' : 'Pilih semua (Select All)'}
+                        />
                       </div>
-                    </Td>
-                    <Td className="font-semibold text-gray-900 text-xs">{h.name}</Td>
-                    <Td>
-                      <span
-                        className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
-                          isCutiBersama
-                            ? 'bg-amber-50 text-amber-800 border-amber-200'
-                            : isCompany
-                            ? 'bg-purple-50 text-purple-800 border-purple-200'
-                            : 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                        }`}
-                      >
-                        {h.type}
-                      </span>
-                    </Td>
-                    <Td align="center" className="text-gray-500 text-xs">
-                      {h.recurring ? '✅ Ya' : '—'}
-                    </Td>
-                    <Td align="right">
-                      <div className="flex justify-end gap-1.5">
-                        <ActionButton size="sm" variant="secondary" onClick={() => handleEdit(h)}>
-                          Edit
-                        </ActionButton>
-                        <ActionButton
-                          size="sm"
-                          variant="secondary"
-                          className="!bg-red-50 !text-red-600 !border-red-100 hover:!bg-red-100"
-                          onClick={() => handleDelete(h.id, h.name)}
+                    ),
+                    width: '4%',
+                    align: 'center',
+                  },
+                  { label: 'Tanggal', width: '15%' },
+                  { label: 'Nama Hari Libur', width: '36%' },
+                  { label: 'Kategori / Tipe', width: '18%' },
+                  { label: 'Berulang Tahunan', align: 'center', width: '12%' },
+                  { label: 'Aksi', align: 'right', width: '15%' },
+                ]}
+                className="ring-0 shadow-none rounded-none"
+              >
+                {holidays.map((h) => {
+                  const d = new Date(h.date + 'T00:00:00')
+                  const dayName = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'][d.getDay()]
+                  const isCutiBersama = h.type === 'Cuti Bersama'
+                  const isCompany = h.type === 'Company'
+                  const isSelected = selectedIds.includes(h.id)
+
+                  return (
+                    <Tr key={h.id} active={isSelected}>
+                      <Td align="center">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => handleToggleSelectOne(h.id)}
+                          className="w-4 h-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500 accent-teal-600 cursor-pointer"
+                        />
+                      </Td>
+                      <Td className="text-gray-800 font-mono text-xs">
+                        <div>
+                          <strong className="text-gray-900">{h.date}</strong>
+                          <p className="text-[10px] text-gray-400 font-sans">{dayName}</p>
+                        </div>
+                      </Td>
+                      <Td className="font-semibold text-gray-900 text-xs">{h.name}</Td>
+                      <Td>
+                        <span
+                          className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+                            isCutiBersama
+                              ? 'bg-amber-50 text-amber-800 border-amber-200'
+                              : isCompany
+                              ? 'bg-purple-50 text-purple-800 border-purple-200'
+                              : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                          }`}
                         >
-                          Hapus
-                        </ActionButton>
-                      </div>
-                    </Td>
-                  </Tr>
-                )
-              })}
-            </DataTable>
+                          {h.type}
+                        </span>
+                      </Td>
+                      <Td align="center" className="text-gray-500 text-xs">
+                        {h.recurring ? '✅ Ya' : '—'}
+                      </Td>
+                      <Td align="right">
+                        <div className="flex justify-end gap-1.5">
+                          <ActionButton size="sm" variant="secondary" onClick={() => handleEdit(h)}>
+                            Edit
+                          </ActionButton>
+                          <ActionButton
+                            size="sm"
+                            variant="secondary"
+                            className="!bg-red-50 !text-red-600 !border-red-100 hover:!bg-red-100"
+                            onClick={() => handleDelete(h.id, h.name, h.date)}
+                          >
+                            Hapus
+                          </ActionButton>
+                        </div>
+                      </Td>
+                    </Tr>
+                  )
+                })}
+              </DataTable>
+            </>
           )}
         </SectionCard>
       )}
@@ -642,6 +882,28 @@ export default function HolidayCalendarPage() {
             </div>
 
             <div className="px-6 py-5 space-y-4">
+              {/* Alert Peringatan Parameter Hari Kerja Bulanan */}
+              <div className="bg-amber-50 border border-amber-300 rounded-xl p-3.5 flex items-start gap-3 text-xs text-amber-950 shadow-xs">
+                <span className="text-xl leading-none select-none">⚠️</span>
+                <div className="space-y-1">
+                  <strong className="font-bold text-amber-900 block">
+                    Peringatan Parameter Hari Kerja Bulanan
+                  </strong>
+                  <p className="text-amber-800 leading-relaxed">
+                    {editingId
+                      ? `Perubahan tanggal atau status libur ini akan langsung mengubah parameter jumlah hari kerja efektif pada bulan ${
+                          form.date ? getMonthYearText(form.date) : 'terkait'
+                        }.`
+                      : `Menambahkan hari libur pada hari kerja (Senin–Jumat) akan mengurangi jumlah hari kerja efektif pada bulan ${
+                          form.date ? getMonthYearText(form.date) : 'terkait'
+                        }.`}
+                  </p>
+                  <p className="text-[11px] text-amber-700 font-medium">
+                    Harap berhati-hati karena parameter ini digunakan langsung pada kalkulasi cut-off absensi dan payroll.
+                  </p>
+                </div>
+              </div>
+
               <FormField label="Nama Hari Libur" required>
                 <Input
                   value={form.name}
@@ -695,6 +957,146 @@ export default function HolidayCalendarPage() {
                 style={{ background: BRAND }}
               >
                 {saving ? 'Menyimpan...' : editingId ? 'Simpan Perubahan' : 'Tambahkan'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Salin Hari Libur Antar Tahun */}
+      {showCopyModal && (
+        <div
+          className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+          onClick={() => setShowCopyModal(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-gray-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-slate-900 to-teal-950 text-white">
+              <div>
+                <h3 className="text-sm font-bold flex items-center gap-2">
+                  <span>📋</span>
+                  <span>Salin Hari Libur Antar Tahun</span>
+                </h3>
+                <p className="text-[11px] text-gray-300">
+                  Gandakan data hari libur ke tahun tujuan tanpa input manual.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowCopyModal(false)}
+                className="text-gray-300 hover:text-white text-xl font-bold leading-none cursor-pointer"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="px-6 py-5 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <FormField label="Tahun Sumber (Asal)">
+                  <Select
+                    value={copyConfig.sourceYear}
+                    onChange={(e) =>
+                      setCopyConfig((c) => ({ ...c, sourceYear: Number(e.target.value) }))
+                    }
+                  >
+                    {[2024, 2025, 2026, 2027, 2028].map((y) => (
+                      <option key={y} value={y}>
+                        {y}
+                      </option>
+                    ))}
+                  </Select>
+                </FormField>
+
+                <FormField label="Tahun Tujuan (Target)">
+                  <Select
+                    value={copyConfig.targetYear}
+                    onChange={(e) =>
+                      setCopyConfig((c) => ({ ...c, targetYear: Number(e.target.value) }))
+                    }
+                  >
+                    {[2025, 2026, 2027, 2028, 2029, 2030].map((y) => (
+                      <option key={y} value={y}>
+                        {y}
+                      </option>
+                    ))}
+                  </Select>
+                </FormField>
+              </div>
+
+              <div className="space-y-2 pt-1">
+                <label className="text-xs font-semibold text-gray-700">Pilihan Hari Libur:</label>
+                <div className="space-y-2 text-xs">
+                  {selectedIds.length > 0 && (
+                    <label className="flex items-center gap-2 p-2.5 rounded-lg border border-teal-200 bg-teal-50 text-teal-900 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="copyMode"
+                        checked={copyConfig.mode === 'selected'}
+                        onChange={() => setCopyConfig((c) => ({ ...c, mode: 'selected' }))}
+                        className="accent-teal-600"
+                      />
+                      <span>
+                        <strong>Hanya {selectedIds.length} item terpilih</strong> saat ini
+                      </span>
+                    </label>
+                  )}
+
+                  <label className="flex items-center gap-2 p-2.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-800 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="copyMode"
+                      checked={copyConfig.mode === 'all'}
+                      onChange={() => setCopyConfig((c) => ({ ...c, mode: 'all' }))}
+                      className="accent-teal-600"
+                    />
+                    <div>
+                      <p className="font-semibold">Semua Hari Libur</p>
+                      <p className="text-[11px] text-gray-500">
+                        Salin seluruh libur nasional, cuti bersama, dan perusahaan dari tahun {copyConfig.sourceYear}.
+                      </p>
+                    </div>
+                  </label>
+
+                  <label className="flex items-center gap-2 p-2.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-800 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="copyMode"
+                      checked={copyConfig.mode === 'recurring'}
+                      onChange={() => setCopyConfig((c) => ({ ...c, mode: 'recurring' }))}
+                      className="accent-teal-600"
+                    />
+                    <div>
+                      <p className="font-semibold">Hanya Libur Tetap (Recurring)</p>
+                      <p className="text-[11px] text-gray-500">
+                        Hanya salin libur dengan tanggal tetap (1 Jan, 1 Mei, 1 Jun, 17 Agu, 25 Des).
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-[11px] text-amber-800">
+                💡 <strong>Catatan:</strong> Jika hari libur pada tanggal tersebut sudah ada di tahun{' '}
+                {copyConfig.targetYear}, data akan diperbarui otomatis agar tidak duplikat.
+              </div>
+            </div>
+
+            <div className="px-6 pb-5 flex gap-3">
+              <button
+                onClick={() => setShowCopyModal(false)}
+                disabled={copying}
+                className="flex-1 py-2 text-xs font-semibold bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleExecuteCopy}
+                disabled={copying || copyConfig.sourceYear === copyConfig.targetYear}
+                className="flex-1 py-2 text-xs font-semibold text-white rounded-lg shadow-sm hover:opacity-90 transition cursor-pointer disabled:opacity-50"
+                style={{ background: BRAND }}
+              >
+                {copying ? 'Menyalin Data...' : `Salin ke Tahun ${copyConfig.targetYear}`}
               </button>
             </div>
           </div>

@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
-import { PrismaClient } from '@prisma/client'
+import { prisma } from '@/lib/prisma'
 import { getTask, getTaskVariables, completeTask, claimTask } from '@/lib/flowable/client'
 
-const prisma = new PrismaClient()
+export const dynamic = 'force-dynamic'
 
 export async function GET(request, props) {
   try {
@@ -79,8 +79,195 @@ export async function POST(request, props) {
       }
       result = await claimTask(id, assignee)
     } else if (action === 'complete' || !action) {
-      // Default action is complete
+      // 1. Ambil detail task dan variabel sebelum complete untuk sinkronisasi DB
+      let taskInfo = null
+      let taskVariables = []
+      try {
+        const [tRes, varsRes] = await Promise.all([
+          getTask(id),
+          getTaskVariables(id),
+        ])
+        if (tRes.success) taskInfo = tRes.data
+        if (varsRes.success) taskVariables = varsRes.data || []
+      } catch (e) {
+        console.warn('Could not pre-fetch task info:', e.message)
+      }
+
+      // 2. Eksekusi complete ke Flowable Engine
       result = await completeTask(id, variables)
+
+      // 3. Jika berhasil, lakukan sinkronisasi otomatis ke tabel PostgreSQL prisma.leave
+      if (result.success) {
+        const isApproved = variables.find((v) => v.name === 'approved')?.value === true
+        const approverName = variables.find((v) => v.name === 'approverName')?.value || 'Approver'
+        const approvalNote = variables.find((v) => v.name === 'approvalNote')?.value || (isApproved ? 'Disetujui' : 'Ditolak')
+
+        const varMap = {}
+        taskVariables.forEach((v) => {
+          varMap[v.name] = v.value
+        })
+        ;(variables || []).forEach((v) => {
+          varMap[v.name] = v.value
+        })
+
+        const procInstId = taskInfo?.processInstanceId || varMap.processInstanceId
+
+        // Cek apakah masih ada langkah berikutnya di Flowable
+        let hasNextTasks = false
+        if (isApproved && procInstId) {
+          try {
+            const nextTasksRes = await getTasks({ processInstanceId: procInstId })
+            if (nextTasksRes.success && Array.isArray(nextTasksRes.data?.data) && nextTasksRes.data.data.length > 0) {
+              hasNextTasks = true
+            }
+          } catch (e) {}
+        }
+
+        const taskKey = (taskInfo?.taskDefinitionKey || '').toLowerCase()
+        const isHrStep = taskKey.includes('hr') || (taskInfo?.name || '').toLowerCase().includes('hr')
+        const isSupervisorStep = !isHrStep
+        const finalLeaveStatus = !isApproved ? 'Rejected' : hasNextTasks ? 'Pending' : 'Approved'
+
+        if (varMap.employeeId || varMap.leaveType || varMap.startDate) {
+          try {
+            const empId = Number(varMap.employeeId) || 0
+            const leaveTypeName = varMap.leaveType || 'Cuti Tahunan'
+            const startDate = varMap.startDate || new Date().toISOString().slice(0, 10)
+            const endDate = varMap.endDate || startDate
+            const days = Number(varMap.days) || 1
+            const reason = varMap.reason || varMap.note || 'Pengajuan via Flowable BPMN'
+
+            // Cari jenis cuti yang cocok di DB
+            let lt = await prisma.leaveType.findFirst({
+              where: { name: { contains: leaveTypeName, mode: 'insensitive' } },
+            })
+            if (!lt) {
+              lt = await prisma.leaveType.findFirst()
+            }
+
+            // Cari user di DB
+            let user = await prisma.user.findFirst({
+              where: {
+                OR: [
+                  ...(empId ? [{ id: empId }, { employeeId: empId }] : []),
+                  ...(varMap.employeeName ? [{ name: { contains: varMap.employeeName, mode: 'insensitive' } }] : []),
+                ],
+              },
+            })
+
+            if (!user && empId) {
+              const emp = await prisma.employee.findUnique({ where: { id: empId } })
+              if (emp) {
+                user = await prisma.user.create({
+                  data: {
+                    id: emp.id,
+                    username: emp.nik || `user_${emp.id}`,
+                    password: 'defaultPassword123',
+                    name: emp.name,
+                    role: 'employee',
+                    employeeId: emp.id,
+                    dept: emp.dept || '',
+                    position: emp.position || '',
+                  },
+                })
+              }
+            }
+
+            let existingLeave = null
+            if (varMap.leaveId) {
+              existingLeave = await prisma.leave.findUnique({
+                where: { id: Number(varMap.leaveId) },
+              })
+            }
+
+            if (!existingLeave && user) {
+              existingLeave = await prisma.leave.findFirst({
+                where: {
+                  userId: user.id,
+                  startDate,
+                  endDate,
+                },
+                orderBy: { id: 'desc' },
+              })
+            }
+
+            const stepSupervisor = {
+              level: 1,
+              label: 'Supervisor Approval (Flowable)',
+              status: isApproved ? 'Approved' : 'Rejected',
+              approverName,
+              actedAt: new Date().toISOString(),
+              note: approvalNote,
+            }
+
+            const stepHr = {
+              level: 2,
+              label: 'HR Verification (Flowable)',
+              status: isApproved ? 'Approved' : 'Rejected',
+              approverName,
+              actedAt: new Date().toISOString(),
+              note: approvalNote,
+            }
+
+            if (existingLeave) {
+              const currentSteps = Array.isArray(existingLeave.steps) ? existingLeave.steps : []
+              let updatedSteps = []
+
+              if (isSupervisorStep) {
+                updatedSteps = [
+                  stepSupervisor,
+                  ...(hasNextTasks
+                    ? [{ level: 2, label: 'HR Verification (Flowable)', status: 'Pending', approverName: 'HR Team' }]
+                    : []),
+                ]
+              } else if (isHrStep) {
+                const step1 = currentSteps.find((s) => s.level === 1) || {
+                  level: 1,
+                  label: 'Supervisor Approval (Flowable)',
+                  status: 'Approved',
+                  approverName: 'Supervisor',
+                }
+                updatedSteps = [step1, stepHr]
+              } else {
+                updatedSteps = [
+                  {
+                    level: 1,
+                    label: taskInfo?.name || 'Flowable Task',
+                    status: isApproved ? 'Approved' : 'Rejected',
+                    approverName,
+                    actedAt: new Date().toISOString(),
+                    note: approvalNote,
+                  },
+                ]
+              }
+
+              await prisma.leave.update({
+                where: { id: existingLeave.id },
+                data: {
+                  status: finalLeaveStatus,
+                  steps: updatedSteps,
+                },
+              })
+            } else if (user) {
+              await prisma.leave.create({
+                data: {
+                  userId: user.id,
+                  typeId: lt?.id || 1,
+                  typeName: leaveTypeName,
+                  startDate,
+                  endDate,
+                  days,
+                  note: reason,
+                  status: finalLeaveStatus,
+                  steps: [stepSupervisor],
+                },
+              })
+            }
+          } catch (syncErr) {
+            console.error('[Flowable -> PostgreSQL Sync] Error:', syncErr)
+          }
+        }
+      }
     } else {
       return NextResponse.json(
         { error: 'Invalid action. Use "claim" or "complete"' },

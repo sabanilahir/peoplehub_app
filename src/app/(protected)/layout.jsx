@@ -102,16 +102,17 @@ export default function ProtectedLayout({ children }) {
 
     // Proteksi rute Sysadmin:
     // - superadmin: Akses penuh ke seluruh sub-rute /sysadmin
-    // - hr_manager: Diizinkan mengakses modul kebijakan kerja & cuti (work-location & leave-workflow)
+    // - hr_manager / hr: Diizinkan mengakses modul kebijakan kerja & cuti (work-location, leave-workflow, userlists)
     if (pathname.startsWith('/sysadmin')) {
       const isHrAllowedSysadminRoute =
         pathname.startsWith('/sysadmin/settings/work-location') ||
-        pathname.startsWith('/sysadmin/leave-workflow')
+        pathname.startsWith('/sysadmin/leave-workflow') ||
+        pathname.startsWith('/sysadmin/workflow/userlists')
 
       if (role === 'superadmin') {
         // Full access
-      } else if (role === 'hr_manager' && isHrAllowedSysadminRoute) {
-        // Diizinkan khusus kebijakan HR
+      } else if (['hr_manager', 'hr'].includes(role) && isHrAllowedSysadminRoute) {
+        // Diizinkan khusus kebijakan HR & Grup Penyetuju Workflow
       } else {
         router.replace('/dashboard')
         return

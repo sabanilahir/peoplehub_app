@@ -5,29 +5,37 @@ export const DEFAULT_LOCATION_RULES = {
   ho: {
     locationName: 'Head Office (HO)',
     enableTransport: true,
+    enableNonPermanent: true,
     enableKpi: true,
     transportPercent: 15,
+    nonPermanentPercent: 10,
     kpiPercent: 10,
   },
   sales: {
     locationName: 'Area Sales (Others)',
     enableTransport: true,
+    enableNonPermanent: true,
     enableKpi: true,
     transportPercent: 15,
+    nonPermanentPercent: 10,
     kpiPercent: 10,
   },
   gudang: {
     locationName: 'Gudang (Warehouse)',
     enableTransport: true,
+    enableNonPermanent: true,
     enableKpi: true,
     transportPercent: 15,
+    nonPermanentPercent: 10,
     kpiPercent: 10,
   },
   livestream: {
     locationName: 'Livestream (Manhattan)',
     enableTransport: true,
+    enableNonPermanent: true,
     enableKpi: true,
     transportPercent: 15,
+    nonPermanentPercent: 10,
     kpiPercent: 10,
   },
 }
@@ -35,6 +43,7 @@ export const DEFAULT_LOCATION_RULES = {
 export const DEFAULT_SALARY_BREAKDOWN_CONFIG = {
   basicPercent: 75,
   transportPercent: 15,
+  nonPermanentPercent: 10,
   kpiPercent: 10,
   roundingStep: 100, // Default: pembulatan ke ratusan terdekat (Rp 100)
   locationRules: DEFAULT_LOCATION_RULES,
@@ -83,19 +92,20 @@ export async function saveSalaryBreakdownConfig(config) {
 
   const basic = Number(config.basicPercent) || current.basicPercent || 75
   const transport = Number(config.transportPercent) || current.transportPercent || 15
-  const kpi = Number(config.kpiPercent) || current.kpiPercent || 10
+  const nonPermanent = Number(config.nonPermanentPercent ?? config.kpiPercent) || current.nonPermanentPercent || current.kpiPercent || 10
   const roundingStep = Number(config.roundingStep) || current.roundingStep || 100
   const locationRules = config.locationRules || current.locationRules || DEFAULT_LOCATION_RULES
 
-  const total = Math.round((basic + transport + kpi) * 100) / 100
+  const total = Math.round((basic + transport + nonPermanent) * 100) / 100
   if (total !== 100) {
-    throw new Error(`Total persentase harus tepat 100% (saat ini ${total}%: Basic ${basic}%, Transport ${transport}%, KPI ${kpi}%)`)
+    throw new Error(`Total persentase harus tepat 100% (saat ini ${total}%: Basic ${basic}%, Transport ${transport}%, Non Permanent ${nonPermanent}%)`)
   }
 
   const payload = {
     basicPercent: basic,
     transportPercent: transport,
-    kpiPercent: kpi,
+    nonPermanentPercent: nonPermanent,
+    kpiPercent: nonPermanent, // alias
     roundingStep,
     locationRules,
     updatedAt: new Date().toISOString(),
@@ -190,9 +200,9 @@ export function calculateSalaryBreakdown(odooWage, config = DEFAULT_SALARY_BREAK
   const locRule = (config.locationRules && config.locationRules[locCode]) || DEFAULT_LOCATION_RULES[locCode] || {}
   const override = options.employeeOverride || null
 
-  // 1. Tentukan apakah Transport & KPI Aktif (Hierarki: Override Individu > Aturan Lokasi > Default True)
+  // 1. Tentukan apakah Transport & Non Permanent Allowance Aktif (Hierarki: Override Individu > Aturan Lokasi > Default True)
   let enableTransport = true
-  let enableKpi = true
+  let enableNonPermanent = true
 
   if (override && typeof override.enableTransport === 'boolean') {
     enableTransport = override.enableTransport
@@ -200,10 +210,13 @@ export function calculateSalaryBreakdown(odooWage, config = DEFAULT_SALARY_BREAK
     enableTransport = locRule.enableTransport
   }
 
-  if (override && typeof override.enableKpi === 'boolean') {
-    enableKpi = override.enableKpi
-  } else if (typeof locRule.enableKpi === 'boolean') {
-    enableKpi = locRule.enableKpi
+  const rawOverrideNP = override ? (override.enableNonPermanent ?? override.enableKpi) : undefined
+  const rawLocNP = locRule.enableNonPermanent ?? locRule.enableKpi
+
+  if (typeof rawOverrideNP === 'boolean') {
+    enableNonPermanent = rawOverrideNP
+  } else if (typeof rawLocNP === 'boolean') {
+    enableNonPermanent = rawLocNP
   }
 
   // 2. Persentase Tunjangan (Lokasi Rule atau Global Config)
@@ -211,23 +224,26 @@ export function calculateSalaryBreakdown(odooWage, config = DEFAULT_SALARY_BREAK
     ? locRule.transportPercent
     : (Number(config.transportPercent) || DEFAULT_SALARY_BREAKDOWN_CONFIG.transportPercent)
 
-  const kpiPercent = typeof locRule.kpiPercent === 'number'
-    ? locRule.kpiPercent
-    : (Number(config.kpiPercent) || DEFAULT_SALARY_BREAKDOWN_CONFIG.kpiPercent)
+  const nonPermanentPercent = typeof (locRule.nonPermanentPercent ?? locRule.kpiPercent) === 'number'
+    ? (locRule.nonPermanentPercent ?? locRule.kpiPercent)
+    : (Number(config.nonPermanentPercent ?? config.kpiPercent) || DEFAULT_SALARY_BREAKDOWN_CONFIG.nonPermanentPercent)
 
   if (basic === 0) {
     return {
       basicSalary: 0,
       transportAllowance: 0,
-      kpiAllowance: 0,
+      nonPermanentAllowance: 0,
+      kpiAllowance: 0, // alias
       grossSalary: 0,
       enableTransport,
-      enableKpi,
+      enableNonPermanent,
+      enableKpi: enableNonPermanent, // alias
       isOverridden: !!override,
       percentages: {
         basicPercent,
         transportPercent,
-        kpiPercent,
+        nonPermanentPercent,
+        kpiPercent: nonPermanentPercent,
         roundingStep,
       },
     }
@@ -235,27 +251,30 @@ export function calculateSalaryBreakdown(odooWage, config = DEFAULT_SALARY_BREAK
 
   // 3. Tunjangan dihitung proporsional terhadap Basic Salary jika aktif
   const transportRaw = enableTransport && basicPercent > 0 ? (basic * transportPercent) / basicPercent : 0
-  const kpiRaw = enableKpi && basicPercent > 0 ? (basic * kpiPercent) / basicPercent : 0
+  const npRaw = enableNonPermanent && basicPercent > 0 ? (basic * nonPermanentPercent) / basicPercent : 0
 
   // 4. Terapkan pembulatan ke kelipatan step
   const transportAllowance = enableTransport ? roundToStep(transportRaw, roundingStep) : 0
-  const kpiAllowance = enableKpi ? roundToStep(kpiRaw, roundingStep) : 0
+  const nonPermanentAllowance = enableNonPermanent ? roundToStep(npRaw, roundingStep) : 0
 
-  // 5. Gross Salary adalah penjumlahan pasti Basic + Transport + KPI agar total selalu klop 100%
-  const grossSalary = basic + transportAllowance + kpiAllowance
+  // 5. Gross Salary adalah penjumlahan pasti Basic + Transport + NPA agar total selalu klop 100%
+  const grossSalary = basic + transportAllowance + nonPermanentAllowance
 
   return {
     basicSalary: basic,
     transportAllowance,
-    kpiAllowance,
+    nonPermanentAllowance,
+    kpiAllowance: nonPermanentAllowance, // alias
     grossSalary,
     enableTransport,
-    enableKpi,
+    enableNonPermanent,
+    enableKpi: enableNonPermanent, // alias
     isOverridden: !!override,
     percentages: {
       basicPercent,
       transportPercent,
-      kpiPercent,
+      nonPermanentPercent,
+      kpiPercent: nonPermanentPercent,
       roundingStep,
     },
   }
