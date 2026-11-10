@@ -119,6 +119,11 @@ export default function ApproveLeavePage() {
   const handleFlowableApprove = async (task) => {
     try {
       setFlowableActionId(task.id)
+      const taskDefKey = (task.taskDefinitionKey || '').toLowerCase()
+      const taskNameLower = (task.name || '').toLowerCase()
+      const isTier1 = taskDefKey.includes('approver1') || taskNameLower.includes('approval 1')
+      const note = isTier1 ? 'Disetujui di Tingkat 1 (Approval 1)' : 'Disetujui di Tingkat 2 (Final)'
+
       const res = await fetch(`/api/flowable/tasks/${task.id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -129,15 +134,17 @@ export default function ApproveLeavePage() {
             { name: 'approverUsername', value: currentUser.username || '', type: 'string' },
             { name: 'approverName', value: currentUser.name || '', type: 'string' },
             { name: 'actedAt', value: new Date().toISOString(), type: 'string' },
-            { name: 'approvalNote', value: 'Disetujui oleh Supervisor', type: 'string' },
+            { name: 'approvalNote', value: note, type: 'string' },
           ],
         }),
       })
 
       const data = await res.json()
       if (data.success) {
+        // Optimistic UI: langsung hapus baris tugas dari state agar tidak bisa diklik ulang
+        setFlowableTasks((prev) => prev.filter((t) => t.id !== task.id))
         flashToast(
-          `Permohonan cuti ${task.applicantName || getTaskVar(task, 'employeeName')} berhasil disetujui via Flowable & otomatis masuk ke HO Calculator!`,
+          `Permohonan cuti ${task.applicantName || getTaskVar(task, 'employeeName')} berhasil disetujui via Flowable!`,
           'success'
         )
         await Promise.all([loadFlowableTasks(), loadLeaves()])
@@ -165,13 +172,15 @@ export default function ApproveLeavePage() {
             { name: 'approverUsername', value: currentUser.username || '', type: 'string' },
             { name: 'approverName', value: currentUser.name || '', type: 'string' },
             { name: 'actedAt', value: new Date().toISOString(), type: 'string' },
-            { name: 'approvalNote', value: flowableRejectNote || 'Ditolak oleh Supervisor', type: 'string' },
+            { name: 'approvalNote', value: flowableRejectNote || 'Ditolak oleh Approver', type: 'string' },
           ],
         }),
       })
 
       const data = await res.json()
       if (data.success) {
+        // Optimistic UI: langsung hapus baris tugas dari state
+        setFlowableTasks((prev) => prev.filter((t) => t.id !== task.id))
         flashToast(`Permohonan cuti ${task.applicantName || getTaskVar(task, 'employeeName')} ditolak via Flowable.`, 'warning')
         setFlowableRejectId(null)
         setFlowableRejectNote('')
@@ -274,56 +283,81 @@ export default function ApproveLeavePage() {
               </td>
             </tr>
           ) : flowableTasks.length ? (
-            flowableTasks.map((task) => {
-              const empName = task.applicantName || getTaskVar(task, 'employeeName', 'Karyawan')
-              const empNik = task.applicantNik || getTaskVar(task, 'employeeNik', '')
-              const dept = task.applicantDept || getTaskVar(task, 'employeeDept', '')
-              const pos = task.applicantPosition || getTaskVar(task, 'employeePosition', '')
-              const lType = task.leaveType || getTaskVar(task, 'leaveType', 'Cuti Tahunan')
-              const start = task.startDate || getTaskVar(task, 'startDate', '')
-              const end = task.endDate || getTaskVar(task, 'endDate', '')
-              const days = task.days || getTaskVar(task, 'days', '1')
-              const reason = task.reason || getTaskVar(task, 'reason', '')
-              const isRejecting = flowableRejectId === task.id
-              const isActioning = flowableActionId === task.id
+            flowableTasks
+              .filter((task) => {
+                // Saring keluar tugas yang permohonan cutinya sudah berstatus final (Approved/Rejected)
+                const leaveId =
+                  task.parsedVariables?.leaveId ||
+                  (task.variables || []).find((v) => v.name === 'leaveId')?.value
+                if (leaveId) {
+                  const dbL = dbLeaves.find((l) => String(l.id) === String(leaveId))
+                  if (dbL && (dbL.status === 'Approved' || dbL.status === 'Rejected')) {
+                    return false
+                  }
+                }
+                return true
+              })
+              .map((task) => {
+                const empName = task.applicantName || getTaskVar(task, 'employeeName', 'Karyawan')
+                const empNik = task.applicantNik || getTaskVar(task, 'employeeNik', '')
+                const dept = task.applicantDept || getTaskVar(task, 'employeeDept', '')
+                const pos = task.applicantPosition || getTaskVar(task, 'employeePosition', '')
+                const lType = task.leaveType || getTaskVar(task, 'leaveType', 'Cuti Tahunan')
+                const start = task.startDate || getTaskVar(task, 'startDate', '')
+                const end = task.endDate || getTaskVar(task, 'endDate', '')
+                const days = task.days || getTaskVar(task, 'days', '1')
+                const reason = task.reason || getTaskVar(task, 'reason', '')
+                const isRejecting = flowableRejectId === task.id
+                const isActioning = flowableActionId === task.id
 
-              return (
-                <Tr key={task.id} className="bg-white hover:bg-teal-50/30 transition">
-                  <Td>
-                    <div className="font-bold text-gray-900">{empName}</div>
-                    <div className="text-[11px] text-gray-500 font-mono">{empNik || '—'}</div>
-                  </Td>
-                  <Td>
-                    <div className="text-xs font-semibold text-gray-700">{dept || '—'}</div>
-                    <div className="text-[11px] text-gray-400 truncate max-w-[180px]">{pos || '—'}</div>
-                  </Td>
-                  <Td>
-                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-100">
-                      {lType}
-                    </span>
-                  </Td>
-                  <Td>
-                    <div className="text-xs font-medium text-gray-800">
-                      {start} <Icon e="→" size={12} className="inline" /> {end}
-                    </div>
-                    <div className="text-[11px] text-teal-700 font-semibold">{days} hari kerja</div>
-                  </Td>
-                  <Td className="max-w-[200px]">
-                    <div className="text-xs text-gray-600 italic truncate" title={reason}>
-                      &ldquo;{reason || 'Tidak ada catatan'}&rdquo;
-                    </div>
-                  </Td>
-                  <Td>
-                    <div className="flex flex-col gap-1">
-                      <StatusBadge tone="warning">{task.name || 'Supervisor Approval'}</StatusBadge>
-                      {task.candidateGroupDisplay && (
-                        <span className="text-[10px] text-teal-700 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-200 font-medium inline-flex items-center gap-1 w-fit">
-                          <span>👥</span> {task.candidateGroupDisplay}
-                        </span>
-                      )}
-                      <span className="text-[10px] text-gray-400 font-mono">ID: {task.id.slice(0, 8)}…</span>
-                    </div>
-                  </Td>
+                const taskDefKey = (task.taskDefinitionKey || '').toLowerCase()
+                const taskNameLower = (task.name || '').toLowerCase()
+                const isTier1 = taskDefKey.includes('approver1') || taskNameLower.includes('approval 1')
+                const isTier2 = taskDefKey.includes('approver2') || taskNameLower.includes('approval 2') || taskDefKey.includes('hr')
+                const tierBadgeLabel = isTier1
+                  ? 'Approval 1 (Tingkat 1)'
+                  : isTier2
+                  ? 'Approval 2 (Tingkat 2 / HR)'
+                  : task.name || 'Approval Task'
+                const tierTone = isTier1 ? 'blue' : 'success'
+
+                return (
+                  <Tr key={task.id} className="bg-white hover:bg-teal-50/30 transition">
+                    <Td>
+                      <div className="font-bold text-gray-900">{empName}</div>
+                      <div className="text-[11px] text-gray-500 font-mono">{empNik || '—'}</div>
+                    </Td>
+                    <Td>
+                      <div className="text-xs font-semibold text-gray-700">{dept || '—'}</div>
+                      <div className="text-[11px] text-gray-400 truncate max-w-[180px]">{pos || '—'}</div>
+                    </Td>
+                    <Td>
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-100">
+                        {lType}
+                      </span>
+                    </Td>
+                    <Td>
+                      <div className="text-xs font-medium text-gray-800">
+                        {start} <Icon e="→" size={12} className="inline" /> {end}
+                      </div>
+                      <div className="text-[11px] text-teal-700 font-semibold">{days} hari kerja</div>
+                    </Td>
+                    <Td className="max-w-[200px]">
+                      <div className="text-xs text-gray-600 italic truncate" title={reason}>
+                        &ldquo;{reason || 'Tidak ada catatan'}&rdquo;
+                      </div>
+                    </Td>
+                    <Td>
+                      <div className="flex flex-col gap-1">
+                        <StatusBadge tone={tierTone}>{tierBadgeLabel}</StatusBadge>
+                        {task.candidateGroupDisplay && (
+                          <span className="text-[10px] text-teal-700 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-200 font-medium inline-flex items-center gap-1 w-fit">
+                            <span>👥</span> {task.candidateGroupDisplay}
+                          </span>
+                        )}
+                        <span className="text-[10px] text-gray-400 font-mono">ID: {task.id.slice(0, 8)}…</span>
+                      </div>
+                    </Td>
                   <Td align="right" className="whitespace-nowrap">
                     {isRejecting ? (
                       <div className="flex items-center justify-end gap-1.5">

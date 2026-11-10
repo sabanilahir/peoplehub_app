@@ -8,40 +8,54 @@ export const LEAVE_REQUEST_BPMN_XML = `<?xml version="1.0" encoding="UTF-8"?>
   <bpmn:process id="LeaveRequest" name="Leave Request Workflow" isExecutable="true">
     <bpmn:startEvent id="StartEvent" name="Submit Leave"/>
 
-    <bpmn:sequenceFlow id="Flow_To_Sup" sourceRef="StartEvent" targetRef="Task_Supervisor"/>
+    <bpmn:sequenceFlow id="Flow_Start_To_Gateway" sourceRef="StartEvent" targetRef="Gateway_BypassCheck"/>
 
-    <bpmn:userTask id="Task_Supervisor" name="Supervisor Approval"
-                   flowable:assignee="\${supervisorUsername}"
-                   flowable:candidateGroups="manager,managers,supervisor,supervisors,superadmin">
-      <bpmn:documentation>Review pengajuan cuti oleh atasan langsung (Supervisor / Manager).</bpmn:documentation>
+    <!-- Gateway Smart Auto-Bypass: jika pemohon adalah Approval 1 itu sendiri -->
+    <bpmn:exclusiveGateway id="Gateway_BypassCheck" name="Check Self Approval"/>
+
+    <bpmn:sequenceFlow id="Flow_To_App1" name="Normal (Approver 1)" sourceRef="Gateway_BypassCheck" targetRef="Task_Approver1">
+      <bpmn:conditionExpression>\${skipApprover1 != true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+
+    <bpmn:sequenceFlow id="Flow_Bypass_To_App2" name="Auto Bypass to Approver 2" sourceRef="Gateway_BypassCheck" targetRef="Task_Approver2">
+      <bpmn:conditionExpression>\${skipApprover1 == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+
+    <!-- Tingkat 1: Approval 1 (Assignee spesifik sesuai approver1Id) -->
+    <bpmn:userTask id="Task_Approver1" name="Approval 1"
+                   flowable:assignee="\${approver1Username}"
+                   flowable:candidateGroups="superadmin">
+      <bpmn:documentation>Persetujuan tingkat 1 oleh penanggung jawab operasional / koordinator.</bpmn:documentation>
     </bpmn:userTask>
 
-    <bpmn:sequenceFlow id="Flow_Sup_To_Gw" sourceRef="Task_Supervisor" targetRef="Gateway_Sup"/>
+    <bpmn:sequenceFlow id="Flow_App1_To_Gw" sourceRef="Task_Approver1" targetRef="Gateway_App1"/>
 
-    <bpmn:exclusiveGateway id="Gateway_Sup" name="Supervisor Decision"/>
+    <bpmn:exclusiveGateway id="Gateway_App1" name="Approver 1 Decision"/>
 
-    <bpmn:sequenceFlow id="Flow_Sup_Approved" name="Approved" sourceRef="Gateway_Sup" targetRef="Task_HR">
+    <bpmn:sequenceFlow id="Flow_App1_Approved" name="Approved" sourceRef="Gateway_App1" targetRef="Task_Approver2">
       <bpmn:conditionExpression>\${approved == true}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
 
-    <bpmn:sequenceFlow id="Flow_Sup_Rejected" name="Rejected" sourceRef="Gateway_Sup" targetRef="End_Rejected">
+    <bpmn:sequenceFlow id="Flow_App1_Rejected" name="Rejected" sourceRef="Gateway_App1" targetRef="End_Rejected">
       <bpmn:conditionExpression>\${approved == false}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
 
-    <bpmn:userTask id="Task_HR" name="HR Approval"
+    <!-- Tingkat 2: Approval 2 (Assignee spesifik sesuai approver2Id + HR Backup) -->
+    <bpmn:userTask id="Task_Approver2" name="Approval 2"
+                   flowable:assignee="\${approver2Username}"
                    flowable:candidateGroups="hr,hr_manager,superadmin">
-      <bpmn:documentation>Verifikasi kuota dan persetujuan final oleh HR Department.</bpmn:documentation>
+      <bpmn:documentation>Persetujuan tingkat 2 oleh Manager / HR / GA.</bpmn:documentation>
     </bpmn:userTask>
 
-    <bpmn:sequenceFlow id="Flow_HR_To_Gw" sourceRef="Task_HR" targetRef="Gateway_HR"/>
+    <bpmn:sequenceFlow id="Flow_App2_To_Gw" sourceRef="Task_Approver2" targetRef="Gateway_App2"/>
 
-    <bpmn:exclusiveGateway id="Gateway_HR" name="HR Decision"/>
+    <bpmn:exclusiveGateway id="Gateway_App2" name="Approver 2 Decision"/>
 
-    <bpmn:sequenceFlow id="Flow_HR_Approved" name="Final Approved" sourceRef="Gateway_HR" targetRef="End_Approved">
+    <bpmn:sequenceFlow id="Flow_App2_Approved" name="Final Approved" sourceRef="Gateway_App2" targetRef="End_Approved">
       <bpmn:conditionExpression>\${approved == true}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
 
-    <bpmn:sequenceFlow id="Flow_HR_Rejected" name="Rejected" sourceRef="Gateway_HR" targetRef="End_Rejected">
+    <bpmn:sequenceFlow id="Flow_App2_Rejected" name="Rejected" sourceRef="Gateway_App2" targetRef="End_Rejected">
       <bpmn:conditionExpression>\${approved == false}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
 
@@ -54,23 +68,26 @@ export const LEAVE_REQUEST_BPMN_XML = `<?xml version="1.0" encoding="UTF-8"?>
       <bpmndi:BPMNShape id="StartEvent_di" bpmnElement="StartEvent">
         <dc:Bounds x="100" y="100" width="36" height="36"/>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Task_Supervisor_di" bpmnElement="Task_Supervisor">
-        <dc:Bounds x="200" y="78" width="120" height="80"/>
+      <bpmndi:BPMNShape id="Gateway_BypassCheck_di" bpmnElement="Gateway_BypassCheck" isMarkerVisible="true">
+        <dc:Bounds x="180" y="93" width="50" height="50"/>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Gateway_Sup_di" bpmnElement="Gateway_Sup">
-        <dc:Bounds x="380" y="98" width="40" height="40"/>
+      <bpmndi:BPMNShape id="Task_Approver1_di" bpmnElement="Task_Approver1">
+        <dc:Bounds x="280" y="78" width="120" height="80"/>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Task_HR_di" bpmnElement="Task_HR">
-        <dc:Bounds x="480" y="78" width="120" height="80"/>
+      <bpmndi:BPMNShape id="Gateway_App1_di" bpmnElement="Gateway_App1" isMarkerVisible="true">
+        <dc:Bounds x="440" y="93" width="50" height="50"/>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Gateway_HR_di" bpmnElement="Gateway_HR">
-        <dc:Bounds x="660" y="98" width="40" height="40"/>
+      <bpmndi:BPMNShape id="Task_Approver2_di" bpmnElement="Task_Approver2">
+        <dc:Bounds x="540" y="78" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_App2_di" bpmnElement="Gateway_App2" isMarkerVisible="true">
+        <dc:Bounds x="700" y="93" width="50" height="50"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="End_Approved_di" bpmnElement="End_Approved">
-        <dc:Bounds x="760" y="100" width="36" height="36"/>
+        <dc:Bounds x="800" y="100" width="36" height="36"/>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="End_Rejected_di" bpmnElement="End_Rejected">
-        <dc:Bounds x="382" y="220" width="36" height="36"/>
+        <dc:Bounds x="572" y="220" width="36" height="36"/>
       </bpmndi:BPMNShape>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>

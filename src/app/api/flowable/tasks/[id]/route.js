@@ -124,9 +124,18 @@ export async function POST(request, props) {
         }
 
         const taskKey = (taskInfo?.taskDefinitionKey || '').toLowerCase()
-        const isHrStep = taskKey.includes('hr') || (taskInfo?.name || '').toLowerCase().includes('hr')
-        const isSupervisorStep = !isHrStep
-        const finalLeaveStatus = !isApproved ? 'Rejected' : hasNextTasks ? 'Pending' : 'Approved'
+        const taskName = (taskInfo?.name || '').toLowerCase()
+        const isStep1 = taskKey.includes('approver1') || taskKey.includes('supervisor') || taskKey.includes('sup') || taskName.includes('approval 1') || taskName.includes('supervisor')
+        const isFinalStep = taskKey.includes('approver2') || taskKey.includes('hr') || taskName.includes('approval 2') || taskName.includes('hr')
+
+        let finalLeaveStatus = 'Pending'
+        if (!isApproved) {
+          finalLeaveStatus = 'Rejected'
+        } else if (isFinalStep) {
+          finalLeaveStatus = 'Approved'
+        } else {
+          finalLeaveStatus = 'Pending' // Tingkat 1 selesai, status di DB wajib tetap Pending menunggu Tingkat 2
+        }
 
         if (varMap.employeeId || varMap.leaveType || varMap.startDate) {
           try {
@@ -191,18 +200,20 @@ export async function POST(request, props) {
               })
             }
 
-            const stepSupervisor = {
+            const step1Obj = {
               level: 1,
-              label: 'Supervisor Approval (Flowable)',
+              tier: 'approval_1',
+              label: 'Approval 1',
               status: isApproved ? 'Approved' : 'Rejected',
               approverName,
               actedAt: new Date().toISOString(),
               note: approvalNote,
             }
 
-            const stepHr = {
+            const step2Obj = {
               level: 2,
-              label: 'HR Verification (Flowable)',
+              tier: 'approval_2',
+              label: 'Approval 2',
               status: isApproved ? 'Approved' : 'Rejected',
               approverName,
               actedAt: new Date().toISOString(),
@@ -213,21 +224,27 @@ export async function POST(request, props) {
               const currentSteps = Array.isArray(existingLeave.steps) ? existingLeave.steps : []
               let updatedSteps = []
 
-              if (isSupervisorStep) {
-                updatedSteps = [
-                  stepSupervisor,
-                  ...(hasNextTasks
-                    ? [{ level: 2, label: 'HR Verification (Flowable)', status: 'Pending', approverName: 'HR Team' }]
-                    : []),
-                ]
-              } else if (isHrStep) {
+              if (isStep1) {
+                const existingStep2 = currentSteps.find((s) => s.level === 2) || {
+                  level: 2,
+                  tier: 'approval_2',
+                  label: 'Approval 2',
+                  status: isApproved ? 'Pending' : 'Waiting',
+                  approverName: varMap.approver2Name || 'Approval 2 / HR',
+                }
+                if (isApproved) {
+                  existingStep2.status = 'Pending'
+                }
+                updatedSteps = [step1Obj, existingStep2]
+              } else if (isFinalStep) {
                 const step1 = currentSteps.find((s) => s.level === 1) || {
                   level: 1,
-                  label: 'Supervisor Approval (Flowable)',
+                  tier: 'approval_1',
+                  label: 'Approval 1',
                   status: 'Approved',
-                  approverName: 'Supervisor',
+                  approverName: varMap.approver1Name || 'Approval 1',
                 }
-                updatedSteps = [step1, stepHr]
+                updatedSteps = [step1, step2Obj]
               } else {
                 updatedSteps = [
                   {

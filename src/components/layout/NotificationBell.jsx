@@ -77,15 +77,42 @@ function canActLeave(pendingStep, leave, currentUser, employees) {
   const role = currentUser?.role
   if (pendingStep.delegatedTo && pendingStep.delegatedTo === uid) return true
   const rid  = leave.userId
+
+  // Pemohon sendiri tidak boleh meng-approve permohonan cutinya sendiri
+  if (rid === uid) return false
+
+  // 1. Cocokkan langsung jika step memiliki approverId eksplisit
+  if (pendingStep.approverId && pendingStep.approverId === uid) return true
+
+  const emp = employees.find(e => e.id === rid)
+
+  // 2. Tingkat 1 (Approval 1 / Coordinator / SPV)
+  if (pendingStep.tier === 'approval_1' || pendingStep.type === 'coordinator') {
+    return emp?.approver1Id === uid || (!emp?.approver1Id && emp?.managerId === uid) || role === 'superadmin'
+  }
+
+  // 3. Tingkat 2 (Approval 2 / Head / HR)
+  if (pendingStep.tier === 'approval_2' || pendingStep.type === 'manager') {
+    const isTargetApp2 = emp?.approver2Id === uid
+    const isHrBackup = ['hr', 'hr_manager', 'superadmin'].includes(role) && (!emp?.approver2Id || emp?.approver2Id === 3)
+    return isTargetApp2 || isHrBackup || role === 'superadmin'
+  }
+
+  // 4. Legacy fallback
   switch (pendingStep.type) {
-    case 'supervisor':        return getDirectManagerId(rid, employees)   === uid
-    case 'indirect_sup':      return getIndirectManagerId(rid, employees) === uid
+    case 'supervisor':
+      return emp?.approver1Id === uid || getDirectManagerId(rid, employees) === uid || role === 'superadmin'
+    case 'indirect_sup':
+      return emp?.approver2Id === uid || getIndirectManagerId(rid, employees) === uid || role === 'superadmin'
     case 'supervisor_pc53':
-    case 'indirect_sup_pc53': return role === 'manager'  || role === 'superadmin'
+    case 'indirect_sup_pc53':
+      return emp?.approver1Id === uid || role === 'superadmin'
     case 'role':
     case 'userlist':
-    case 'employee':          return role === 'hr'        || role === 'superadmin'
-    default:                  return role === 'superadmin'
+    case 'employee':
+      return role === 'hr' || role === 'hr_manager' || role === 'superadmin'
+    default:
+      return role === 'superadmin'
   }
 }
 

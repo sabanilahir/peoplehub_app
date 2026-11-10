@@ -8,10 +8,12 @@ export const ROLE_ICONS = {
   hr: '🗂️',
   hr_officer: '📋',
   manager: '👥',
+  supervisor: '🎖️',
+  senior_staff: '⭐',
+  staff: '👤',
   employee: '👤',
   director: '🏛️',
   finance: '💰',
-  supervisor: '🎖️',
 }
 
 export const DEFAULT_ROLES = [
@@ -20,7 +22,10 @@ export const DEFAULT_ROLES = [
   { id: 3, key: 'hr',         name: 'hr',         label: 'HR Staff',   desc: 'Staff HR dengan akses operasional HR', color: '#7c3aed', icon: '🗂️', isSystem: true },
   { id: 4, key: 'hr_officer', name: 'hr_officer', label: 'HR Officer', desc: 'Officer HR untuk operasional harian', color: '#0891b2', icon: '📋', isSystem: true },
   { id: 5, key: 'manager',    name: 'manager',    label: 'Manager',    desc: 'Manager dengan akses MSS dan tim', color: '#059669', icon: '👥', isSystem: true },
-  { id: 6, key: 'employee',   name: 'employee',   label: 'Employee',   desc: 'Karyawan dengan akses ESS saja', color: '#d97706', icon: '👤', isSystem: true },
+  { id: 6, key: 'supervisor', name: 'supervisor', label: 'Supervisor / Coordinator', desc: 'Supervisor & Koordinator tim dengan akses MSS', color: '#0891b2', icon: '🎖️', isSystem: true },
+  { id: 7, key: 'senior_staff', name: 'senior_staff', label: 'Senior Staff', desc: 'Senior Staff operasional & lead teknis', color: '#6366f1', icon: '⭐', isSystem: true },
+  { id: 8, key: 'staff',      name: 'staff',      label: 'Staff',      desc: 'Staff operasional dengan akses ESS', color: '#d97706', icon: '👤', isSystem: true },
+  { id: 9, key: 'employee',   name: 'employee',   label: 'Employee',   desc: 'Karyawan umum dengan akses ESS', color: '#64748b', icon: '👤', isSystem: true },
 ]
 
 export const useRoleStore = create(

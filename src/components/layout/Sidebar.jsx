@@ -361,7 +361,11 @@ export default function Sidebar({ allow } = {}) {
   const r      = currentUser?.role
   const canHR  = HR_ROLES.includes(r)
   const canSA  = r === 'superadmin'
-  const canMgr = r === 'manager' || r === 'superadmin' || employees.some(e => e.managerId === currentUser?.id)
+  const canMgr =
+    r === 'manager' ||
+    r === 'supervisor' ||
+    r === 'superadmin' ||
+    employees.some(e => e.managerId === currentUser?.id || e.approver1Id === currentUser?.id)
 
   const initialized = useRef(false)
   const [openId, setOpenId] = useState(null)

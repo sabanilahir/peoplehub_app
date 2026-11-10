@@ -3,6 +3,9 @@
 export const ROLE_LABELS = {
   employee:    'Employee',
   manager:     'Manager',
+  supervisor:  'Supervisor / Coordinator',
+  senior_staff:'Senior Staff',
+  staff:       'Staff',
   hr:          'HR',
   hr_officer:  'HR Officer',
   hr_manager:  'HR Manager',

@@ -213,15 +213,33 @@ export async function GET(request) {
         if (task.assignee && userAliases.has(task.assignee)) return true
         if (task.owner && userAliases.has(task.owner)) return true
 
-        // 2. Cocokkan ke variabel proses atasan langsung
+        // 2. Cocokkan ke variabel proses approver tingkat 1 dan 2
+        const app1Id = vars.find((v) => v.name === 'approver1Id')?.value
+        const app1User = vars.find((v) => v.name === 'approver1Username')?.value
+        const app2Id = vars.find((v) => v.name === 'approver2Id')?.value
+        const app2User = vars.find((v) => v.name === 'approver2Username')?.value
         const supId = vars.find((v) => v.name === 'supervisorId')?.value
         const supUser = vars.find((v) => v.name === 'supervisorUsername')?.value
-        const app1Id = vars.find((v) => v.name === 'approverId')?.value
+        const appOldId = vars.find((v) => v.name === 'approverId')?.value
         const targetUsername = vars.find((v) => v.name === 'targetUsername')?.value
 
-        if (supId && userAliases.has(String(supId))) return true
-        if (supUser && userAliases.has(String(supUser))) return true
-        if (app1Id && userAliases.has(String(app1Id))) return true
+        const taskKeyLower = (task.taskDefinitionKey || '').toLowerCase()
+        const isTask1 = taskKeyLower.includes('approver1') || taskKeyLower.includes('supervisor')
+        const isTask2 = taskKeyLower.includes('approver2') || taskKeyLower.includes('hr')
+
+        if (isTask1) {
+          if (app1Id && userAliases.has(String(app1Id))) return true
+          if (app1User && userAliases.has(String(app1User))) return true
+          if (supId && userAliases.has(String(supId))) return true
+          if (supUser && userAliases.has(String(supUser))) return true
+        }
+
+        if (isTask2) {
+          if (app2Id && userAliases.has(String(app2Id))) return true
+          if (app2User && userAliases.has(String(app2User))) return true
+        }
+
+        if (appOldId && userAliases.has(String(appOldId))) return true
         if (targetUsername && userAliases.has(String(targetUsername))) return true
 
         // 3. Jika task BELUM memiliki assignee spesifik (task pool untuk group),

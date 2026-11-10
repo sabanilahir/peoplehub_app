@@ -7,7 +7,10 @@ const DEFAULT_SYSTEM_ROLES = [
   { name: 'hr', label: 'HR Staff', color: '#7c3aed', description: 'Staff HR dengan akses operasional HR', isSystem: true },
   { name: 'hr_officer', label: 'HR Officer', color: '#0891b2', description: 'Officer HR untuk operasional harian', isSystem: true },
   { name: 'manager', label: 'Manager', color: '#059669', description: 'Manager dengan akses MSS dan tim', isSystem: true },
-  { name: 'employee', label: 'Employee', color: '#d97706', description: 'Karyawan dengan akses ESS saja', isSystem: true },
+  { name: 'supervisor', label: 'Supervisor / Coordinator', color: '#0891b2', description: 'Supervisor & Koordinator tim dengan akses MSS', isSystem: true },
+  { name: 'senior_staff', label: 'Senior Staff', color: '#6366f1', description: 'Senior Staff operasional & lead teknis', isSystem: true },
+  { name: 'staff', label: 'Staff', color: '#d97706', description: 'Staff operasional dengan akses ESS', isSystem: true },
+  { name: 'employee', label: 'Employee', color: '#64748b', description: 'Karyawan umum dengan akses ESS', isSystem: true },
 ]
 
 export async function GET() {

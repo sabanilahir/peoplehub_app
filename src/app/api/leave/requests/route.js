@@ -310,10 +310,10 @@ export async function POST(req) {
     // Otomatis picu Flowable BPMN Engine untuk persetujuan workflow
     if (!leaveType.autoApprove) {
       try {
-        // Resolusi akun approver di tabel User
-        let approverUser = null
+        // Resolusi akun approver 1 di tabel User
+        let approver1User = null
         if (app1Id) {
-          approverUser = await prisma.user.findFirst({
+          approver1User = await prisma.user.findFirst({
             where: {
               OR: [
                 { id: app1Id },
@@ -325,16 +325,20 @@ export async function POST(req) {
           })
         }
 
-        let supervisorUsername = approverUser?.username
-        if (!supervisorUsername && approver1) {
-          if (approver1.odoo_id) supervisorUsername = `ODOO-${approver1.odoo_id}`
-          else if (approver1.nik) supervisorUsername = approver1.nik
-          else supervisorUsername = approver1.name
+        let approver1Username = approver1User?.username
+        if (!approver1Username && approver1) {
+          if (approver1.odoo_id) approver1Username = `ODOO-${approver1.odoo_id}`
+          else if (approver1.nik) approver1Username = approver1.nik
+          else approver1Username = approver1.name
+        }
+        if (!approver1Username) {
+          approver1Username = 'admin'
         }
 
-        // Jika pemohon adalah koordinator (self approver 1), alihkan ke approval 2 atau HR
-        if (isSelfApprover1 && app2Id) {
-          const approver2User = await prisma.user.findFirst({
+        // Resolusi akun approver 2 di tabel User
+        let approver2User = null
+        if (app2Id) {
+          approver2User = await prisma.user.findFirst({
             where: {
               OR: [
                 { id: app2Id },
@@ -342,15 +346,18 @@ export async function POST(req) {
                 ...(approver2?.nik ? [{ username: approver2.nik }] : []),
               ],
             },
-            select: { id: true, username: true },
+            select: { id: true, username: true, name: true },
           })
-          supervisorUsername =
-            approver2User?.username ||
-            (approver2?.odoo_id ? `ODOO-${approver2.odoo_id}` : approver2?.nik || supervisorUsername)
         }
 
-        if (!supervisorUsername) {
-          supervisorUsername = 'admin'
+        let approver2Username = approver2User?.username
+        if (!approver2Username && approver2) {
+          if (approver2.odoo_id) approver2Username = `ODOO-${approver2.odoo_id}`
+          else if (approver2.nik) approver2Username = approver2.nik
+          else approver2Username = approver2.name
+        }
+        if (!approver2Username) {
+          approver2Username = 'rina.marlina'
         }
 
         const flowVariables = [
@@ -369,8 +376,16 @@ export async function POST(req) {
           { name: 'endDate', value: endDate, type: 'string' },
           { name: 'days', value: String(days), type: 'string' },
           { name: 'reason', value: finalNote.trim() || 'Pengajuan Cuti', type: 'string' },
+          { name: 'approver1Id', value: String(app1Id || ''), type: 'string' },
+          { name: 'approver1Username', value: String(approver1Username), type: 'string' },
+          { name: 'approver1Name', value: approver1?.name || 'Approval 1', type: 'string' },
+          { name: 'approver2Id', value: String(app2Id || ''), type: 'string' },
+          { name: 'approver2Username', value: String(approver2Username), type: 'string' },
+          { name: 'approver2Name', value: approver2?.name || 'Approval 2', type: 'string' },
+          { name: 'skipApprover1', value: isSelfApprover1, type: 'boolean' },
+          // Backward compatibility
           { name: 'supervisorId', value: String(app1Id || ''), type: 'string' },
-          { name: 'supervisorUsername', value: String(supervisorUsername), type: 'string' },
+          { name: 'supervisorUsername', value: String(approver1Username), type: 'string' },
           { name: 'attachment', value: String(attachment || ''), type: 'string' },
         ]
 
