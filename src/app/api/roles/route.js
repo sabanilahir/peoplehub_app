@@ -100,3 +100,38 @@ export async function POST(req) {
     return NextResponse.json({ error: e.message }, { status: 500 })
   }
 }
+
+export async function PATCH(req) {
+  try {
+    const body = await req.json()
+    const name = (body.key || body.name || '').trim().toLowerCase()
+    const permissions = Array.isArray(body.permissions) ? body.permissions : null
+
+    if (!name) {
+      return NextResponse.json({ error: 'Role key (name) is required' }, { status: 400 })
+    }
+
+    const updated = await prisma.role.update({
+      where: { name },
+      data: {
+        ...(permissions ? { permissions } : {}),
+        ...(body.label ? { label: body.label.trim() } : {}),
+        ...(body.color ? { color: body.color } : {}),
+        ...(body.description !== undefined ? { description: body.description } : {}),
+      },
+    })
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        id: updated.id,
+        key: updated.name,
+        name: updated.name,
+        label: updated.label,
+        permissions: updated.permissions || [],
+      },
+    })
+  } catch (e) {
+    return NextResponse.json({ error: e.message }, { status: 500 })
+  }
+}

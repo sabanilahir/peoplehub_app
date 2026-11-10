@@ -195,6 +195,26 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     ...MSS_KEYS,
     ...WORKFLOW_KEYS,
   ],
+  supervisor: [
+    'dashboard_view',
+    ...ESS_KEYS,
+    ...LMS_KEYS,
+    ...MSS_KEYS,
+    ...WORKFLOW_KEYS,
+  ],
+  senior_staff: [
+    'dashboard_view',
+    ...ESS_KEYS,
+    ...LMS_KEYS,
+    'workflow_tasks',
+    'workflow_my_requests',
+  ],
+  staff: [
+    'dashboard_view',
+    ...ESS_KEYS,
+    'workflow_tasks',
+    'workflow_my_requests',
+  ],
   employee: [
     'dashboard_view',
     ...ESS_KEYS,
@@ -210,16 +230,37 @@ export const usePermissionStore = create(
       rolePermissions: DEFAULT_ROLE_PERMISSIONS,
 
       getByGroup: (group) => get().permissions.filter(p => p.group === group),
-      getRolePermissions: (role) => get().rolePermissions[role] || [],
+      getRolePermissions: (role) => {
+        const custom = get().rolePermissions[role]
+        if (Array.isArray(custom) && custom.length > 0) return custom
+        if (DEFAULT_ROLE_PERMISSIONS[role]) return DEFAULT_ROLE_PERMISSIONS[role]
+        const rLower = String(role || '').toLowerCase()
+        if (rLower.includes('supervisor') || rLower.includes('coordinator') || rLower.includes('manager') || rLower.includes('lead')) {
+          return DEFAULT_ROLE_PERMISSIONS.supervisor
+        }
+        if (rLower.includes('hr')) return DEFAULT_ROLE_PERMISSIONS.hr_officer
+        return DEFAULT_ROLE_PERMISSIONS.staff
+      },
 
       hasPermission: (role, key) => {
         if (!role) return false
         if (role === 'superadmin') return true
 
         let perms = get().rolePermissions[role]
-        // Jika data perms untuk role ini kosong di local state, gunakan default
+        // Jika data perms untuk role ini kosong di local state, gunakan default atau template cerdas
         if (!perms || !Array.isArray(perms) || perms.length === 0) {
-          perms = DEFAULT_ROLE_PERMISSIONS[role] || []
+          if (DEFAULT_ROLE_PERMISSIONS[role]) {
+            perms = DEFAULT_ROLE_PERMISSIONS[role]
+          } else {
+            const rLower = String(role).toLowerCase()
+            if (rLower.includes('supervisor') || rLower.includes('coordinator') || rLower.includes('manager') || rLower.includes('lead')) {
+              perms = DEFAULT_ROLE_PERMISSIONS.supervisor
+            } else if (rLower.includes('hr')) {
+              perms = DEFAULT_ROLE_PERMISSIONS.hr_officer
+            } else {
+              perms = DEFAULT_ROLE_PERMISSIONS.staff
+            }
+          }
         }
 
         if (perms.includes('*') || perms.includes(key)) return true

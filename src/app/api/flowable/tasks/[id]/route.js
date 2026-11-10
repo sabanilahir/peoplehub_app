@@ -276,7 +276,7 @@ export async function POST(request, props) {
                   days,
                   note: reason,
                   status: finalLeaveStatus,
-                  steps: [stepSupervisor],
+                  steps: isFinalStep ? [step1Obj, step2Obj] : [step1Obj],
                 },
               })
             }

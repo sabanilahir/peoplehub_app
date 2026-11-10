@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Shield, Plus, Edit2, Trash2, ArrowRight, CheckCircle2, AlertCircle } from 'lucide-react'
+import { Shield, Plus, Edit2, Trash2, ArrowRight, CheckCircle2, AlertCircle, Key } from 'lucide-react'
 import { useRoleStore } from '@/store/roleStore'
 
 export default function RoleManagementPage() {
@@ -97,6 +97,13 @@ export default function RoleManagementPage() {
         </div>
         <div className="flex items-center gap-3">
           <Link
+            href="/sysadmin/role/permission"
+            className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 shadow-sm transition"
+          >
+            <Key size={15} />
+            <span>Hak Akses (Permission)</span>
+          </Link>
+          <Link
             href="/sysadmin/workflow/userlists"
             className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 shadow-sm transition"
           >
@@ -169,6 +176,13 @@ export default function RoleManagementPage() {
                 </td>
                 <td className="px-5 py-3.5 text-center">
                   <div className="flex items-center justify-center gap-1.5">
+                    <Link
+                      href={`/sysadmin/role/permission?role=${encodeURIComponent(role.key || role.name)}`}
+                      className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition"
+                      title={`Atur hak akses (permission) untuk ${role.label}`}
+                    >
+                      <Key size={16} />
+                    </Link>
                     <button
                       onClick={() => handleEdit(role)}
                       className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition"

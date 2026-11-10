@@ -1,19 +1,27 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect, useMemo, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Shield, ChevronDown, ChevronRight, Plus, X, Key, RotateCcw, Check, Sparkles } from 'lucide-react'
 import { usePermissionStore, PERMISSION_GROUPS } from '@/store/permissionStore'
 import { useMenuStore, ICON_MAP } from '@/store/menuStore'
+import { useRoleStore } from '@/store/roleStore'
 
-const ROLES = [
+const DEFAULT_SYSTEM_ROLES = [
   { key: 'superadmin', label: 'Superadmin', color: '#dc2626' },
   { key: 'hr_manager', label: 'HR Manager', color: '#2563eb' },
   { key: 'hr', label: 'HR Staff', color: '#7c3aed' },
   { key: 'hr_officer', label: 'HR Officer', color: '#0891b2' },
   { key: 'manager', label: 'Manager', color: '#059669' },
-  { key: 'employee', label: 'Employee', color: '#d97706' },
+  { key: 'supervisor', label: 'Supervisor / Coordinator', color: '#0891b2' },
+  { key: 'senior_staff', label: 'Senior Staff', color: '#4f46e5' },
+  { key: 'staff', label: 'Staff', color: '#d97706' },
+  { key: 'employee', label: 'Employee', color: '#6b7280' },
 ]
 
-export default function PermissionPage() {
+function PermissionContent() {
+  const searchParams = useSearchParams()
+  const roleParam = searchParams.get('role')
+
   const {
     permissions,
     rolePermissions,
@@ -21,11 +29,13 @@ export default function PermissionPage() {
     addPermission,
     deletePermission,
     getByGroup,
+    getRolePermissions,
     reset,
   } = usePermissionStore()
   const { menus } = useMenuStore()
+  const { roles: storeRoles, fetchRoles } = useRoleStore()
 
-  const [selectedRole, setSelectedRole] = useState('superadmin')
+  const [selectedRole, setSelectedRole] = useState(roleParam || 'superadmin')
   const [expandedGroups, setExpandedGroups] = useState([
     'ess',
     'lms',
@@ -40,29 +50,69 @@ export default function PermissionPage() {
   const [newPerm, setNewPerm] = useState({ key: '', label: '', group: 'ess' })
   const [savedNotice, setSavedNotice] = useState(false)
 
-  const currentPerms = rolePermissions[selectedRole] || []
+  // Ambil data role dari database saat mount
+  useEffect(() => {
+    fetchRoles()
+  }, [fetchRoles])
+
+  // Sinkronkan selectedRole jika query parameter ?role berubah
+  useEffect(() => {
+    if (roleParam) {
+      setSelectedRole(roleParam)
+    }
+  }, [roleParam])
+
+  // Gabungkan role dari store / database dengan role sistem bawaan
+  const allRoles = useMemo(() => {
+    const list = [...DEFAULT_SYSTEM_ROLES]
+    if (Array.isArray(storeRoles)) {
+      storeRoles.forEach((sr) => {
+        const k = (sr.key || sr.name || '').toLowerCase()
+        const existingIdx = list.findIndex((r) => r.key === k)
+        if (existingIdx >= 0) {
+          list[existingIdx] = {
+            ...list[existingIdx],
+            label: sr.label || list[existingIdx].label,
+            color: sr.color || list[existingIdx].color,
+          }
+        } else if (k) {
+          list.push({
+            key: k,
+            label: sr.label || sr.name,
+            color: sr.color || '#0284c7',
+          })
+        }
+      })
+    }
+    return list
+  }, [storeRoles])
+
+  // Dapatkan izin hak akses aktif untuk role terpilih (dengan fallback ke smart template)
+  const currentPerms = useMemo(() => {
+    return getRolePermissions(selectedRole)
+  }, [rolePermissions, selectedRole, getRolePermissions])
 
   // Auto-upgrade jika data lokal di browser masih versi lama yang kurang dari 35 item
-  useState(() => {
+  useEffect(() => {
     if (typeof window !== 'undefined' && permissions && permissions.length < 35) {
       reset()
     }
-  })
+  }, [permissions, reset])
 
-  const toggleGroup = (group) =>
-    setExpandedGroups(prev => (prev.includes(group) ? prev.filter(g => g !== group) : [...prev, group]))
-
-  const toggleAllInGroup = (group) => {
-    const gp = getByGroup(group).map(p => p.key)
-    const all = gp.length > 0 && gp.every(k => currentPerms.includes(k))
-    gp.forEach(k => {
-      if (all) {
-        if (currentPerms.includes(k)) togglePermission(selectedRole, k)
-      } else {
-        if (!currentPerms.includes(k)) togglePermission(selectedRole, k)
-      }
-    })
-    triggerNotice()
+  // Simpan perubahan permissions ke PostgreSQL backend
+  const persistPermissionsToBackend = async (roleKey, updatedPerms) => {
+    try {
+      await fetch('/api/roles', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          key: roleKey,
+          permissions: updatedPerms,
+        }),
+      })
+    } catch (e) {
+      console.warn('[PermissionPage] Gagal menyimpan ke /api/roles:', e.message)
+    }
   }
 
   const triggerNotice = () => {
@@ -70,8 +120,34 @@ export default function PermissionPage() {
     setTimeout(() => setSavedNotice(false), 2000)
   }
 
+  const toggleGroup = (group) =>
+    setExpandedGroups((prev) => (prev.includes(group) ? prev.filter((g) => g !== group) : [...prev, group]))
+
+  const toggleAllInGroup = (group) => {
+    const gp = getByGroup(group).map((p) => p.key)
+    const all = gp.length > 0 && gp.every((k) => currentPerms.includes(k))
+    let newSet = new Set(currentPerms)
+
+    gp.forEach((k) => {
+      if (all) {
+        newSet.delete(k)
+        if (currentPerms.includes(k)) togglePermission(selectedRole, k)
+      } else {
+        newSet.add(k)
+        if (!currentPerms.includes(k)) togglePermission(selectedRole, k)
+      }
+    })
+
+    persistPermissionsToBackend(selectedRole, Array.from(newSet))
+    triggerNotice()
+  }
+
   const handleToggle = (key) => {
     togglePermission(selectedRole, key)
+    const newPerms = currentPerms.includes(key)
+      ? currentPerms.filter((k) => k !== key)
+      : [...currentPerms, key]
+    persistPermissionsToBackend(selectedRole, newPerms)
     triggerNotice()
   }
 
@@ -93,14 +169,13 @@ export default function PermissionPage() {
   // Sinkronkan otomatis permission dari item menu kustom jika belum ada
   const handleSyncFromMenus = () => {
     let addedCount = 0
-    const existingKeys = new Set(permissions.map(p => p.key))
+    const existingKeys = new Set(permissions.map((p) => p.key))
 
-    menus.forEach(m => {
+    menus.forEach((m) => {
       if (!m.parentId) return // section root
       const permKey = m.permissionKey || m.key.replace(/-/g, '_')
       if (!existingKeys.has(permKey)) {
-        // Tentukan group dari parent menu key
-        const parent = menus.find(p => p.id === m.parentId)
+        const parent = menus.find((p) => p.id === m.parentId)
         const groupKey = parent?.key || 'sysadmin'
 
         addPermission({
@@ -113,23 +188,31 @@ export default function PermissionPage() {
       }
     })
 
-    alert(addedCount > 0 ? `Berhasil menyinkronkan ${addedCount} sub-menu baru ke permission!` : 'Semua sub-menu sudah tersinkronisasi.')
+    alert(
+      addedCount > 0
+        ? `Berhasil menyinkronkan ${addedCount} sub-menu baru ke permission!`
+        : 'Semua sub-menu sudah tersinkronisasi.'
+    )
   }
 
   const filteredPermissions = search
     ? permissions.filter(
-        p =>
+        (p) =>
           p.label.toLowerCase().includes(search.toLowerCase()) ||
           p.key.toLowerCase().includes(search.toLowerCase())
       )
     : permissions
 
-  const groupedPermissions = PERMISSION_GROUPS.map(g => ({
+  const groupedPermissions = PERMISSION_GROUPS.map((g) => ({
     ...g,
-    items: filteredPermissions.filter(p => p.group === g.key),
-  })).filter(g => g.items.length > 0)
+    items: filteredPermissions.filter((p) => p.group === g.key),
+  })).filter((g) => g.items.length > 0)
 
-  const selectedRoleObj = ROLES.find(r => r.key === selectedRole)
+  const selectedRoleObj = allRoles.find((r) => r.key === selectedRole) || {
+    key: selectedRole,
+    label: selectedRole,
+    color: '#0891b2',
+  }
 
   return (
     <div className="p-6">
@@ -170,14 +253,16 @@ export default function PermissionPage() {
 
       <div className="flex flex-col lg:flex-row gap-6">
         {/* Role Selector Sidebar */}
-        <div className="w-full lg:w-60 flex-shrink-0">
+        <div className="w-full lg:w-64 flex-shrink-0">
           <div className="bg-white rounded-xl border border-gray-200 shadow-xs p-4">
-            <h2 className="font-semibold text-xs text-gray-400 uppercase tracking-wider mb-3">
-              Pilih Role
-            </h2>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-semibold text-xs text-gray-400 uppercase tracking-wider">
+                Pilih Role ({allRoles.length})
+              </h2>
+            </div>
             <div className="space-y-1">
-              {ROLES.map(role => {
-                const count = (rolePermissions[role.key] || []).length
+              {allRoles.map((role) => {
+                const count = getRolePermissions(role.key).length
                 const isActive = selectedRole === role.key
                 return (
                   <button
@@ -190,14 +275,14 @@ export default function PermissionPage() {
                         : 'text-gray-600 hover:bg-gray-50 border border-transparent')
                     }
                   >
-                    <div className="flex items-center gap-2.5">
+                    <div className="flex items-center gap-2.5 truncate">
                       <span
-                        className="inline-block w-2.5 h-2.5 rounded-full"
-                        style={{ backgroundColor: role.color }}
+                        className="inline-block w-2.5 h-2.5 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: role.color || '#0891b2' }}
                       />
-                      <span>{role.label}</span>
+                      <span className="truncate">{role.label}</span>
                     </div>
-                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 font-medium">
+                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 font-medium flex-shrink-0">
                       {role.key === 'superadmin' ? 'Semua' : count}
                     </span>
                   </button>
@@ -216,7 +301,7 @@ export default function PermissionPage() {
                 <h2 className="font-bold text-gray-800 flex items-center gap-2">
                   <span
                     className="inline-block w-3 h-3 rounded-full"
-                    style={{ backgroundColor: selectedRoleObj?.color }}
+                    style={{ backgroundColor: selectedRoleObj?.color || '#0891b2' }}
                   />
                   Hak Akses Sub-Menu: {selectedRoleObj?.label}
                 </h2>
@@ -230,7 +315,7 @@ export default function PermissionPage() {
                   type="text"
                   placeholder="Cari sub-menu atau izin..."
                   value={search}
-                  onChange={e => setSearch(e.target.value)}
+                  onChange={(e) => setSearch(e.target.value)}
                   className="px-3.5 py-1.5 border border-gray-200 rounded-lg text-sm w-56 focus:outline-hidden focus:ring-2 focus:ring-teal-500 bg-white"
                 />
                 <button
@@ -244,13 +329,13 @@ export default function PermissionPage() {
 
             {/* Permission Group List */}
             <div className="divide-y divide-gray-100 overflow-auto" style={{ maxHeight: 'calc(100vh - 270px)' }}>
-              {groupedPermissions.map(group => {
+              {groupedPermissions.map((group) => {
                 const isExpanded = expandedGroups.includes(group.key)
                 const gp = getByGroup(group.key)
                 const isSuper = selectedRole === 'superadmin'
-                const all = isSuper || (gp.length > 0 && gp.every(p => currentPerms.includes(p.key)))
-                const some = !isSuper && gp.some(p => currentPerms.includes(p.key)) && !all
-                const cnt = isSuper ? gp.length : gp.filter(p => currentPerms.includes(p.key)).length
+                const all = isSuper || (gp.length > 0 && gp.every((p) => currentPerms.includes(p.key)))
+                const some = !isSuper && gp.some((p) => currentPerms.includes(p.key)) && !all
+                const cnt = isSuper ? gp.length : gp.filter((p) => currentPerms.includes(p.key)).length
                 const IconComponent = group.icon && ICON_MAP[group.icon] ? ICON_MAP[group.icon] : null
 
                 return (
@@ -260,16 +345,20 @@ export default function PermissionPage() {
                       className="w-full px-4 py-3 bg-gray-50/80 flex items-center justify-between hover:bg-gray-100/80 transition"
                     >
                       <div className="flex items-center gap-3">
-                        {isExpanded ? <ChevronDown size={18} className="text-gray-500" /> : <ChevronRight size={18} className="text-gray-500" />}
+                        {isExpanded ? (
+                          <ChevronDown size={18} className="text-gray-500" />
+                        ) : (
+                          <ChevronRight size={18} className="text-gray-500" />
+                        )}
                         <input
                           type="checkbox"
                           checked={all}
                           disabled={isSuper}
-                          ref={el => {
+                          ref={(el) => {
                             if (el) el.indeterminate = some
                           }}
                           onChange={() => toggleAllInGroup(group.key)}
-                          onClick={e => e.stopPropagation()}
+                          onClick={(e) => e.stopPropagation()}
                           className="w-4 h-4 rounded text-teal-600 focus:ring-teal-500 cursor-pointer disabled:opacity-50"
                         />
                         {IconComponent && (
@@ -286,10 +375,10 @@ export default function PermissionPage() {
 
                     {isExpanded && (
                       <div className="divide-y divide-gray-100 bg-white">
-                        {group.items.map(perm => {
+                        {group.items.map((perm) => {
                           const checked = isSuper || currentPerms.includes(perm.key)
                           const menuItem = menus.find(
-                            m => (m.permissionKey || m.key.replace(/-/g, '_')) === perm.key
+                            (m) => (m.permissionKey || m.key.replace(/-/g, '_')) === perm.key
                           )
                           const ItemIcon = menuItem?.icon && ICON_MAP[menuItem.icon] ? ICON_MAP[menuItem.icon] : null
 
@@ -298,31 +387,30 @@ export default function PermissionPage() {
                               key={perm.key}
                               className="flex items-center justify-between px-5 py-2.5 hover:bg-teal-50/30 transition"
                             >
-                              <label className="flex items-center gap-3 cursor-pointer flex-1 select-none">
+                              <label className="flex items-center gap-3 cursor-pointer flex-1">
                                 <input
                                   type="checkbox"
                                   checked={checked}
                                   disabled={isSuper}
                                   onChange={() => handleToggle(perm.key)}
-                                  className="w-4 h-4 rounded text-teal-600 focus:ring-teal-500 disabled:opacity-50"
+                                  className="w-4 h-4 rounded text-teal-600 focus:ring-teal-500 cursor-pointer disabled:opacity-50"
                                 />
                                 {ItemIcon && (
-                                  <span className={checked ? 'text-teal-600' : 'text-gray-400'}>
-                                    <ItemIcon size={16} />
+                                  <span className="text-gray-400">
+                                    <ItemIcon size={14} />
                                   </span>
                                 )}
                                 <div>
-                                  <p className={'text-sm ' + (checked ? 'font-semibold text-gray-900' : 'text-gray-400')}>
-                                    {perm.label}
-                                  </p>
+                                  <p className="text-sm font-medium text-gray-800">{perm.label}</p>
                                   <p className="text-[11px] text-gray-400 font-mono">{perm.key}</p>
                                 </div>
                               </label>
-                              {!['superadmin'].includes(selectedRole) && (
+
+                              {perm.isCustom && (
                                 <button
-                                  onClick={() => deletePermission(perm.id)}
-                                  className="p-1 text-gray-300 hover:text-red-500 rounded transition"
-                                  title="Hapus izin"
+                                  onClick={() => deletePermission(perm.key)}
+                                  className="text-gray-400 hover:text-red-500 p-1 rounded transition"
+                                  title="Hapus Izin Kustom"
                                 >
                                   <X size={14} />
                                 </button>
@@ -340,79 +428,84 @@ export default function PermissionPage() {
         </div>
       </div>
 
-      {/* Add Modal */}
+      {/* Modal Tambah Izin Baru */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 animate-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between mb-4 border-b pb-3">
-              <h3 className="text-lg font-bold flex items-center gap-2 text-gray-800">
-                <Key size={20} className="text-teal-600" />
-                Tambah Permission Baru
-              </h3>
-              <button onClick={() => setShowAddModal(false)} className="text-gray-400 hover:text-gray-600">
-                <X size={20} />
-              </button>
-            </div>
-
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 animate-in fade-in zoom-in-95">
+            <h3 className="font-bold text-gray-800 text-lg mb-4 flex items-center gap-2">
+              <Key size={18} className="text-teal-600" />
+              Tambah Izin / Fitur Baru
+            </h3>
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Key Izin (Unique Code)</label>
+                <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">
+                  Key Izin (Huruf kecil & underscore)
+                </label>
                 <input
                   type="text"
+                  placeholder="contoh: export_pdf_report"
                   value={newPerm.key}
-                  onChange={e =>
-                    setNewPerm({ ...newPerm, key: e.target.value.toLowerCase().replace(/\s/g, '_') })
+                  onChange={(e) =>
+                    setNewPerm({ ...newPerm, key: e.target.value.toLowerCase().replace(/\s+/g, '_') })
                   }
-                  placeholder="misal: hr_special_report"
-                  className="w-full px-3.5 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 font-mono"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm font-mono focus:outline-hidden focus:ring-2 focus:ring-teal-500"
                 />
               </div>
-
               <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Label Menu / Fitur</label>
+                <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">
+                  Label / Nama Izin
+                </label>
                 <input
                   type="text"
+                  placeholder="contoh: Export Laporan PDF"
                   value={newPerm.label}
-                  onChange={e => setNewPerm({ ...newPerm, label: e.target.value })}
-                  placeholder="misal: Special Report HR"
-                  className="w-full px-3.5 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-teal-500"
+                  onChange={(e) => setNewPerm({ ...newPerm, label: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-teal-500"
                 />
               </div>
-
               <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Modul / Grup</label>
+                <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">
+                  Grup Fitur
+                </label>
                 <select
                   value={newPerm.group}
-                  onChange={e => setNewPerm({ ...newPerm, group: e.target.value })}
-                  className="w-full px-3.5 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 bg-white"
+                  onChange={(e) => setNewPerm({ ...newPerm, group: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-hidden focus:ring-2 focus:ring-teal-500"
                 >
-                  {PERMISSION_GROUPS.map(g => (
+                  {PERMISSION_GROUPS.map((g) => (
                     <option key={g.key} value={g.key}>
                       {g.label}
                     </option>
                   ))}
                 </select>
               </div>
+            </div>
 
-              <div className="flex gap-3 pt-3">
-                <button
-                  onClick={() => setShowAddModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-200 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50"
-                >
-                  Batal
-                </button>
-                <button
-                  onClick={handleAddPermission}
-                  disabled={!newPerm.key || !newPerm.label}
-                  className="flex-1 px-4 py-2 bg-teal-600 text-white rounded-xl text-sm font-semibold hover:bg-teal-700 disabled:opacity-50 transition"
-                >
-                  Simpan Izin
-                </button>
-              </div>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                onClick={() => setShowAddModal(false)}
+                className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition"
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleAddPermission}
+                className="px-4 py-2 text-sm bg-teal-600 text-white font-semibold rounded-lg hover:bg-teal-700 transition"
+              >
+                Simpan
+              </button>
             </div>
           </div>
         </div>
       )}
     </div>
+  )
+}
+
+export default function PermissionPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-sm text-gray-400">Memuat hak akses permission...</div>}>
+      <PermissionContent />
+    </Suspense>
   )
 }

@@ -295,6 +295,19 @@ export default function ApproveLeavePage() {
                     return false
                   }
                 }
+                // Fallback pencocokan via NIK / Nama dan startDate jika leaveId tidak tercatat di task lama
+                const empNik = task.applicantNik || task.parsedVariables?.employeeNik || ''
+                const empName = (task.applicantName || task.parsedVariables?.employeeName || '').toLowerCase().trim()
+                const start = task.startDate || task.parsedVariables?.startDate || ''
+                if (start && (empNik || empName)) {
+                  const match = dbLeaves.find((l) => {
+                    const lName = (l.name || l.user?.name || '').toLowerCase().trim()
+                    const lNik = l.user?.username || l.user?.nik || ''
+                    const isSameEmp = (empNik && lNik === empNik) || (empName && lName.includes(empName))
+                    return isSameEmp && l.start === start && (l.status === 'Approved' || l.status === 'Rejected')
+                  })
+                  if (match) return false
+                }
                 return true
               })
               .map((task) => {
