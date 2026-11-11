@@ -109,6 +109,24 @@ export const startProcess = async (processDefinitionKey, variables = []) => {
     const response = await flowableClient.post('/runtime/process-instances', payload)
     return { success: true, data: response.data }
   } catch (error) {
+    // If not found, try fallback key alias (LeaveRequest <-> leave-request-process)
+    const fallbackKey = processDefinitionKey === 'LeaveRequest'
+      ? 'leave-request-process'
+      : (processDefinitionKey === 'leave-request-process' ? 'LeaveRequest' : null)
+
+    if (fallbackKey) {
+      try {
+        const fallbackRes = await flowableClient.post('/runtime/process-instances', {
+          processDefinitionKey: fallbackKey,
+          variables: variables.map(v => ({
+            name: v.name,
+            value: v.value,
+            type: v.type || 'string',
+          })),
+        })
+        return { success: true, data: fallbackRes.data }
+      } catch {}
+    }
     return { success: false, error: error.message, data: null }
   }
 }
@@ -325,15 +343,20 @@ export const submitForm = async (formFields) => {
 // Ensure LeaveRequest process is deployed in Flowable
 export const ensureLeaveProcessDeployed = async () => {
   try {
-    const defsRes = await getProcessDefinitions({ key: 'LeaveRequest', latest: true })
+    // Check if leave-request-process or LeaveRequest is already deployed
+    const defsRes = await getProcessDefinitions({ key: 'leave-request-process', latest: true })
     if (defsRes.success && Array.isArray(defsRes.data?.data) && defsRes.data.data.length > 0) {
       return { success: true, message: 'Process already deployed', data: defsRes.data.data[0] }
     }
+    const defsLegacyRes = await getProcessDefinitions({ key: 'LeaveRequest', latest: true })
+    if (defsLegacyRes.success && Array.isArray(defsLegacyRes.data?.data) && defsLegacyRes.data.data.length > 0) {
+      return { success: true, message: 'Process already deployed', data: defsLegacyRes.data.data[0] }
+    }
 
-    // Deploy the standard LeaveRequest process BPMN
-    const deployRes = await deployProcess(LEAVE_REQUEST_BPMN_XML, 'Leave Request Workflow', 'LeaveRequest')
+    // Deploy the standard process BPMN
+    const deployRes = await deployProcess(LEAVE_REQUEST_BPMN_XML, 'Pengajuan Cuti Karyawan', 'leave-request-process')
     if (deployRes.success) {
-      console.log('[Flowable Auto-Bootstrap] Successfully deployed LeaveRequest process definition.')
+      console.log('[Flowable Auto-Bootstrap] Successfully deployed leave-request-process definition.')
     }
     return deployRes
   } catch (err) {

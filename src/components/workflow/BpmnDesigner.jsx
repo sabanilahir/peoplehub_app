@@ -35,39 +35,134 @@ export const LEAVE_REQUEST_BPMN = `<?xml version="1.0" encoding="UTF-8"?>
                   xmlns:flowable="http://flowable.org/bpmn"
                   id="Definitions_Leave" targetNamespace="http://flowable.org/bpmn">
   <bpmn:process id="leave-request-process" name="Pengajuan Cuti Karyawan" isExecutable="true">
-    <bpmn:startEvent id="start_leave" name="Pengajuan Cuti"/>
-    <bpmn:sequenceFlow id="flow_1" sourceRef="start_leave" targetRef="task_manager_review"/>
-    <bpmn:userTask id="task_manager_review" name="Persetujuan Manager" flowable:candidateGroups="managers"/>
-    <bpmn:sequenceFlow id="flow_2" sourceRef="task_manager_review" targetRef="task_hr_approval"/>
-    <bpmn:userTask id="task_hr_approval" name="Verifikasi HR" flowable:candidateGroups="hr"/>
-    <bpmn:sequenceFlow id="flow_3" sourceRef="task_hr_approval" targetRef="end_leave"/>
-    <bpmn:endEvent id="end_leave" name="Selesai Disetujui"/>
+    <bpmn:startEvent id="StartEvent_Leave" name="Pengajuan Cuti (ESS)"/>
+    <bpmn:sequenceFlow id="Flow_Start_To_Gateway" sourceRef="StartEvent_Leave" targetRef="Gateway_EntryCheck"/>
+    <bpmn:exclusiveGateway id="Gateway_EntryCheck" name="Cek Approver Operasional"/>
+    <bpmn:sequenceFlow id="Flow_To_ApproverTask" name="Ada Matriks Approver" sourceRef="Gateway_EntryCheck" targetRef="Task_Approver">
+      <bpmn:conditionExpression>\${noOperationalApprovers != true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_Direct_To_HR_Start" name="Direct to HR (Tanpa Atasan)" sourceRef="Gateway_EntryCheck" targetRef="Task_HRApproval">
+      <bpmn:conditionExpression>\${noOperationalApprovers == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+
+    <bpmn:userTask id="Task_Approver" name="\${currentStepLabel}"
+                   flowable:assignee="\${currentApproverUsername}"
+                   flowable:candidateGroups="superadmin">
+      <bpmn:documentation>Persetujuan tingkat operasional bertingkat (Level 1, Level 2, Level 3, dst.) sesuai matriks approval karyawan.</bpmn:documentation>
+    </bpmn:userTask>
+    <bpmn:sequenceFlow id="Flow_App_To_Decision" sourceRef="Task_Approver" targetRef="Gateway_Decision"/>
+
+    <bpmn:exclusiveGateway id="Gateway_Decision" name="Keputusan Approver"/>
+    <bpmn:sequenceFlow id="Flow_App_Approved" name="Disetujui" sourceRef="Gateway_Decision" targetRef="Gateway_HasMore">
+      <bpmn:conditionExpression>\${approved == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_App_Rejected" name="Ditolak" sourceRef="Gateway_Decision" targetRef="End_Rejected">
+      <bpmn:conditionExpression>\${approved == false}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+
+    <bpmn:exclusiveGateway id="Gateway_HasMore" name="Ada Tingkat Lanjutan?"/>
+    <bpmn:sequenceFlow id="Flow_Loop_Next_Approver" name="Next Level (Loop)" sourceRef="Gateway_HasMore" targetRef="Task_Approver">
+      <bpmn:conditionExpression>\${hasMoreApprovers == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_All_Approved_To_HR" name="Semua Level Selesai" sourceRef="Gateway_HasMore" targetRef="Task_HRApproval">
+      <bpmn:conditionExpression>\${hasMoreApprovers != true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+
+    <bpmn:userTask id="Task_HRApproval" name="Verifikasi &amp; Persetujuan HR"
+                   flowable:candidateGroups="hr,hr_manager,superadmin">
+      <bpmn:documentation>Persetujuan akhir oleh HR Team untuk validasi kuota cuti dan sinkronisasi ke modul payroll.</bpmn:documentation>
+    </bpmn:userTask>
+    <bpmn:sequenceFlow id="Flow_HR_To_Gw" sourceRef="Task_HRApproval" targetRef="Gateway_HR"/>
+
+    <bpmn:exclusiveGateway id="Gateway_HR" name="Keputusan HR"/>
+    <bpmn:sequenceFlow id="Flow_HR_Approved" name="Disetujui HR" sourceRef="Gateway_HR" targetRef="End_Approved">
+      <bpmn:conditionExpression>\${approved == true}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_HR_Rejected" name="Ditolak HR" sourceRef="Gateway_HR" targetRef="End_Rejected">
+      <bpmn:conditionExpression>\${approved == false}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+
+    <bpmn:endEvent id="End_Approved" name="Selesai Disetujui (Payroll Sync)"/>
+    <bpmn:endEvent id="End_Rejected" name="Pengajuan Cuti Ditolak"/>
   </bpmn:process>
   <bpmndi:BPMNDiagram id="BPMNDiagram_Leave">
     <bpmndi:BPMNPlane id="BPMNPlane_Leave" bpmnElement="leave-request-process">
-      <bpmndi:BPMNShape id="start_leave_di" bpmnElement="start_leave">
-        <dc:Bounds x="150" y="110" width="36" height="36"/>
+      <bpmndi:BPMNShape id="StartEvent_Leave_di" bpmnElement="StartEvent_Leave">
+        <dc:Bounds x="120" y="162" width="36" height="36"/>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="task_mgr_di" bpmnElement="task_manager_review">
-        <dc:Bounds x="240" y="88" width="130" height="80"/>
+      <bpmndi:BPMNShape id="Gateway_EntryCheck_di" bpmnElement="Gateway_EntryCheck" isMarkerVisible="true">
+        <dc:Bounds x="210" y="155" width="50" height="50"/>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="task_hr_di" bpmnElement="task_hr_approval">
-        <dc:Bounds x="420" y="88" width="130" height="80"/>
+      <bpmndi:BPMNShape id="Task_Approver_di" bpmnElement="Task_Approver">
+        <dc:Bounds x="320" y="140" width="160" height="80"/>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="end_leave_di" bpmnElement="end_leave">
-        <dc:Bounds x="600" y="110" width="36" height="36"/>
+      <bpmndi:BPMNShape id="Gateway_Decision_di" bpmnElement="Gateway_Decision" isMarkerVisible="true">
+        <dc:Bounds x="540" y="155" width="50" height="50"/>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="flow_1_di" bpmnElement="flow_1">
-        <di:waypoint x="186" y="128"/>
-        <di:waypoint x="240" y="128"/>
+      <bpmndi:BPMNShape id="Gateway_HasMore_di" bpmnElement="Gateway_HasMore" isMarkerVisible="true">
+        <dc:Bounds x="650" y="155" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_HRApproval_di" bpmnElement="Task_HRApproval">
+        <dc:Bounds x="770" y="140" width="160" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_HR_di" bpmnElement="Gateway_HR" isMarkerVisible="true">
+        <dc:Bounds x="990" y="155" width="50" height="50"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Approved_di" bpmnElement="End_Approved">
+        <dc:Bounds x="1110" y="162" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Rejected_di" bpmnElement="End_Rejected">
+        <dc:Bounds x="780" y="322" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_Start_To_Gateway_di" bpmnElement="Flow_Start_To_Gateway">
+        <di:waypoint x="156" y="180"/>
+        <di:waypoint x="210" y="180"/>
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="flow_2_di" bpmnElement="flow_2">
-        <di:waypoint x="370" y="128"/>
-        <di:waypoint x="420" y="128"/>
+      <bpmndi:BPMNEdge id="Flow_To_ApproverTask_di" bpmnElement="Flow_To_ApproverTask">
+        <di:waypoint x="260" y="180"/>
+        <di:waypoint x="320" y="180"/>
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="flow_3_di" bpmnElement="flow_3">
-        <di:waypoint x="550" y="128"/>
-        <di:waypoint x="600" y="128"/>
+      <bpmndi:BPMNEdge id="Flow_Direct_To_HR_Start_di" bpmnElement="Flow_Direct_To_HR_Start">
+        <di:waypoint x="235" y="155"/>
+        <di:waypoint x="235" y="60"/>
+        <di:waypoint x="850" y="60"/>
+        <di:waypoint x="850" y="140"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_App_To_Decision_di" bpmnElement="Flow_App_To_Decision">
+        <di:waypoint x="480" y="180"/>
+        <di:waypoint x="540" y="180"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_App_Approved_di" bpmnElement="Flow_App_Approved">
+        <di:waypoint x="590" y="180"/>
+        <di:waypoint x="650" y="180"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_App_Rejected_di" bpmnElement="Flow_App_Rejected">
+        <di:waypoint x="565" y="205"/>
+        <di:waypoint x="565" y="340"/>
+        <di:waypoint x="780" y="340"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Loop_Next_Approver_di" bpmnElement="Flow_Loop_Next_Approver">
+        <di:waypoint x="675" y="205"/>
+        <di:waypoint x="675" y="260"/>
+        <di:waypoint x="400" y="260"/>
+        <di:waypoint x="400" y="220"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_All_Approved_To_HR_di" bpmnElement="Flow_All_Approved_To_HR">
+        <di:waypoint x="700" y="180"/>
+        <di:waypoint x="770" y="180"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_HR_To_Gw_di" bpmnElement="Flow_HR_To_Gw">
+        <di:waypoint x="930" y="180"/>
+        <di:waypoint x="990" y="180"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_HR_Approved_di" bpmnElement="Flow_HR_Approved">
+        <di:waypoint x="1040" y="180"/>
+        <di:waypoint x="1110" y="180"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_HR_Rejected_di" bpmnElement="Flow_HR_Rejected">
+        <di:waypoint x="1015" y="205"/>
+        <di:waypoint x="1015" y="340"/>
+        <di:waypoint x="816" y="340"/>
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
@@ -120,6 +215,46 @@ export const REIMBURSEMENT_BPMN = `<?xml version="1.0" encoding="UTF-8"?>
 </bpmn:definitions>`
 
 export const DEFAULT_LEAVE_FORMS = {
+  StartEvent_Leave: {
+    elementId: 'StartEvent_Leave',
+    elementName: 'Pengajuan Cuti (ESS)',
+    elementType: 'bpmn:StartEvent',
+    title: 'Formulir Pengajuan Cuti Karyawan',
+    description: 'Diisi oleh karyawan pemohon cuti melalui portal ESS',
+    decisionType: 'none',
+    fields: [
+      { id: 'f_leave_type', label: 'Tipe Cuti', type: 'dropdown', required: true, options: 'Tahunan, Sakit, Melahirkan, Menikah, Izin Khusus' },
+      { id: 'f_start_date', label: 'Tanggal Mulai', type: 'date', required: true },
+      { id: 'f_end_date', label: 'Tanggal Selesai', type: 'date', required: true },
+      { id: 'f_reason', label: 'Alasan Cuti', type: 'textarea', required: true, placeholder: 'Jelaskan keperluan pengajuan cuti...' },
+      { id: 'f_attachment', label: 'Surat Keterangan / Resep Dokter', type: 'file', required: false },
+    ],
+  },
+  Task_Approver: {
+    elementId: 'Task_Approver',
+    elementName: 'Persetujuan Operasional Dinamis (N-Tier)',
+    elementType: 'bpmn:UserTask',
+    title: 'Persetujuan Tingkat Operasional Dinamis',
+    description: 'Pemeriksaan beban kerja tim dan persetujuan bertingkat (Level 1, Level 2, dst.) sesuai matriks persetujuan karyawan',
+    decisionType: 'approval',
+    fields: [
+      { id: 'f_approver_comment', label: 'Catatan Approver', type: 'textarea', required: false, placeholder: 'Catatan atau arahan untuk pemohon...' },
+      { id: 'f_handover_ok', label: 'Delegasi & Handover Tugas Sudah Terpenuhi', type: 'checkbox', required: false },
+    ],
+  },
+  Task_HRApproval: {
+    elementId: 'Task_HRApproval',
+    elementName: 'Verifikasi & Persetujuan HR',
+    elementType: 'bpmn:UserTask',
+    title: 'Verifikasi & Validasi HR Department',
+    description: 'Pengecekan kuota cuti tahunan, validasi kepatuhan, dan integrasi modul payroll',
+    decisionType: 'approval',
+    fields: [
+      { id: 'f_hr_comment', label: 'Catatan HR Verifikator', type: 'textarea', required: false, placeholder: 'Catatan verifikasi final HR...' },
+      { id: 'f_quota_deducted', label: 'Kuota Cuti Mencukupi & Telah Divalidasi', type: 'checkbox', required: true },
+    ],
+  },
+  // Backward compatibility aliases
   start_leave: {
     elementId: 'start_leave',
     elementName: 'Pengajuan Cuti',

@@ -31,6 +31,8 @@ function WorkflowDesignerContent() {
   const [selectedTemplate, setSelectedTemplate] = useState('leave')
   const [saving, setSaving] = useState(false)
   const [loadingDef, setLoadingDef] = useState(false)
+  const [loadedXml, setLoadedXml] = useState(null)
+  const [loadedForms, setLoadedForms] = useState(null)
   const [message, setMessage] = useState(null)
   const [formsCount, setFormsCount] = useState(Object.keys(DEFAULT_LEAVE_FORMS).length)
   const designerRef = useRef(null)
@@ -47,9 +49,17 @@ function WorkflowDesignerContent() {
           const def = result.data
           setName(def.name)
           setKey(def.key)
-          setSelectedTemplate('custom')
+          if (def.key === 'leave-request-process' || def.key === 'LeaveRequest') {
+            setSelectedTemplate('leave')
+          } else if (def.key === 'expense-reimbursement') {
+            setSelectedTemplate('reimbursement')
+          } else {
+            setSelectedTemplate('custom')
+          }
           const defForms = def.forms || {}
           setFormsCount(Object.keys(defForms).length)
+          setLoadedXml(def.xml)
+          setLoadedForms(defForms)
           setTimeout(() => {
             designerRef.current?.loadXml(def.xml, defForms)
           }, 300)
@@ -283,8 +293,8 @@ function WorkflowDesignerContent() {
         ) : (
           <BpmnDesigner
             ref={designerRef}
-            initialXml={LEAVE_REQUEST_BPMN}
-            initialForms={DEFAULT_LEAVE_FORMS}
+            initialXml={loadedXml || LEAVE_REQUEST_BPMN}
+            initialForms={loadedForms || DEFAULT_LEAVE_FORMS}
             onSave={handleSaveDraft}
             onDeploy={handleDeployFlowable}
             onFormsChange={handleFormsChange}

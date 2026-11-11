@@ -5,7 +5,7 @@ const prisma = new PrismaClient()
 
 export async function GET(request, { params }) {
   try {
-    const { id } = params
+    const { id } = await params
 
     const definition = await prisma.workflowDefinition.findUnique({
       where: { id: parseInt(id) }
@@ -32,7 +32,7 @@ export async function GET(request, { params }) {
 
 export async function PUT(request, { params }) {
   try {
-    const { id } = params
+    const { id } = await params
     const body = await request.json()
     const { name, xml, description, active, forms } = body
 
@@ -69,7 +69,7 @@ export async function PUT(request, { params }) {
 
 export async function DELETE(request, { params }) {
   try {
-    const { id } = params
+    const { id } = await params
 
     await prisma.workflowDefinition.delete({
       where: { id: parseInt(id) }
