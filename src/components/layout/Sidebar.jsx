@@ -311,12 +311,12 @@ const SA_GROUPS = [
     { label: 'Gen AI',                href: '/sysadmin/settings/gen-ai',                icon: ic('zap') },
     { label: 'Notification Setup',    href: '/sysadmin/settings/notification-setup',    icon: ic('mail') },
   ]},
-  { title: 'Workflow Engine (Flowable)', icon: ic('workflow'), items: [
-    { label: 'Flowable Engine',     href: '/sysadmin/workflow',                     icon: ic('workflow') },
+  { title: 'Workflow Engine', icon: ic('workflow'), items: [
+    { label: 'Workflow Dashboard',  href: '/sysadmin/workflow',                     icon: ic('workflow') },
     { label: 'BPMN Designer',       href: '/sysadmin/workflow/designer',            icon: ic('paint') },
     { label: 'Analisa & Metrik',    href: '/sysadmin/workflow/analytics',           icon: ic('chart') },
     { label: 'Definitions',         href: '/sysadmin/workflow/definitions',         icon: ic('list') },
-    { label: 'Flowable Settings',   href: '/sysadmin/workflow/flowable-settings',   icon: ic('settings') },
+    { label: 'Engine Settings',     href: '/sysadmin/workflow/flowable-settings',   icon: ic('settings') },
     { label: 'Workflow Settings',   href: '/sysadmin/workflow/settings',            icon: ic('settings') },
     { label: 'Userlists (Grup Penyetuju)', href: '/sysadmin/workflow/userlists', icon: ic('users') },
     { label: 'Transaction Manager', href: '/sysadmin/workflow/transaction-manager', icon: ic('cpu') },

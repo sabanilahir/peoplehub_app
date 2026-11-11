@@ -654,7 +654,7 @@ export default function EmployeeProfilePage() {
             <div className='border-t border-gray-100 mt-6 pt-5'>
               <div className='flex items-center justify-between mb-4'>
                 <h3 className='text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5'>
-                  <span>🔄</span> {t('Matriks Persetujuan Cuti & Workflow (Flowable)', 'Leave Approval Matrix & Workflow (Flowable)')}
+                  <span>🔄</span> {t('Matriks Persetujuan Cuti & Workflow', 'Leave Approval Matrix & Workflow')}
                 </h3>
                 <button
                   onClick={() => setShowApprovalModal(true)}

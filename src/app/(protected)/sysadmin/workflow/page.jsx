@@ -42,12 +42,12 @@ export default function WorkflowPage() {
               {checking
                 ? 'Memeriksa status engine...'
                 : engineStatus
-                ? '🟢 Flowable Engine Lokal Aktif'
-                : '🟡 Flowable Offline (Local Mock Mode)'}
+                ? '🟢 Workflow Engine Aktif'
+                : '🟡 Workflow Offline (Local Mock Mode)'}
             </span>
           </div>
           <p className="text-sm text-gray-600 mt-1">
-            Integrasi Flowable Engine open-source lokal dengan visual BPMN.js modeler dan dashboard analisa proses.
+            Integrasi Workflow Engine lokal dengan visual BPMN modeler dan dashboard analisa proses.
           </p>
         </div>
 
@@ -98,7 +98,7 @@ export default function WorkflowPage() {
             BPMN Visual Designer
           </h2>
           <p className="text-sm text-gray-600 mt-1.5 leading-relaxed">
-            Editor visual berbasis bpmn-js: buat alur persetujuan, user task, sequence flow, lalu deploy langsung ke Flowable Engine.
+            Editor visual berbasis BPMN: buat alur persetujuan, user task, sequence flow, lalu deploy langsung ke Workflow Engine.
           </p>
         </Link>
 
@@ -116,14 +116,14 @@ export default function WorkflowPage() {
           </p>
         </Link>
 
-        {/* Card 4: Flowable Settings */}
+        {/* Card 4: Workflow Engine Settings */}
         <Link
           href="/sysadmin/workflow/flowable-settings"
           className="group block bg-white border border-gray-200 hover:border-gray-400 rounded-2xl p-6 shadow-sm hover:shadow-lg transition-all"
         >
           <div className="text-4xl p-3 bg-gray-100 text-gray-700 rounded-xl w-fit mb-4">⚙️</div>
           <h2 className="text-lg font-bold text-gray-900 group-hover:text-gray-700 transition">
-            Flowable Settings
+            Workflow Settings
           </h2>
           <p className="text-sm text-gray-600 mt-1.5 leading-relaxed">
             Konfigurasi koneksi REST API engine lokal (http://localhost:8080/flowable-rest), username/password, dan tes status engine.
@@ -165,9 +165,9 @@ export default function WorkflowPage() {
           <span>💡 Arsitektur Engine &amp; Editor</span>
         </h3>
         <p className="text-sm text-blue-800 leading-relaxed">
-          Modul ini menggabungkan <strong>Flowable Engine Opensource</strong> di backend (REST API port 8080)
+          Modul ini menggabungkan <strong>Workflow Engine</strong> di backend (REST API)
           dengan <strong>BPMN.js</strong> di frontend browser. Model BPMN 2.0 yang dirancang dapat langsung dideploy
-          secara native ke Flowable REST endpoint <code className="bg-blue-100/80 px-1.5 py-0.5 rounded font-mono text-xs">/repository/deployments</code>,
+          secara native ke Workflow REST endpoint <code className="bg-blue-100/80 px-1.5 py-0.5 rounded font-mono text-xs">/repository/deployments</code>,
           kemudian seluruh data riwayat eksekusi dianalisis secara otomatis di halaman <strong>Analisa Workflow</strong>.
         </p>
       </div>

@@ -212,7 +212,7 @@ export default function ApplyLeavePage() {
         setMsg({
           type: 'success',
           text: isFlowableStarted
-            ? t('Pengajuan cuti berhasil dikirim & proses Flowable BPMN telah berjalan!', 'Leave request submitted & Flowable BPMN process started!')
+            ? t('Pengajuan cuti berhasil dikirim & alur workflow telah berjalan!', 'Leave request submitted & workflow process started!')
             : t('Pengajuan cuti berhasil disimpan ke database.', 'Leave request saved successfully.'),
         })
 
@@ -251,7 +251,7 @@ export default function ApplyLeavePage() {
         await loadMyLeaves()
         setMsg({
           type: 'success',
-          text: t('Pengajuan cuti berhasil di-withdraw & instance Flowable dibatalkan.', 'Leave request withdrawn successfully.'),
+          text: t('Pengajuan cuti berhasil di-withdraw & alur workflow dibatalkan.', 'Leave request withdrawn successfully.'),
         })
       } else {
         setMsg({ type: 'error', text: json.error || 'Gagal membatalkan pengajuan cuti.' })
@@ -429,7 +429,7 @@ export default function ApplyLeavePage() {
                       <StatusBadge status={l.status} />
                       {l.flowableProcessInstanceId ? (
                         <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-sky-50 text-sky-700 border border-sky-200">
-                          ⚡ Flowable BPMN
+                          ⚡ Workflow
                         </span>
                       ) : (
                         <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-gray-50 text-gray-500 border border-gray-200">

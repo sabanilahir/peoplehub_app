@@ -31,7 +31,7 @@ export async function GET(req, { params }) {
     if (type === 'flowable') {
       const taskRes = await getTask(flowableTaskId)
       if (!taskRes.success || !taskRes.data) {
-        return Response.json({ success: false, error: 'Tugas Flowable tidak ditemukan' }, { status: 404 })
+        return Response.json({ success: false, error: 'Tugas workflow tidak ditemukan' }, { status: 404 })
       }
       const task = taskRes.data
       const varsRes = await getTaskVariables(flowableTaskId)
@@ -57,7 +57,7 @@ export async function GET(req, { params }) {
           taskId: task.id,
           isFlowable: true,
           category: 'leave',
-          type: 'Permohonan Cuti (Flowable BPMN)',
+          type: 'Permohonan Cuti (Workflow)',
           title: `${leaveType} · ${applicantName}`,
           applicantName,
           applicantNik,
@@ -69,7 +69,7 @@ export async function GET(req, { params }) {
           endDate,
           durationText: `${days} Hari Kerja`,
           days,
-          note: varMap.reason || task.description || 'Pengajuan via Flowable BPMN Engine',
+          note: varMap.reason || task.description || 'Pengajuan via Workflow Engine',
           attachment: null,
           status: 'Pending',
           currentStep: task.name || 'Supervisor Approval',
@@ -260,12 +260,12 @@ export async function POST(req, { params }) {
         return Response.json({
           success: true,
           message: action === 'approve'
-            ? 'Permohonan Flowable berhasil disetujui & otomatis masuk ke HO Calculator!'
-            : 'Permohonan Flowable berhasil ditolak.',
+            ? 'Permohonan berhasil disetujui & otomatis masuk ke HO Calculator!'
+            : 'Permohonan berhasil ditolak.',
           data,
         })
       } else {
-        return Response.json({ success: false, error: data.error || 'Gagal memproses tugas Flowable' }, { status: 400 })
+        return Response.json({ success: false, error: data.error || 'Gagal memproses tugas workflow' }, { status: 400 })
       }
     }
 

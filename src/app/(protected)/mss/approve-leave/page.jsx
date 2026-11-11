@@ -144,12 +144,12 @@ export default function ApproveLeavePage() {
         // Optimistic UI: langsung hapus baris tugas dari state agar tidak bisa diklik ulang
         setFlowableTasks((prev) => prev.filter((t) => t.id !== task.id))
         flashToast(
-          `Permohonan cuti ${task.applicantName || getTaskVar(task, 'employeeName')} berhasil disetujui via Flowable!`,
+          `Permohonan cuti ${task.applicantName || getTaskVar(task, 'employeeName')} berhasil disetujui!`,
           'success'
         )
         await Promise.all([loadFlowableTasks(), loadLeaves()])
       } else {
-        flashToast(data.error || 'Gagal menyetujui tugas Flowable', 'error')
+        flashToast(data.error || 'Gagal menyetujui tugas workflow', 'error')
       }
     } catch (err) {
       flashToast('Error: ' + err.message, 'error')
@@ -181,12 +181,12 @@ export default function ApproveLeavePage() {
       if (data.success) {
         // Optimistic UI: langsung hapus baris tugas dari state
         setFlowableTasks((prev) => prev.filter((t) => t.id !== task.id))
-        flashToast(`Permohonan cuti ${task.applicantName || getTaskVar(task, 'employeeName')} ditolak via Flowable.`, 'warning')
+        flashToast(`Permohonan cuti ${task.applicantName || getTaskVar(task, 'employeeName')} ditolak.`, 'warning')
         setFlowableRejectId(null)
         setFlowableRejectNote('')
         await Promise.all([loadFlowableTasks(), loadLeaves()])
       } else {
-        flashToast(data.error || 'Gagal menolak tugas Flowable', 'error')
+        flashToast(data.error || 'Gagal menolak tugas workflow', 'error')
       }
     } catch (err) {
       flashToast('Error: ' + err.message, 'error')
@@ -210,8 +210,8 @@ export default function ApproveLeavePage() {
         icon="✅"
         title="Approve Leave"
         subtitle={t(
-          'Review dan setujui pengajuan cuti tim melalui Flowable BPMN Engine.',
-          'Review and approve leave requests powered by Flowable BPMN Engine.'
+          'Review dan setujui pengajuan cuti tim melalui alur workflow persetujuan.',
+          'Review and approve team leave requests via workflow.'
         )}
       />
 
@@ -236,15 +236,15 @@ export default function ApproveLeavePage() {
         </div>
       )}
 
-      {/* ── FLOWABLE BPMN TASK INBOX (PRIORITAS UTAMA) ── */}
+      {/* ── WORKFLOW TASK INBOX (PRIORITAS UTAMA) ── */}
       <SectionCard
-        title={t('Inbox Persetujuan Cuti (Flowable BPMN Engine)', 'Leave Approval Inbox (Flowable BPMN Engine)')}
+        title={t('Inbox Persetujuan Cuti (Workflow)', 'Leave Approval Inbox (Workflow)')}
         icon="⚡"
         actions={
           <div className="flex items-center gap-2">
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold text-teal-700 bg-teal-50 border border-teal-200 rounded-md">
               <span className="w-2 h-2 rounded-full bg-teal-500 animate-pulse" />
-              Flowable Engine (Online)
+              Workflow Engine (Online)
             </span>
             <StatusBadge tone={flowableTasks.length > 0 ? 'warning' : 'neutral'}>
               {flowableTasks.length} {t('Tugas', 'Tasks')}
@@ -253,7 +253,7 @@ export default function ApproveLeavePage() {
               onClick={loadFlowableTasks}
               disabled={loadingFlowable}
               className="p-1.5 text-gray-500 hover:text-gray-800 rounded-lg hover:bg-gray-100 transition"
-              title="Muat ulang tugas Flowable"
+              title="Muat ulang tugas workflow"
             >
               <Icon e={loadingFlowable ? '⌛' : '🔄'} size={14} className={loadingFlowable ? 'animate-spin' : ''} />
             </button>
@@ -268,7 +268,7 @@ export default function ApproveLeavePage() {
             { label: t('Jenis Cuti', 'Leave Type') },
             { label: t('Periode & Durasi', 'Dates') },
             { label: t('Alasan Cuti', 'Reason') },
-            { label: 'Status BPMN' },
+            { label: 'Status Workflow' },
             { label: t('Aksi Persetujuan', 'Action'), align: 'right' },
           ]}
           className="ring-0 shadow-none rounded-none"
@@ -278,7 +278,7 @@ export default function ApproveLeavePage() {
               <td colSpan={7} className="px-4 py-8 text-center text-xs text-gray-400">
                 <div className="inline-flex items-center gap-2">
                   <div className="w-4 h-4 border-2 border-teal-600 border-t-transparent rounded-full animate-spin" />
-                  <span>Memeriksa task Flowable engine...</span>
+                  <span>Memeriksa task workflow engine...</span>
                 </div>
               </td>
             </tr>
@@ -418,7 +418,7 @@ export default function ApproveLeavePage() {
                           disabled={isActioning}
                           className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-white rounded-lg shadow-sm hover:opacity-95 transition disabled:opacity-50"
                           style={{ background: 'linear-gradient(135deg, #052B52, #039299)' }}
-                          title="Setujui permohonan melalui Flowable Engine"
+                          title="Setujui permohonan workflow"
                         >
                           <Icon e="✓" size={12} className="inline" />
                           {isActioning ? 'Memproses...' : 'Setujui'}
@@ -446,8 +446,8 @@ export default function ApproveLeavePage() {
               <td colSpan={7} className="px-4 py-8">
                 <EmptyState
                   icon="🎉"
-                  title={t('Semua tugas Flowable selesai.', 'No pending Flowable tasks.')}
-                  subtitle="Tidak ada pengajuan cuti bawahan di Flowable yang perlu disetujui saat ini."
+                  title={t('Semua tugas workflow selesai.', 'No pending workflow tasks.')}
+                  subtitle="Tidak ada pengajuan cuti bawahan yang perlu disetujui saat ini."
                 />
               </td>
             </tr>

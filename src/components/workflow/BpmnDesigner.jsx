@@ -491,9 +491,9 @@ const BpmnDesigner = forwardRef(function BpmnDesigner(
           <button
             onClick={handleDeploy}
             className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md font-medium text-xs flex items-center gap-1 shadow-sm transition"
-            title="Deploy langsung ke Flowable Engine lokal"
+            title="Deploy langsung ke Workflow Engine"
           >
-            🚀 Deploy ke Flowable
+            🚀 Deploy Workflow
           </button>
         )}
 

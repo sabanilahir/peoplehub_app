@@ -672,7 +672,7 @@ export default function DashboardPage() {
       id: `flowable-${ft.id}`,
       icon: '🏖️',
       title: t(`Persetujuan Cuti: ${empName}`, `Leave Approval: ${empName}`),
-      subtitle: [leaveType, duration, dates].filter(Boolean).join(' · ') || (ft.name || 'Tugas Approval Flowable'),
+      subtitle: [leaveType, duration, dates].filter(Boolean).join(' · ') || (ft.name || 'Tugas Approval Workflow'),
       badge: t('Review', 'Review'),
       badgeColor: 'bg-emerald-100 text-emerald-800',
       href: '/mss/approve-leave',

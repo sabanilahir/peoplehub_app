@@ -147,12 +147,12 @@ function WorkflowDesignerContent() {
       if (result.success) {
         setMessage({
           type: 'success',
-          text: result.message || '🚀 Workflow dan formulir task berhasil dideploy ke Flowable Engine lokal!',
+          text: result.message || '🚀 Workflow dan formulir task berhasil dideploy ke Workflow Engine!',
         })
       } else {
         setMessage({
           type: 'error',
-          text: result.error || 'Gagal deploy ke Flowable',
+          text: result.error || 'Gagal deploy workflow',
         })
       }
     } catch (error) {
@@ -248,7 +248,7 @@ function WorkflowDesignerContent() {
         </div>
 
         <div className="flex-1 min-w-[200px]">
-          <label className="block text-xs font-semibold text-gray-700 mb-1">Process Key (Flowable ID) *</label>
+          <label className="block text-xs font-semibold text-gray-700 mb-1">Process Key (Workflow ID) *</label>
           <input
             type="text"
             value={key}

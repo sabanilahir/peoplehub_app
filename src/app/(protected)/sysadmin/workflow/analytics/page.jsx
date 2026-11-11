@@ -68,7 +68,7 @@ export default function WorkflowAnalyticsPage() {
                   : 'bg-amber-100 text-amber-800 border border-amber-300'
               }`}
             >
-              {engine.connected ? '🟢 Flowable Engine Online' : '🟡 Standalone / Fallback Mode'}
+              {engine.connected ? '🟢 Workflow Engine Online' : '🟡 Standalone / Fallback Mode'}
             </span>
           </div>
           <p className="text-sm text-gray-600 mt-1">
@@ -126,15 +126,15 @@ export default function WorkflowAnalyticsPage() {
           <div>
             <div className="font-semibold">
               {engine.connected
-                ? 'Terhubung ke Engine Flowable Opensource Lokal'
-                : 'Engine Flowable Lokal Belum Terdeteksi Aktif'}
+                ? 'Terhubung ke Workflow Engine Lokal'
+                : 'Workflow Engine Lokal Belum Terdeteksi Aktif'}
             </div>
             <div className="text-xs opacity-90 mt-0.5">
               Target endpoint: <code className="font-mono bg-white/70 px-1.5 py-0.5 rounded">{engine.url || 'http://localhost:8080/flowable-rest'}</code>
               {' • '}
               {engine.connected
                 ? 'Data historis dan aktivitas runtime disinkronkan secara real-time.'
-                : 'Data analisa berjalan dengan cache database internal. Jalankan engine flowable lokal untuk sinkronisasi runtime.'}
+                : 'Data analisa berjalan dengan cache database internal. Jalankan workflow engine lokal untuk sinkronisasi runtime.'}
             </div>
           </div>
         </div>
@@ -257,7 +257,7 @@ export default function WorkflowAnalyticsPage() {
 
             <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
               <h2 className="text-base font-bold text-gray-900 mb-1">Distribusi Status Instance</h2>
-              <p className="text-xs text-gray-500 mb-4">Rasio status proses dalam Flowable</p>
+              <p className="text-xs text-gray-500 mb-4">Rasio status proses dalam Workflow</p>
               <div className="h-56">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>

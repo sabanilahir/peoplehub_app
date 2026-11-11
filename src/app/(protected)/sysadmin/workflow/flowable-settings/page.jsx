@@ -37,8 +37,8 @@ export default function FlowableSettingsPage() {
   return (
     <div className="p-6 max-w-3xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold">Flowable Settings</h1>
-        <p className="text-gray-600">Configure Flowable engine connection</p>
+        <h1 className="text-2xl font-bold">Workflow Settings</h1>
+        <p className="text-gray-600">Configure workflow engine connection</p>
       </div>
 
       {message && <div className={`p-4 rounded-lg mb-6 ${message.type === 'error' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>{message.text}</div>}
@@ -58,7 +58,7 @@ export default function FlowableSettingsPage() {
           </div>
           <div className="flex items-center gap-2">
             <input type="checkbox" name="enabled" checked={formData.enabled} onChange={handleChange} className="w-4 h-4" />
-            <label className="text-sm">Enable Flowable</label>
+            <label className="text-sm">Enable Workflow Engine</label>
           </div>
         </div>
         <div className="flex gap-3 mt-6 pt-6 border-t">
@@ -72,7 +72,7 @@ export default function FlowableSettingsPage() {
       </div>
 
       <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <h3 className="font-semibold text-blue-900 mb-2">📋 Cara Menjalankan Flowable Lokal (Tanpa Docker)</h3>
+        <h3 className="font-semibold text-blue-900 mb-2">📋 Cara Menjalankan Workflow Engine Lokal (Tanpa Docker)</h3>
         <ol className="text-sm text-blue-800 space-y-1.5 list-decimal list-inside">
           <li>Pastikan Java (JDK/JRE 11, 17, atau 21) terpasang di komputer Anda (<code className="bg-blue-100 px-1 rounded font-mono text-xs">java -version</code>).</li>
           <li>Jalankan script starter: <code className="bg-blue-100 px-1.5 py-0.5 rounded font-mono text-xs font-semibold">scripts\start-flowable.bat</code></li>

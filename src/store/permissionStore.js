@@ -76,7 +76,7 @@ export const DEFAULT_PERMISSIONS = [
   { id: 513, key: 'workflow_engine_definitions', label: 'Definitions', group: 'sysadmin-workflow' },
   { id: 517, key: 'workflow_engine_userlists', label: 'Userlists (Grup Penyetuju)', group: 'sysadmin-workflow' },
   { id: 515, key: 'workflow_engine_analytics', label: 'Workflow Analytics', group: 'sysadmin-workflow' },
-  { id: 514, key: 'workflow_engine_settings', label: 'Flowable Settings', group: 'sysadmin-workflow' },
+  { id: 514, key: 'workflow_engine_settings', label: 'Engine Settings', group: 'sysadmin-workflow' },
 
   // ==================== 7. Workflow ====================
   { id: 901, key: 'workflow_tasks', label: 'Task Inbox', group: 'user-workflow' },

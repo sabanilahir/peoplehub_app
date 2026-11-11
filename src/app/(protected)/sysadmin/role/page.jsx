@@ -227,7 +227,7 @@ export default function RoleManagementPage() {
                   disabled={editData?.isSystem}
                   className="w-full px-3.5 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none disabled:bg-gray-100 disabled:text-gray-400"
                 />
-                <p className="text-xs text-gray-400 mt-1">Digunakan pada konfigurasi BPMN, Flowable, dan Userlists.</p>
+                <p className="text-xs text-gray-400 mt-1">Digunakan pada konfigurasi BPMN, Workflow, dan Userlists.</p>
               </div>
 
               <div>

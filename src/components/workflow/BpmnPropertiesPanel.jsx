@@ -350,7 +350,7 @@ export default function BpmnPropertiesPanel({
         {isGenericTask && onConvertToUserTask && (
           <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs space-y-2">
             <p className="text-amber-800">
-              ⚠️ Ini adalah <strong>Task Umum</strong>. Flowable memerlukan <strong>User Task</strong> agar dapat memiliki Form Interaktif dan ditugaskan ke Approver.
+              ⚠️ Ini adalah <strong>Task Umum</strong>. Workflow Engine memerlukan <strong>User Task</strong> agar dapat memiliki Form Interaktif dan ditugaskan ke Approver.
             </p>
             <button
               type="button"
@@ -656,7 +656,7 @@ export default function BpmnPropertiesPanel({
               {/* Form Key Input */}
               <div>
                 <label className="block text-[11px] font-medium text-gray-700 mb-1">
-                  Form Key (ID Formulir di Flowable) *
+                  Form Key (ID Formulir di Workflow) *
                 </label>
                 <input
                   type="text"
