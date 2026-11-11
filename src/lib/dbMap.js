@@ -2,7 +2,7 @@
 // Int fields coerce '' / null / undefined → null; strings → String.
 
 const EMP_INT = ['companyId', 'divisionId', 'businessUnitId', 'departmentId',
-  'positionId', 'gradeId', 'managerId', 'salary']
+  'positionId', 'gradeId', 'managerId', 'approver1Id', 'approver2Id', 'salary']
 const EMP_STR = ['nik', 'name', 'status', 'employmentType', 'role', 'joinDate', 'endDate',
   'gender', 'birthPlace', 'birthDate', 'nationality', 'religion', 'maritalStatus', 'ktp',
   'phone', 'email', 'personalEmail', 'address', 'city', 'province', 'country', 'location',

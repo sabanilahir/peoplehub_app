@@ -125,16 +125,17 @@ export async function POST(request, props) {
 
         const taskKey = (taskInfo?.taskDefinitionKey || '').toLowerCase()
         const taskName = (taskInfo?.name || '').toLowerCase()
-        const isStep1 = taskKey.includes('approver1') || taskKey.includes('supervisor') || taskKey.includes('sup') || taskName.includes('approval 1') || taskName.includes('supervisor')
-        const isFinalStep = taskKey.includes('approver2') || taskKey.includes('hr') || taskName.includes('approval 2') || taskName.includes('hr')
+        const isStep1 = taskKey.includes('approver1') || taskName.includes('approval 1')
+        const isStep2 = taskKey.includes('approver2') || taskName.includes('approval 2')
+        const isHRStep = taskKey.includes('hrapproval') || taskKey.includes('task_hr') || taskName.includes('hr approval') || taskKey === 'hr'
 
         let finalLeaveStatus = 'Pending'
         if (!isApproved) {
           finalLeaveStatus = 'Rejected'
-        } else if (isFinalStep) {
-          finalLeaveStatus = 'Approved'
+        } else if (isHRStep) {
+          finalLeaveStatus = 'Approved' // HANYA HR yang mengesahkan menjadi final Approved!
         } else {
-          finalLeaveStatus = 'Pending' // Tingkat 1 selesai, status di DB wajib tetap Pending menunggu Tingkat 2
+          finalLeaveStatus = 'Pending' // Tingkat 1 & Tingkat 2 selesai, status DB tetap Pending menunggu HR
         }
 
         if (varMap.employeeId || varMap.leaveType || varMap.startDate) {
@@ -222,40 +223,69 @@ export async function POST(request, props) {
 
             if (existingLeave) {
               const currentSteps = Array.isArray(existingLeave.steps) ? existingLeave.steps : []
-              let updatedSteps = []
+              let updatedSteps = currentSteps.length > 0 ? [...currentSteps] : []
+
+              if (updatedSteps.length === 0) {
+                // Inisialisasi jika steps sebelumnya kosong
+                updatedSteps = [
+                  { level: 1, tier: 'approval_1', label: 'Approval 1', status: 'Approved' },
+                  { level: 2, tier: 'hr_approval', label: 'HR Approval', status: 'Pending' },
+                ]
+              }
 
               if (isStep1) {
-                const existingStep2 = currentSteps.find((s) => s.level === 2) || {
-                  level: 2,
-                  tier: 'approval_2',
-                  label: 'Approval 2',
-                  status: isApproved ? 'Pending' : 'Waiting',
-                  approverName: varMap.approver2Name || 'Approval 2 / HR',
-                }
-                if (isApproved) {
-                  existingStep2.status = 'Pending'
-                }
-                updatedSteps = [step1Obj, existingStep2]
-              } else if (isFinalStep) {
-                const step1 = currentSteps.find((s) => s.level === 1) || {
-                  level: 1,
-                  tier: 'approval_1',
-                  label: 'Approval 1',
-                  status: 'Approved',
-                  approverName: varMap.approver1Name || 'Approval 1',
-                }
-                updatedSteps = [step1, step2Obj]
-              } else {
-                updatedSteps = [
-                  {
-                    level: 1,
-                    label: taskInfo?.name || 'Flowable Task',
+                const s1Idx = updatedSteps.findIndex(s => s.tier === 'approval_1' || s.level === 1)
+                if (s1Idx >= 0) {
+                  updatedSteps[s1Idx] = {
+                    ...updatedSteps[s1Idx],
                     status: isApproved ? 'Approved' : 'Rejected',
                     approverName,
                     actedAt: new Date().toISOString(),
                     note: approvalNote,
-                  },
-                ]
+                  }
+                }
+                // Langkah berikutnya menjadi Pending
+                const nextStepIdx = updatedSteps.findIndex(s => s.level === (updatedSteps[s1Idx]?.level || 1) + 1)
+                if (nextStepIdx >= 0 && isApproved) {
+                  updatedSteps[nextStepIdx].status = 'Pending'
+                }
+              } else if (isStep2) {
+                const s2Idx = updatedSteps.findIndex(s => s.tier === 'approval_2' || (s.level === 2 && s.tier !== 'hr_approval'))
+                if (s2Idx >= 0) {
+                  updatedSteps[s2Idx] = {
+                    ...updatedSteps[s2Idx],
+                    status: isApproved ? 'Approved' : 'Rejected',
+                    approverName,
+                    actedAt: new Date().toISOString(),
+                    note: approvalNote,
+                  }
+                }
+                // Langkah HR menjadi Pending
+                const hrIdx = updatedSteps.findIndex(s => s.tier === 'hr_approval' || s.type === 'hr')
+                if (hrIdx >= 0 && isApproved) {
+                  updatedSteps[hrIdx].status = 'Pending'
+                }
+              } else if (isHRStep) {
+                const hrIdx = updatedSteps.findIndex(s => s.tier === 'hr_approval' || s.type === 'hr')
+                if (hrIdx >= 0) {
+                  updatedSteps[hrIdx] = {
+                    ...updatedSteps[hrIdx],
+                    status: isApproved ? 'Approved' : 'Rejected',
+                    approverName,
+                    actedAt: new Date().toISOString(),
+                    note: approvalNote,
+                  }
+                } else {
+                  updatedSteps.push({
+                    level: updatedSteps.length + 1,
+                    tier: 'hr_approval',
+                    label: 'HR Approval',
+                    status: isApproved ? 'Approved' : 'Rejected',
+                    approverName,
+                    actedAt: new Date().toISOString(),
+                    note: approvalNote,
+                  })
+                }
               }
 
               await prisma.leave.update({

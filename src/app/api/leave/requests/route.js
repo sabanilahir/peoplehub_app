@@ -236,7 +236,7 @@ export async function POST(req) {
         })
       }
 
-      // Step 2: Approval 2 (Manager / Dept Head / HR Manager)
+      // Step 2: Approval 2 (Manager / Dept Head)
       if (app2Id && app2Id !== app1Id) {
         steps.push({
           level: steps.length + 1,
@@ -250,6 +250,19 @@ export async function POST(req) {
           note: '',
         })
       }
+
+      // Step Final: HR Approval (Persetujuan Akhir oleh HR)
+      steps.push({
+        level: steps.length + 1,
+        tier: 'hr_approval',
+        type: 'hr',
+        label: 'HR Approval (Persetujuan Akhir HR)',
+        status: 'Waiting',
+        approverId: null,
+        approverName: 'HR Department',
+        actedAt: null,
+        note: '',
+      })
     }
 
     // Validasi field dinamis dari Form Builder
@@ -360,6 +373,8 @@ export async function POST(req) {
           approver2Username = 'rina.marlina'
         }
 
+        const hasApproval2 = Boolean(app2Id && app2Id !== app1Id)
+
         const flowVariables = [
           { name: 'leaveId', value: String(created.id), type: 'string' },
           { name: 'employeeId', value: String(finalUserId), type: 'string' },
@@ -382,6 +397,7 @@ export async function POST(req) {
           { name: 'approver2Id', value: String(app2Id || ''), type: 'string' },
           { name: 'approver2Username', value: String(approver2Username), type: 'string' },
           { name: 'approver2Name', value: approver2?.name || 'Approval 2', type: 'string' },
+          { name: 'hasApproval2', value: hasApproval2, type: 'boolean' },
           { name: 'skipApprover1', value: isSelfApprover1, type: 'boolean' },
           // Backward compatibility
           { name: 'supervisorId', value: String(app1Id || ''), type: 'string' },

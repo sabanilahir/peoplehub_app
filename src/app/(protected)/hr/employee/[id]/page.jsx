@@ -154,6 +154,25 @@ export default function EmployeeProfilePage() {
 
   const manager      = employees.find(e => e.id === emp.managerId)
   const managerHeadcount = manager ? employees.filter(e => e.managerId === manager.id && e.status === 'Active').length : 0
+  const approver1    = employees.find(e => e.id === emp.approver1Id)
+  const approver2    = employees.find(e => e.id === emp.approver2Id)
+  const [showApprovalModal, setShowApprovalModal] = useState(false)
+  const [approvalForm, setApprovalForm] = useState({
+    managerId: emp.managerId || '',
+    approver1Id: emp.approver1Id || '',
+    approver2Id: emp.approver2Id || '',
+  })
+
+  useEffect(() => {
+    if (emp) {
+      setApprovalForm({
+        managerId: emp.managerId || '',
+        approver1Id: emp.approver1Id || '',
+        approver2Id: emp.approver2Id || '',
+      })
+    }
+  }, [emp])
+
   const directSubordinates = employees
     .filter(e => e.managerId === emp.id && e.status === 'Active')
     .sort((a, b) => a.name.localeCompare(b.name))
@@ -612,6 +631,76 @@ export default function EmployeeProfilePage() {
               <KVRow label={t('Tanggal Bergabung', 'Join Date')} value={emp.joinDate} />
               {emp.endDate && <KVRow label={t('Tanggal Akhir', 'End Date')} value={emp.endDate} />}
               <ManagerRow label={t('Atasan Langsung', 'Direct Manager')} manager={manager} headcount={managerHeadcount} />
+            </div>
+
+            {/* ── MATRIKS APPROVAL CUTI & WORKFLOW ────────────────────────── */}
+            <div className='border-t border-gray-100 mt-6 pt-5'>
+              <div className='flex items-center justify-between mb-4'>
+                <h3 className='text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5'>
+                  <span>🔄</span> {t('Matriks Persetujuan Cuti & Workflow (Flowable)', 'Leave Approval Matrix & Workflow (Flowable)')}
+                </h3>
+                <button
+                  onClick={() => setShowApprovalModal(true)}
+                  className='text-xs font-semibold px-3 py-1.5 rounded-lg border border-[#052B52]/20 text-[#052B52] hover:bg-[#052B52]/5 transition flex items-center gap-1'
+                >
+                  <Icon e='✏️' size={12} />
+                  {t('Edit Matriks Approval', 'Edit Approval Matrix')}
+                </button>
+              </div>
+
+              <div className='grid grid-cols-1 sm:grid-cols-4 gap-3 bg-gray-50/80 p-4 rounded-xl border border-gray-200'>
+                {/* 1. Atasan Langsung */}
+                <div className='bg-white p-3 rounded-lg border border-gray-100 shadow-sm'>
+                  <div className='text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1 flex items-center gap-1'>
+                    <span>👤</span> Atasan Langsung
+                  </div>
+                  <div className='text-sm font-semibold text-gray-800 truncate'>
+                    {manager ? manager.name : '— Belum Diset —'}
+                  </div>
+                  <div className='text-xs text-gray-500 truncate mt-0.5'>
+                    {manager?.jobPosition || manager?.position || 'Manager / Leader'}
+                  </div>
+                </div>
+
+                {/* 2. Approval 1 */}
+                <div className='bg-white p-3 rounded-lg border border-blue-100 shadow-sm'>
+                  <div className='text-[11px] font-semibold text-blue-600 uppercase tracking-wider mb-1 flex items-center gap-1'>
+                    <span>1️⃣</span> Approval 1 (Operasional)
+                  </div>
+                  <div className='text-sm font-semibold text-gray-800 truncate'>
+                    {approver1 ? approver1.name : (manager ? manager.name : '— Belum Diset —')}
+                  </div>
+                  <div className='text-xs text-blue-500 truncate mt-0.5'>
+                    {approver1 ? (approver1.jobPosition || 'Persetujuan Tahap 1') : 'Default Atasan Langsung'}
+                  </div>
+                </div>
+
+                {/* 3. Approval 2 */}
+                <div className='bg-white p-3 rounded-lg border border-amber-100 shadow-sm'>
+                  <div className='text-[11px] font-semibold text-amber-600 uppercase tracking-wider mb-1 flex items-center gap-1'>
+                    <span>2️⃣</span> Approval 2 (Manager)
+                  </div>
+                  <div className='text-sm font-semibold text-gray-800 truncate'>
+                    {approver2 ? approver2.name : '— Tidak Ada —'}
+                  </div>
+                  <div className='text-xs text-amber-600 truncate mt-0.5'>
+                    {approver2 ? (approver2.jobPosition || 'Persetujuan Tahap 2') : 'Langsung ke HR (1-Tier)'}
+                  </div>
+                </div>
+
+                {/* 4. Persetujuan Akhir (HR) */}
+                <div className='bg-white p-3 rounded-lg border border-purple-100 shadow-sm'>
+                  <div className='text-[11px] font-semibold text-purple-600 uppercase tracking-wider mb-1 flex items-center gap-1'>
+                    <span>🏢</span> Persetujuan Akhir
+                  </div>
+                  <div className='text-sm font-semibold text-purple-900 truncate'>
+                    HR Department
+                  </div>
+                  <div className='text-xs text-purple-500 truncate mt-0.5'>
+                    Final Gate (Ubah Status Approved)
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* ── LOCATION (Sesuai Odoo) ────────────────────────── */}
@@ -1664,6 +1753,138 @@ export default function EmployeeProfilePage() {
                 {t('Batal','Cancel')}
               </button>
               <ActionButton onClick={saveBio} disabled={!bioModal.form.effectiveDate || !bioModal.form.reason} className='flex-1'>{t('Simpan','Save')}</ActionButton>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL EDIT MATRIKS APPROVAL ────────────────────────── */}
+      {showApprovalModal && (
+        <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4'>
+          <div className='bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4'>
+            <div className='flex items-center justify-between pb-3 border-b border-gray-100'>
+              <div>
+                <h3 className='text-base font-bold text-gray-900'>
+                  {t('Konfigurasi Matriks Approval', 'Configure Approval Matrix')}
+                </h3>
+                <p className='text-xs text-gray-500 mt-0.5'>
+                  {emp.name} ({emp.dept || 'Department'} - {emp.jobPosition || emp.position || 'Position'})
+                </p>
+              </div>
+              <button
+                onClick={() => setShowApprovalModal(false)}
+                className='text-gray-400 hover:text-gray-600 p-1 text-lg'
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className='space-y-4 text-sm'>
+              {/* 1. Atasan Langsung */}
+              <div>
+                <label className='block text-xs font-semibold text-gray-700 mb-1'>
+                  {t('Atasan Langsung (Direct Manager)', 'Direct Manager')}
+                </label>
+                <select
+                  value={approvalForm.managerId}
+                  onChange={(e) => setApprovalForm(f => ({ ...f, managerId: e.target.value }))}
+                  className='w-full px-3 py-2 border border-gray-200 rounded-xl text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100'
+                >
+                  <option value=''>— {t('Pilih Atasan Langsung', 'Select Direct Manager')} —</option>
+                  {employees
+                    .filter(e => e.id !== emp.id && e.status === 'Active')
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map(e => (
+                      <option key={e.id} value={e.id}>
+                        {e.name} {e.jobPosition ? `(${e.jobPosition})` : ''}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              {/* 2. Approval 1 */}
+              <div>
+                <label className='block text-xs font-semibold text-blue-700 mb-1'>
+                  {t('Approval 1 (Operasional / Koordinator / Lead)', 'Approval 1 (Operational / Coordinator / Lead)')}
+                </label>
+                <select
+                  value={approvalForm.approver1Id}
+                  onChange={(e) => setApprovalForm(f => ({ ...f, approver1Id: e.target.value }))}
+                  className='w-full px-3 py-2 border border-blue-200 rounded-xl text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 bg-blue-50/20'
+                >
+                  <option value=''>— {t('Sama dengan Atasan Langsung', 'Same as Direct Manager')} —</option>
+                  {employees
+                    .filter(e => e.status === 'Active')
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map(e => (
+                      <option key={e.id} value={e.id}>
+                        {e.name} {e.jobPosition ? `(${e.jobPosition})` : ''}
+                      </option>
+                    ))}
+                </select>
+                <p className='text-[11px] text-gray-500 mt-1'>
+                  {t('Jika pemohon adalah Approval 1 itu sendiri, Flowable akan otomatis melewatinya (Auto-Bypass).', 'If applicant is Approval 1 themselves, Flowable will auto-bypass.')}
+                </p>
+              </div>
+
+              {/* 3. Approval 2 */}
+              <div>
+                <label className='block text-xs font-semibold text-amber-700 mb-1'>
+                  {t('Approval 2 (Manager / Head / Direksi)', 'Approval 2 (Manager / Head / Director)')}
+                </label>
+                <select
+                  value={approvalForm.approver2Id}
+                  onChange={(e) => setApprovalForm(f => ({ ...f, approver2Id: e.target.value }))}
+                  className='w-full px-3 py-2 border border-amber-200 rounded-xl text-sm outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100 bg-amber-50/20'
+                >
+                  <option value=''>— {t('Tidak Ada (1-Tier / Langsung ke HR)', 'None (1-Tier / Direct to HR)')} —</option>
+                  {employees
+                    .filter(e => e.status === 'Active')
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map(e => (
+                      <option key={e.id} value={e.id}>
+                        {e.name} {e.jobPosition ? `(${e.jobPosition})` : ''}
+                      </option>
+                    ))}
+                </select>
+                <p className='text-[11px] text-gray-500 mt-1'>
+                  {t('Kosongkan jika karyawan hanya memerlukan 1 approval operasional sebelum diverifikasi HR.', 'Leave blank if employee only requires 1 operational approval before HR.')}
+                </p>
+              </div>
+
+              {/* 4. Persetujuan Akhir HR (Info only) */}
+              <div className='p-3 rounded-xl bg-purple-50 border border-purple-100 flex items-center gap-2'>
+                <span className='text-lg'>🏢</span>
+                <div className='text-xs text-purple-900'>
+                  <span className='font-semibold'>{t('Persetujuan Akhir: Tim HR', 'Final Approval: HR Team')}</span>
+                  <p className='text-purple-700 text-[11px] mt-0.5'>
+                    {t('Semua pengajuan cuti akan bermuara ke HR untuk persetujuan akhir dan penetapan status Approved di database.', 'All requests route to HR for final sign-off and database status change to Approved.')}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className='flex gap-2 pt-2 border-t border-gray-100'>
+              <button
+                onClick={() => setShowApprovalModal(false)}
+                className='flex-1 py-2 text-sm font-semibold bg-gray-100 text-gray-600 rounded-xl hover:bg-gray-200 transition'
+              >
+                {t('Batal', 'Cancel')}
+              </button>
+              <button
+                onClick={async () => {
+                  await updateEmployee(emp.id, {
+                    managerId: approvalForm.managerId ? Number(approvalForm.managerId) : null,
+                    approver1Id: approvalForm.approver1Id ? Number(approvalForm.approver1Id) : null,
+                    approver2Id: approvalForm.approver2Id ? Number(approvalForm.approver2Id) : null,
+                  })
+                  setShowApprovalModal(false)
+                }}
+                className='flex-1 py-2 text-sm font-semibold text-white rounded-xl shadow-md hover:opacity-90 transition'
+                style={{ background: 'linear-gradient(135deg,#052B52,#039299)' }}
+              >
+                {t('Simpan Matriks', 'Save Matrix')}
+              </button>
             </div>
           </div>
         </div>

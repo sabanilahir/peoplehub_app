@@ -325,14 +325,22 @@ export default function ApproveLeavePage() {
 
                 const taskDefKey = (task.taskDefinitionKey || '').toLowerCase()
                 const taskNameLower = (task.name || '').toLowerCase()
-                const isTier1 = taskDefKey.includes('approver1') || taskNameLower.includes('approval 1')
-                const isTier2 = taskDefKey.includes('approver2') || taskNameLower.includes('approval 2') || taskDefKey.includes('hr')
-                const tierBadgeLabel = isTier1
-                  ? 'Approval 1 (Tingkat 1)'
-                  : isTier2
-                  ? 'Approval 2 (Tingkat 2 / HR)'
-                  : task.name || 'Approval Task'
-                const tierTone = isTier1 ? 'blue' : 'success'
+                const isHR = taskDefKey.includes('hrapproval') || taskDefKey.includes('hr') || taskNameLower.includes('hr')
+                const isTier1 = !isHR && (taskDefKey.includes('approver1') || taskNameLower.includes('approval 1'))
+                const isTier2 = !isHR && (taskDefKey.includes('approver2') || taskNameLower.includes('approval 2'))
+
+                let tierBadgeLabel = task.name || 'Approval Task'
+                let tierTone = 'neutral'
+                if (isTier1) {
+                  tierBadgeLabel = 'Approval 1 (Operasional)'
+                  tierTone = 'blue'
+                } else if (isTier2) {
+                  tierBadgeLabel = 'Approval 2 (Manager)'
+                  tierTone = 'warning'
+                } else if (isHR) {
+                  tierBadgeLabel = 'HR Approval (Persetujuan Akhir)'
+                  tierTone = 'success'
+                }
 
                 return (
                   <Tr key={task.id} className="bg-white hover:bg-teal-50/30 transition">
