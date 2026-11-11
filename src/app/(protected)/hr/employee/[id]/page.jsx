@@ -142,8 +142,11 @@ export default function EmployeeProfilePage() {
     approver2Id: '',
   })
   const [matrixRows, setMatrixRows] = useState([])
+  const [managerDeptFilter, setManagerDeptFilter] = useState('')
+  const [globalDeptFilter, setGlobalDeptFilter] = useState('')
 
   const emp = employees.find(e => String(e.id) === String(id))
+  const allDepts = Array.from(new Set(employees.map(e => e.dept).filter(Boolean))).sort()
 
   useEffect(() => {
     if (emp) {
@@ -152,20 +155,23 @@ export default function EmployeeProfilePage() {
         approver1Id: emp.approver1Id || '',
         approver2Id: emp.approver2Id || '',
       })
+      setManagerDeptFilter(emp.dept || '')
+      setGlobalDeptFilter(emp.dept || '')
 
       if (Array.isArray(emp.approvalMatrix) && emp.approvalMatrix.length > 0) {
         setMatrixRows(emp.approvalMatrix.map((m, i) => ({
           level: i + 1,
           employeeId: m.employeeId || '',
           label: m.label || `Approval ${i + 1}`,
+          deptFilter: '',
         })))
       } else {
         const rows = []
         const a1 = emp.approver1Id || emp.managerId || ''
         const a2 = emp.approver2Id || ''
-        if (a1) rows.push({ level: 1, employeeId: a1, label: 'Approval 1 (Operasional)' })
-        if (a2 && a2 !== a1) rows.push({ level: 2, employeeId: a2, label: 'Approval 2 (Manager)' })
-        if (rows.length === 0) rows.push({ level: 1, employeeId: '', label: 'Approval 1 (Operasional)' })
+        if (a1) rows.push({ level: 1, employeeId: a1, label: 'Approval 1 (Operasional)', deptFilter: '' })
+        if (a2 && a2 !== a1) rows.push({ level: 2, employeeId: a2, label: 'Approval 2 (Manager)', deptFilter: '' })
+        if (rows.length === 0) rows.push({ level: 1, employeeId: '', label: 'Approval 1 (Operasional)', deptFilter: '' })
         setMatrixRows(rows)
       }
     }
@@ -1778,14 +1784,20 @@ export default function EmployeeProfilePage() {
       {/* ── MODAL EDIT MATRIKS APPROVAL ────────────────────────── */}
       {showApprovalModal && (
         <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4'>
-          <div className='bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4'>
+          <div className='bg-white rounded-2xl max-w-3xl w-full p-6 shadow-2xl space-y-4'>
             <div className='flex items-center justify-between pb-3 border-b border-gray-100'>
               <div>
                 <h3 className='text-base font-bold text-gray-900'>
                   {t('Konfigurasi Matriks Approval', 'Configure Approval Matrix')}
                 </h3>
-                <p className='text-xs text-gray-500 mt-0.5'>
-                  {emp.name} ({emp.dept || 'Department'} - {emp.jobPosition || emp.position || 'Position'})
+                <p className='text-xs text-gray-500 mt-0.5 flex items-center gap-1.5'>
+                  <span className='font-semibold text-gray-700'>{emp.name}</span>
+                  <span>•</span>
+                  <span className='px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 font-medium text-[11px] border border-blue-100'>
+                    {emp.dept || 'No Department'}
+                  </span>
+                  <span>•</span>
+                  <span>{emp.jobPosition || emp.position || 'Staff'}</span>
                 </p>
               </div>
               <button
@@ -1798,103 +1810,201 @@ export default function EmployeeProfilePage() {
 
             <div className='space-y-4 text-sm max-h-[70vh] overflow-y-auto pr-1'>
               {/* 1. Atasan Langsung */}
-              <div className='bg-gray-50/70 p-3 rounded-xl border border-gray-100'>
-                <label className='block text-xs font-semibold text-gray-700 mb-1'>
-                  {t('Atasan Langsung (Direct Manager)', 'Direct Manager')}
-                </label>
-                <select
-                  value={approvalForm.managerId}
-                  onChange={(e) => setApprovalForm(f => ({ ...f, managerId: e.target.value }))}
-                  className='w-full px-3 py-2 border border-gray-200 rounded-xl text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 bg-white'
-                >
-                  <option value=''>— {t('Pilih Atasan Langsung', 'Select Direct Manager')} —</option>
-                  {employees
-                    .filter(e => e.id !== emp.id && e.status === 'Active')
-                    .sort((a, b) => a.name.localeCompare(b.name))
-                    .map(e => (
-                      <option key={e.id} value={e.id}>
-                        {e.name} {e.jobPosition ? `(${e.jobPosition})` : ''}
-                      </option>
-                    ))}
-                </select>
+              <div className='bg-gray-50/70 p-3.5 rounded-xl border border-gray-200/70 space-y-2'>
+                <div className='flex items-center justify-between'>
+                  <label className='block text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1'>
+                    <span>👤</span> {t('Atasan Langsung (Direct Manager)', 'Direct Manager')}
+                  </label>
+                  {managerDeptFilter && (
+                    <button
+                      type='button'
+                      onClick={() => setManagerDeptFilter('')}
+                      className='text-[11px] text-blue-600 hover:underline'
+                    >
+                      {t('Tampilkan Semua Departemen', 'Show All Departments')}
+                    </button>
+                  )}
+                </div>
+
+                <div className='grid grid-cols-1 sm:grid-cols-2 gap-2.5'>
+                  <div>
+                    <label className='block text-[11px] text-gray-500 mb-1 font-medium'>
+                      {t('Filter Departemen Atasan', 'Filter Manager Department')}
+                    </label>
+                    <select
+                      value={managerDeptFilter}
+                      onChange={(e) => setManagerDeptFilter(e.target.value)}
+                      className='w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs outline-none focus:border-blue-400 bg-white'
+                    >
+                      <option value=''>— {t('Semua Departemen', 'All Departments')} —</option>
+                      {allDepts.map(d => (
+                        <option key={d} value={d}>
+                          {d} {emp.dept === d ? `(${t('Dept Karyawan Ini', 'This Employee Dept')})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className='block text-[11px] text-gray-500 mb-1 font-medium'>
+                      {t('Pilih Karyawan Atasan', 'Select Direct Manager')}
+                    </label>
+                    <select
+                      value={approvalForm.managerId}
+                      onChange={(e) => setApprovalForm(f => ({ ...f, managerId: e.target.value }))}
+                      className='w-full px-2.5 py-1.5 border border-blue-200 rounded-lg text-xs outline-none focus:border-blue-400 bg-white font-medium'
+                    >
+                      <option value=''>— {t('Pilih Atasan Langsung', 'Select Direct Manager')} —</option>
+                      {employees
+                        .filter(e => {
+                          if (e.id === emp.id || e.status !== 'Active') return false
+                          if (approvalForm.managerId && e.id === Number(approvalForm.managerId)) return true
+                          if (!managerDeptFilter) return true
+                          return e.dept === managerDeptFilter
+                        })
+                        .sort((a, b) => a.name.localeCompare(b.name))
+                        .map(e => (
+                          <option key={e.id} value={e.id}>
+                            {e.name} {e.jobPosition ? `(${e.jobPosition})` : ''} • [{e.dept || 'No Dept'}]
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                </div>
               </div>
 
               {/* 2. Tingkat Approval Dinamis (N-Tier) */}
-              <div className='space-y-2.5'>
-                <div className='flex items-center justify-between'>
-                  <label className='block text-xs font-bold text-gray-700 uppercase tracking-wider'>
-                    {t('Tingkat Persetujuan (Approval Tiers)', 'Approval Tiers')}
-                  </label>
-                  <span className='text-[11px] text-gray-400'>
-                    {matrixRows.length} {t('Tingkat', 'Tier(s)')}
-                  </span>
+              <div className='space-y-3'>
+                <div className='flex flex-wrap items-center justify-between gap-2 bg-blue-50/50 p-2.5 rounded-xl border border-blue-100'>
+                  <div>
+                    <label className='block text-xs font-bold text-blue-900 uppercase tracking-wider flex items-center gap-1'>
+                      <span>⚡</span> {t('Tingkat Persetujuan (Approval Tiers)', 'Approval Tiers')}
+                    </label>
+                    <span className='text-[11px] text-blue-700/80'>
+                      {matrixRows.length} {t('Tingkat persetujuan dikonfigurasi', 'Tier(s) configured')}
+                    </span>
+                  </div>
+
+                  <div className='flex items-center gap-1.5 text-xs'>
+                    <span className='text-gray-600 font-medium text-[11px]'>
+                      {t('Filter Departemen Cepat:', 'Quick Dept Filter:')}
+                    </span>
+                    <select
+                      value={globalDeptFilter}
+                      onChange={(e) => {
+                        const val = e.target.value
+                        setGlobalDeptFilter(val)
+                        setMatrixRows(rows => rows.map(r => ({ ...r, deptFilter: val })))
+                      }}
+                      className='px-2.5 py-1 border border-blue-200 rounded-lg text-xs outline-none bg-white text-blue-900 font-medium'
+                    >
+                      <option value=''>— {t('Semua Departemen', 'All Departments')} —</option>
+                      {allDepts.map(d => (
+                        <option key={d} value={d}>
+                          {d} {emp.dept === d ? `(${t('Dept Karyawan Ini', 'This Employee Dept')})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
-                {matrixRows.map((row, idx) => (
-                  <div key={idx} className='p-3 bg-blue-50/25 border border-blue-100/80 rounded-xl space-y-2 relative'>
-                    <div className='flex items-center justify-between'>
-                      <span className='text-xs font-bold text-blue-700 flex items-center gap-1.5'>
-                        <span>{idx === 0 ? '1️⃣' : idx === 1 ? '2️⃣' : idx === 2 ? '3️⃣' : `${idx + 1}️⃣`}</span>
-                        Tingkat {idx + 1}
-                      </span>
-                      {matrixRows.length > 1 && (
-                        <button
-                          type='button'
-                          onClick={() => {
-                            setMatrixRows(rows => rows.filter((_, i) => i !== idx).map((r, i) => ({ ...r, level: i + 1 })))
-                          }}
-                          className='text-xs text-red-500 hover:text-red-700 p-1 flex items-center gap-1 transition'
-                          title={t('Hapus tingkat ini', 'Delete this tier')}
-                        >
-                          <Icon e='🗑️' size={12} />
-                          <span className='text-[11px]'>{t('Hapus', 'Delete')}</span>
-                        </button>
-                      )}
-                    </div>
+                {matrixRows.map((row, idx) => {
+                  const activeDept = row.deptFilter !== undefined ? row.deptFilter : globalDeptFilter
+                  return (
+                    <div key={idx} className='p-3.5 bg-blue-50/20 border border-blue-100 rounded-xl space-y-2 relative hover:border-blue-200 transition'>
+                      <div className='flex items-center justify-between'>
+                        <span className='text-xs font-bold text-blue-800 flex items-center gap-1.5'>
+                          <span>{idx === 0 ? '1️⃣' : idx === 1 ? '2️⃣' : idx === 2 ? '3️⃣' : `${idx + 1}️⃣`}</span>
+                          Tingkat {idx + 1}
+                        </span>
+                        {matrixRows.length > 1 && (
+                          <button
+                            type='button'
+                            onClick={() => {
+                              setMatrixRows(rows => rows.filter((_, i) => i !== idx).map((r, i) => ({ ...r, level: i + 1 })))
+                            }}
+                            className='text-xs text-red-500 hover:text-red-700 p-1 flex items-center gap-1 transition'
+                            title={t('Hapus tingkat ini', 'Delete this tier')}
+                          >
+                            <Icon e='🗑️' size={12} />
+                            <span className='text-[11px] font-medium'>{t('Hapus', 'Delete')}</span>
+                          </button>
+                        )}
+                      </div>
 
-                    <div className='grid grid-cols-1 sm:grid-cols-2 gap-2'>
-                      <div>
-                        <label className='block text-[11px] text-gray-500 mb-0.5 font-medium'>
-                          {t('Approver', 'Approver')}
-                        </label>
-                        <select
-                          value={row.employeeId}
-                          onChange={(e) => {
-                            const val = e.target.value ? Number(e.target.value) : ''
-                            setMatrixRows(rows => rows.map((r, i) => i === idx ? { ...r, employeeId: val } : r))
-                          }}
-                          className='w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs outline-none focus:border-blue-400 bg-white font-medium'
-                        >
-                          <option value=''>— {t('Pilih Approver', 'Select Approver')} —</option>
-                          {employees
-                            .filter(e => e.status === 'Active')
-                            .sort((a, b) => a.name.localeCompare(b.name))
-                            .map(e => (
-                              <option key={e.id} value={e.id}>
-                                {e.name} {e.jobPosition ? `(${e.jobPosition})` : ''}
+                      <div className='grid grid-cols-1 sm:grid-cols-3 gap-2.5'>
+                        {/* 1. Filter Departemen per Baris */}
+                        <div>
+                          <label className='block text-[11px] text-gray-500 mb-1 font-medium'>
+                            {t('Filter Departemen', 'Filter Department')}
+                          </label>
+                          <select
+                            value={row.deptFilter || ''}
+                            onChange={(e) => {
+                              const val = e.target.value
+                              setMatrixRows(rows => rows.map((r, i) => i === idx ? { ...r, deptFilter: val } : r))
+                            }}
+                            className='w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs outline-none focus:border-blue-400 bg-white font-medium'
+                          >
+                            <option value=''>— {t('Semua Departemen', 'All Departments')} —</option>
+                            {allDepts.map(d => (
+                              <option key={d} value={d}>
+                                {d} {emp.dept === d ? `(${t('Dept Karyawan', 'Emp Dept')})` : ''}
                               </option>
                             ))}
-                        </select>
-                      </div>
+                          </select>
+                        </div>
 
-                      <div>
-                        <label className='block text-[11px] text-gray-500 mb-0.5 font-medium'>
-                          {t('Label / Jabatan Approval', 'Tier Label / Role')}
-                        </label>
-                        <input
-                          type='text'
-                          value={row.label}
-                          onChange={(e) => {
-                            const val = e.target.value
-                            setMatrixRows(rows => rows.map((r, i) => i === idx ? { ...r, label: val } : r))
-                          }}
-                          placeholder={`Approval ${idx + 1}`}
-                          className='w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs outline-none focus:border-blue-400 bg-white'
-                        />
+                        {/* 2. Dropdown Karyawan Approver */}
+                        <div>
+                          <label className='block text-[11px] text-gray-500 mb-1 font-medium'>
+                            {t('Pilih Approver', 'Select Approver')}
+                          </label>
+                          <select
+                            value={row.employeeId}
+                            onChange={(e) => {
+                              const val = e.target.value ? Number(e.target.value) : ''
+                              setMatrixRows(rows => rows.map((r, i) => i === idx ? { ...r, employeeId: val } : r))
+                            }}
+                            className='w-full px-2.5 py-1.5 border border-blue-200 rounded-lg text-xs outline-none focus:border-blue-400 bg-white font-medium'
+                          >
+                            <option value=''>— {t('Pilih Approver', 'Select Approver')} —</option>
+                            {employees
+                              .filter(e => {
+                                if (e.status !== 'Active') return false
+                                if (row.employeeId && e.id === Number(row.employeeId)) return true
+                                if (!activeDept) return true
+                                return e.dept === activeDept
+                              })
+                              .sort((a, b) => a.name.localeCompare(b.name))
+                              .map(e => (
+                                <option key={e.id} value={e.id}>
+                                  {e.name} {e.jobPosition ? `(${e.jobPosition})` : ''} • [{e.dept || 'No Dept'}]
+                                </option>
+                              ))}
+                          </select>
+                        </div>
+
+                        {/* 3. Label / Peran Tingkat */}
+                        <div>
+                          <label className='block text-[11px] text-gray-500 mb-1 font-medium'>
+                            {t('Label / Jabatan Approval', 'Tier Label / Role')}
+                          </label>
+                          <input
+                            type='text'
+                            value={row.label}
+                            onChange={(e) => {
+                              const val = e.target.value
+                              setMatrixRows(rows => rows.map((r, i) => i === idx ? { ...r, label: val } : r))
+                            }}
+                            placeholder={`Approval ${idx + 1}`}
+                            className='w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs outline-none focus:border-blue-400 bg-white'
+                          />
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
 
                 <button
                   type='button'
@@ -1905,10 +2015,11 @@ export default function EmployeeProfilePage() {
                         level: rows.length + 1,
                         employeeId: '',
                         label: `Approval ${rows.length + 1} (${rows.length === 1 ? 'Manager' : rows.length === 2 ? 'Direktur / GM' : 'Head'})`,
+                        deptFilter: globalDeptFilter || '',
                       }
                     ])
                   }}
-                  className='w-full py-2.5 border-2 border-dashed border-blue-200 text-blue-700 hover:bg-blue-50/40 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition'
+                  className='w-full py-2.5 border-2 border-dashed border-blue-200 text-blue-700 hover:bg-blue-50/50 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition'
                 >
                   <Icon e='➕' size={13} />
                   <span>{t('Tambah Tingkat Approval', 'Add Approval Tier')}</span>
@@ -1916,27 +2027,34 @@ export default function EmployeeProfilePage() {
               </div>
 
               {/* 3. Persetujuan Akhir HR (Info only) */}
-              <div className='p-3 rounded-xl bg-purple-50 border border-purple-100 flex items-center gap-2.5'>
-                <span className='text-xl'>🏢</span>
+              <div className='p-3.5 rounded-xl bg-purple-50 border border-purple-100 flex items-center gap-3'>
+                <span className='text-2xl'>🏢</span>
                 <div className='text-xs text-purple-900'>
-                  <span className='font-semibold'>{t('Persetujuan Akhir: Tim HR', 'Final Approval: HR Team')}</span>
+                  <span className='font-semibold text-purple-950'>{t('Persetujuan Akhir: Tim HR (Final Gate)', 'Final Approval: HR Team (Final Gate)')}</span>
                   <p className='text-purple-700 text-[11px] mt-0.5 leading-relaxed'>
-                    {t('Seluruh tingkat operasional di atas akan bermuara ke HR untuk persetujuan akhir dan pengesahan status Approved di sistem.', 'All operational tiers above will lead to HR for final sign-off and Approved status confirmation.')}
+                    {t('Seluruh tingkat operasional di atas akan bermuara ke HR untuk verifikasi akhir dan pengesahan status Approved di sistem.', 'All operational tiers above will lead to HR for final verification and Approved status confirmation.')}
                   </p>
                 </div>
               </div>
             </div>
 
-            <div className='flex gap-2 pt-3 border-t border-gray-100'>
+            <div className='flex gap-2.5 pt-3 border-t border-gray-100'>
               <button
                 onClick={() => setShowApprovalModal(false)}
-                className='flex-1 py-2 text-sm font-semibold bg-gray-100 text-gray-600 rounded-xl hover:bg-gray-200 transition'
+                className='flex-1 py-2.5 text-sm font-semibold bg-gray-100 text-gray-600 rounded-xl hover:bg-gray-200 transition'
               >
                 {t('Batal', 'Cancel')}
               </button>
               <button
                 onClick={async () => {
-                  const cleaned = matrixRows.filter(r => r.employeeId)
+                  const cleaned = matrixRows
+                    .filter(r => r.employeeId)
+                    .map(r => ({
+                      level: r.level,
+                      employeeId: Number(r.employeeId),
+                      label: r.label,
+                    }))
+
                   await updateEmployee(emp.id, {
                     managerId: approvalForm.managerId ? Number(approvalForm.managerId) : null,
                     approver1Id: cleaned[0]?.employeeId ? Number(cleaned[0].employeeId) : null,
@@ -1945,7 +2063,7 @@ export default function EmployeeProfilePage() {
                   })
                   setShowApprovalModal(false)
                 }}
-                className='flex-1 py-2 text-sm font-semibold text-white rounded-xl shadow-md hover:opacity-90 transition'
+                className='flex-1 py-2.5 text-sm font-semibold text-white rounded-xl shadow-md hover:opacity-90 transition'
                 style={{ background: 'linear-gradient(135deg,#052B52,#039299)' }}
               >
                 {t('Simpan Matriks', 'Save Matrix')}
