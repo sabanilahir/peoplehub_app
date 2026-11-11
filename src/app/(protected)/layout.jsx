@@ -10,6 +10,8 @@ import Toast from '@/components/layout/Toast'
 import NavigationProgressBar from '@/components/layout/NavigationProgressBar'
 import PageLoadingOverlay from '@/components/layout/PageLoadingOverlay'
 import { useBrandingStore } from '@/store/brandingStore'
+import { usePermissionStore } from '@/store/permissionStore'
+import { useEmployeeStore } from '@/store/employeeStore'
 import { roleLabel } from '@/constants/roles'
 import { runStateBackfill } from '@/lib/stateBackfill'
 
@@ -20,6 +22,8 @@ export default function ProtectedLayout({ children }) {
   const pathname = usePathname()
   const { currentUser, logout, _hydrated } = useAuthStore()
   const { companyName, topbarLogo } = useBrandingStore()
+  const { hasPermission } = usePermissionStore()
+  const { employees } = useEmployeeStore()
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
 
@@ -119,18 +123,88 @@ export default function ProtectedLayout({ children }) {
       }
     }
 
-    // Proteksi rute MSS (khusus manager, hr_manager, superadmin)
-    if (pathname.startsWith('/mss') && !['manager', 'hr_manager', 'superadmin'].includes(role)) {
-      router.replace('/dashboard')
-      return
+    // Proteksi rute MSS (Manager Self-Service):
+    // Izinkan jika:
+    // 1. Role adalah managerial: manager, supervisor, director, hr_manager, superadmin
+    // 2. Khusus /mss/approve-leave: jika memiliki izin 'mss_leave' ATAU terdaftar sebagai approver/manager bawahan
+    // 3. Sub-rute MSS lainnya sesuai permissionKey terkait (mss_attendance, mss_performance, mss_talent)
+    // 4. Secara umum jika role memiliki salah satu izin MSS
+    if (pathname.startsWith('/mss')) {
+      const isMssRole = ['manager', 'supervisor', 'director', 'hr_manager', 'superadmin', 'admin'].includes(role)
+      const isApproverInStore = (employees || []).some(
+        (e) =>
+          e.managerId === activeUser.id ||
+          e.approver1Id === activeUser.id ||
+          e.approver2Id === activeUser.id ||
+          (Array.isArray(e.approvalMatrix) && e.approvalMatrix.some((m) => m.employeeId === activeUser.id))
+      )
+
+      if (pathname.startsWith('/mss/approve-leave')) {
+        const canApproveLeave = isMssRole || hasPermission(role, 'mss_leave') || isApproverInStore
+        if (!canApproveLeave) {
+          router.replace('/dashboard')
+          return
+        }
+      } else if (pathname.startsWith('/mss/team-attendance') || pathname.startsWith('/mss/apply-leave-team')) {
+        const canAccessAttendance = isMssRole || hasPermission(role, 'mss_attendance') || isApproverInStore
+        if (!canAccessAttendance) {
+          router.replace('/dashboard')
+          return
+        }
+      } else if (
+        pathname.startsWith('/mss/check-in') ||
+        pathname.startsWith('/mss/competency-assessment') ||
+        pathname.startsWith('/mss/pip') ||
+        pathname.startsWith('/mss/feedback') ||
+        pathname.startsWith('/mss/congratulation')
+      ) {
+        const canAccessPerf = isMssRole || hasPermission(role, 'mss_performance')
+        if (!canAccessPerf) {
+          router.replace('/dashboard')
+          return
+        }
+      } else if (pathname.startsWith('/mss/talent')) {
+        const canAccessTalent = isMssRole || hasPermission(role, 'mss_talent')
+        if (!canAccessTalent) {
+          router.replace('/dashboard')
+          return
+        }
+      } else {
+        // Sub-rute MSS umum lainnya
+        const canAccessAnyMss =
+          isMssRole ||
+          hasPermission(role, 'mss_leave') ||
+          hasPermission(role, 'mss_attendance') ||
+          hasPermission(role, 'mss_performance') ||
+          hasPermission(role, 'mss_talent') ||
+          isApproverInStore
+        if (!canAccessAnyMss) {
+          router.replace('/dashboard')
+          return
+        }
+      }
     }
 
-    // Proteksi rute HR (khusus role hr, hr_officer, hr_manager, superadmin)
-    if (pathname.startsWith('/hr') && !['hr', 'hr_officer', 'hr_manager', 'superadmin'].includes(role)) {
-      router.replace('/dashboard')
-      return
+    // Proteksi rute HR:
+    // Izinkan jika role HR resmi ATAU memiliki izin hak akses HR terkait
+    if (pathname.startsWith('/hr')) {
+      const isHrRole = ['hr', 'hr_officer', 'hr_manager', 'superadmin', 'admin'].includes(role)
+      const hasAnyHrPerm =
+        hasPermission(role, 'hr_employee') ||
+        hasPermission(role, 'hr_attendance') ||
+        hasPermission(role, 'hr_leave') ||
+        hasPermission(role, 'hr_payroll') ||
+        hasPermission(role, 'hr_recruitment') ||
+        hasPermission(role, 'hr_onboarding') ||
+        hasPermission(role, 'hr_performance') ||
+        hasPermission(role, 'hr_talent') ||
+        hasPermission(role, 'hr_org_chart')
+      if (!isHrRole && !hasAnyHrPerm) {
+        router.replace('/dashboard')
+        return
+      }
     }
-  }, [pathname, activeUser, mounted, router])
+  }, [pathname, activeUser, mounted, router, hasPermission, employees])
 
   const handleLogout = () => {
     logout()
