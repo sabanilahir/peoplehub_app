@@ -9,6 +9,7 @@ import { tenure } from '@/utils/dateUtils'
 import { exportCsv } from '@/utils/exportCsv'
 import { EMPTY_EMP, EMP_TYPES } from '@/utils/constants'
 import NewEmployeeForm from '@/components/employee/NewEmployeeForm'
+import UploadApprovalModal from '@/components/employee/UploadApprovalModal'
 
 // ─── Status → pill styling ────────────────────────────────────────────────────
 const STATUS_STYLE = {
@@ -126,6 +127,7 @@ export default function EmployeeDataPage() {
 
   // ── New employee modal ────────────────────────────────────────────────────--
   const [showNew, setShowNew] = useState(false)
+  const [showUploadApproval, setShowUploadApproval] = useState(false)
   const [form, setForm]       = useState(EMPTY_EMP)
   const [msg, setMsg]         = useState(null)
   const [syncingOdoo, setSyncingOdoo] = useState(false)
@@ -244,6 +246,13 @@ export default function EmployeeDataPage() {
           >
             <Icon e={syncingOdoo ? '⌛' : '🔄'} size={14} className={`inline align-[-2px] ${syncingOdoo ? 'animate-spin' : ''}`} /> 
             {syncingOdoo ? 'Menyinkronkan...' : 'Sinkron Odoo'}
+          </button>
+          <button 
+            onClick={() => setShowUploadApproval(true)}
+            className='inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition'
+            title='Upload & import matriks approval bertingkat dari file CSV'
+          >
+            <Icon e='📤' size={14} className='inline align-[-2px]' /> {t('Upload Matriks Approval', 'Upload Approval Matrix')}
           </button>
           <button onClick={handleExportCsv}
             className='inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition'>
@@ -482,6 +491,15 @@ export default function EmployeeDataPage() {
           </div>
         </div>
       )}
+
+      {/* ── Modal Upload Matriks Approval Massal ──────────────────────────── */}
+      <UploadApprovalModal
+        isOpen={showUploadApproval}
+        onClose={() => setShowUploadApproval(false)}
+        onUploaded={(res) => {
+          flash(`Matriks approval ${res.updatedCount} karyawan berhasil diperbarui ke database!`, 'success')
+        }}
+      />
     </div>
   )
 }
