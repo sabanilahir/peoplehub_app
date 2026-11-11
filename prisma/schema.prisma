@@ -144,6 +144,7 @@ model Employee {
   managerId      Int? // supervisor Employee.id
   approver1Id    Int? // Approval 1: Koordinator / Team Lead / SPV
   approver2Id    Int? // Approval 2: Manager / Dept Head / HR Manager
+  approvalMatrix Json? // Matriks approval dinamis N-Tier: [{ level: 1, employeeId: Int, label: String }, ...]
   employmentType String   @default("")
   role           String   @default("employee")
   joinDate       String   @default("")

@@ -325,21 +325,25 @@ export default function ApproveLeavePage() {
 
                 const taskDefKey = (task.taskDefinitionKey || '').toLowerCase()
                 const taskNameLower = (task.name || '').toLowerCase()
-                const isHR = taskDefKey.includes('hrapproval') || taskDefKey.includes('hr') || taskNameLower.includes('hr')
-                const isTier1 = !isHR && (taskDefKey.includes('approver1') || taskNameLower.includes('approval 1'))
-                const isTier2 = !isHR && (taskDefKey.includes('approver2') || taskNameLower.includes('approval 2'))
+                const isHR = taskDefKey.includes('hrapproval') || taskDefKey.includes('task_hr') || taskNameLower.includes('hr')
+                const isTier1 = !isHR && (taskDefKey.includes('approver1') || taskNameLower.includes('approval 1') || taskNameLower.includes('tingkat 1'))
+                const isTier2 = !isHR && (taskDefKey.includes('approver2') || taskNameLower.includes('approval 2') || taskNameLower.includes('tingkat 2'))
+                const isTier3Plus = !isHR && !isTier1 && !isTier2
 
                 let tierBadgeLabel = task.name || 'Approval Task'
                 let tierTone = 'neutral'
-                if (isTier1) {
-                  tierBadgeLabel = 'Approval 1 (Operasional)'
-                  tierTone = 'blue'
-                } else if (isTier2) {
-                  tierBadgeLabel = 'Approval 2 (Manager)'
-                  tierTone = 'warning'
-                } else if (isHR) {
+                if (isHR) {
                   tierBadgeLabel = 'HR Approval (Persetujuan Akhir)'
                   tierTone = 'success'
+                } else if (isTier1) {
+                  tierBadgeLabel = task.name || 'Approval 1 (Operasional)'
+                  tierTone = 'blue'
+                } else if (isTier2) {
+                  tierBadgeLabel = task.name || 'Approval 2 (Manager)'
+                  tierTone = 'warning'
+                } else if (isTier3Plus) {
+                  tierBadgeLabel = task.name || 'Approval Lanjutan'
+                  tierTone = 'info'
                 }
 
                 return (

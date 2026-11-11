@@ -8,19 +8,21 @@ const EMP_STR = ['nik', 'name', 'status', 'employmentType', 'role', 'joinDate', 
   'phone', 'email', 'personalEmail', 'address', 'city', 'province', 'country', 'location',
   'odooWorkLocationId', 'workLocationCode',
   'dept', 'position', 'jobPosition', 'jobTitle']
+const EMP_JSON = ['approvalMatrix']
 
 const USER_INT = ['employeeId', 'salary']
 const USER_STR = ['username', 'password', 'name', 'role', 'dept', 'position', 'email']
 
-function pick(body, ints, strs, withId) {
+function pick(body, ints, strs, withId, jsons = []) {
   const out = {}
   if (withId && body.id != null) out.id = Number(body.id)
   for (const k of ints) if (k in body) out[k] = (body[k] === '' || body[k] == null) ? null : Number(body[k])
   for (const k of strs) if (k in body) out[k] = body[k] == null ? '' : String(body[k])
+  for (const k of jsons) if (k in body) out[k] = body[k] == null ? null : body[k]
   return out
 }
 
-export const pickEmployee = (body, opts = {}) => pick(body, EMP_INT, EMP_STR, opts.withId)
+export const pickEmployee = (body, opts = {}) => pick(body, EMP_INT, EMP_STR, opts.withId, EMP_JSON)
 export const pickUser     = (body, opts = {}) => pick(body, USER_INT, USER_STR, opts.withId)
 
 // ─── Onboarding templates ─────────────────────────────────────────────────────

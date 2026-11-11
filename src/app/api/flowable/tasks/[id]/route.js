@@ -93,225 +93,142 @@ export async function POST(request, props) {
         console.warn('Could not pre-fetch task info:', e.message)
       }
 
+      const isApproved = variables.find((v) => v.name === 'approved')?.value === true
+      const approverName = variables.find((v) => v.name === 'approverName')?.value || 'Approver'
+      const approvalNote = variables.find((v) => v.name === 'approvalNote')?.value || (isApproved ? 'Disetujui' : 'Ditolak')
+
+      const varMap = {}
+      taskVariables.forEach((v) => { varMap[v.name] = v.value })
+      ;(variables || []).forEach((v) => { varMap[v.name] = v.value })
+
+      // Cari leave record di DB
+      let existingLeave = null
+      if (varMap.leaveId) {
+        existingLeave = await prisma.leave.findUnique({
+          where: { id: Number(varMap.leaveId) },
+        })
+      }
+      if (!existingLeave && taskInfo?.processInstanceId) {
+        existingLeave = await prisma.leave.findFirst({
+          where: {
+            customData: {
+              path: ['flowableProcessInstanceId'],
+              equals: taskInfo.processInstanceId,
+            },
+          },
+        })
+      }
+
+      const taskKey = (taskInfo?.taskDefinitionKey || '').toLowerCase()
+      const taskName = (taskInfo?.name || '').toLowerCase()
+      const isHRStep = taskKey.includes('hrapproval') || taskKey.includes('task_hr') || taskName.includes('hr approval') || taskKey === 'hr'
+
+      // Jika ini adalah operational task (Task_Approver) dan disetujui, evaluasi next approver dalam dynamic loop
+      if (!isHRStep && isApproved && existingLeave) {
+        const matrix = Array.isArray(existingLeave.customData?.flowableMatrix) ? existingLeave.customData.flowableMatrix : []
+        const currIdx = Number(existingLeave.customData?.currentMatrixIndex ?? 0)
+        const nextIdx = currIdx + 1
+
+        if (nextIdx < matrix.length) {
+          const nextApp = matrix[nextIdx]
+          variables.push(
+            { name: 'hasMoreApprovers', value: true, type: 'boolean' },
+            { name: 'currentApproverUsername', value: nextApp.username, type: 'string' },
+            { name: 'currentStepLabel', value: nextApp.label, type: 'string' },
+            { name: 'stepIndex', value: String(nextIdx), type: 'string' },
+          )
+        } else {
+          variables.push(
+            { name: 'hasMoreApprovers', value: false, type: 'boolean' }
+          )
+        }
+      }
+
       // 2. Eksekusi complete ke Flowable Engine
       result = await completeTask(id, variables)
 
       // 3. Jika berhasil, lakukan sinkronisasi otomatis ke tabel PostgreSQL prisma.leave
       if (result.success) {
-        const isApproved = variables.find((v) => v.name === 'approved')?.value === true
-        const approverName = variables.find((v) => v.name === 'approverName')?.value || 'Approver'
-        const approvalNote = variables.find((v) => v.name === 'approvalNote')?.value || (isApproved ? 'Disetujui' : 'Ditolak')
-
-        const varMap = {}
-        taskVariables.forEach((v) => {
-          varMap[v.name] = v.value
-        })
-        ;(variables || []).forEach((v) => {
-          varMap[v.name] = v.value
-        })
-
-        const procInstId = taskInfo?.processInstanceId || varMap.processInstanceId
-
-        // Cek apakah masih ada langkah berikutnya di Flowable
-        let hasNextTasks = false
-        if (isApproved && procInstId) {
-          try {
-            const nextTasksRes = await getTasks({ processInstanceId: procInstId })
-            if (nextTasksRes.success && Array.isArray(nextTasksRes.data?.data) && nextTasksRes.data.data.length > 0) {
-              hasNextTasks = true
-            }
-          } catch (e) {}
-        }
-
-        const taskKey = (taskInfo?.taskDefinitionKey || '').toLowerCase()
-        const taskName = (taskInfo?.name || '').toLowerCase()
-        const isStep1 = taskKey.includes('approver1') || taskName.includes('approval 1')
-        const isStep2 = taskKey.includes('approver2') || taskName.includes('approval 2')
-        const isHRStep = taskKey.includes('hrapproval') || taskKey.includes('task_hr') || taskName.includes('hr approval') || taskKey === 'hr'
-
         let finalLeaveStatus = 'Pending'
         if (!isApproved) {
           finalLeaveStatus = 'Rejected'
         } else if (isHRStep) {
           finalLeaveStatus = 'Approved' // HANYA HR yang mengesahkan menjadi final Approved!
         } else {
-          finalLeaveStatus = 'Pending' // Tingkat 1 & Tingkat 2 selesai, status DB tetap Pending menunggu HR
+          finalLeaveStatus = 'Pending' // Level operasional selesai, status DB tetap Pending menunggu HR
         }
 
-        if (varMap.employeeId || varMap.leaveType || varMap.startDate) {
-          try {
-            const empId = Number(varMap.employeeId) || 0
-            const leaveTypeName = varMap.leaveType || 'Cuti Tahunan'
-            const startDate = varMap.startDate || new Date().toISOString().slice(0, 10)
-            const endDate = varMap.endDate || startDate
-            const days = Number(varMap.days) || 1
-            const reason = varMap.reason || varMap.note || 'Pengajuan via Flowable BPMN'
+        if (existingLeave) {
+          const currentSteps = Array.isArray(existingLeave.steps) ? [...existingLeave.steps] : []
+          const matrix = Array.isArray(existingLeave.customData?.flowableMatrix) ? existingLeave.customData.flowableMatrix : []
+          const currIdx = Number(existingLeave.customData?.currentMatrixIndex ?? 0)
+          const nextIdx = currIdx + 1
 
-            // Cari jenis cuti yang cocok di DB
-            let lt = await prisma.leaveType.findFirst({
-              where: { name: { contains: leaveTypeName, mode: 'insensitive' } },
-            })
-            if (!lt) {
-              lt = await prisma.leaveType.findFirst()
+          if (!isHRStep) {
+            // Tandai step aktif sebagai Approved / Rejected
+            const activeItem = matrix[currIdx]
+            let targetStepIdx = currentSteps.findIndex(s => s.status === 'Pending' && s.tier !== 'hr_approval')
+            if (targetStepIdx < 0 && activeItem) {
+              targetStepIdx = currentSteps.findIndex(s => s.level === activeItem.level)
             }
 
-            // Cari user di DB
-            let user = await prisma.user.findFirst({
-              where: {
-                OR: [
-                  ...(empId ? [{ id: empId }, { employeeId: empId }] : []),
-                  ...(varMap.employeeName ? [{ name: { contains: varMap.employeeName, mode: 'insensitive' } }] : []),
-                ],
+            if (targetStepIdx >= 0) {
+              currentSteps[targetStepIdx] = {
+                ...currentSteps[targetStepIdx],
+                status: isApproved ? 'Approved' : 'Rejected',
+                approverName: approverName || currentSteps[targetStepIdx].approverName,
+                actedAt: new Date().toISOString(),
+                note: approvalNote,
+              }
+            }
+
+            let updatedCustom = { ...(existingLeave.customData || {}) }
+            if (isApproved) {
+              if (nextIdx < matrix.length) {
+                // Aktifkan step berikutnya menjadi Pending
+                const nextItem = matrix[nextIdx]
+                const nextStepIdx = currentSteps.findIndex(s => s.level === nextItem.level)
+                if (nextStepIdx >= 0) {
+                  currentSteps[nextStepIdx].status = 'Pending'
+                }
+                updatedCustom.currentMatrixIndex = nextIdx
+              } else {
+                // Seluruh level operasional selesai -> HR Step menjadi Pending!
+                const hrStepIdx = currentSteps.findIndex(s => s.tier === 'hr_approval' || s.type === 'hr')
+                if (hrStepIdx >= 0) {
+                  currentSteps[hrStepIdx].status = 'Pending'
+                }
+              }
+            }
+
+            await prisma.leave.update({
+              where: { id: existingLeave.id },
+              data: {
+                status: finalLeaveStatus,
+                steps: currentSteps,
+                customData: updatedCustom,
               },
             })
-
-            if (!user && empId) {
-              const emp = await prisma.employee.findUnique({ where: { id: empId } })
-              if (emp) {
-                user = await prisma.user.create({
-                  data: {
-                    id: emp.id,
-                    username: emp.nik || `user_${emp.id}`,
-                    password: 'defaultPassword123',
-                    name: emp.name,
-                    role: 'employee',
-                    employeeId: emp.id,
-                    dept: emp.dept || '',
-                    position: emp.position || '',
-                  },
-                })
+          } else {
+            // Task HR selesai
+            const hrStepIdx = currentSteps.findIndex(s => s.tier === 'hr_approval' || s.type === 'hr')
+            if (hrStepIdx >= 0) {
+              currentSteps[hrStepIdx] = {
+                ...currentSteps[hrStepIdx],
+                status: isApproved ? 'Approved' : 'Rejected',
+                approverName: approverName || 'HR Department',
+                actedAt: new Date().toISOString(),
+                note: approvalNote,
               }
             }
 
-            let existingLeave = null
-            if (varMap.leaveId) {
-              existingLeave = await prisma.leave.findUnique({
-                where: { id: Number(varMap.leaveId) },
-              })
-            }
-
-            if (!existingLeave && user) {
-              existingLeave = await prisma.leave.findFirst({
-                where: {
-                  userId: user.id,
-                  startDate,
-                  endDate,
-                },
-                orderBy: { id: 'desc' },
-              })
-            }
-
-            const step1Obj = {
-              level: 1,
-              tier: 'approval_1',
-              label: 'Approval 1',
-              status: isApproved ? 'Approved' : 'Rejected',
-              approverName,
-              actedAt: new Date().toISOString(),
-              note: approvalNote,
-            }
-
-            const step2Obj = {
-              level: 2,
-              tier: 'approval_2',
-              label: 'Approval 2',
-              status: isApproved ? 'Approved' : 'Rejected',
-              approverName,
-              actedAt: new Date().toISOString(),
-              note: approvalNote,
-            }
-
-            if (existingLeave) {
-              const currentSteps = Array.isArray(existingLeave.steps) ? existingLeave.steps : []
-              let updatedSteps = currentSteps.length > 0 ? [...currentSteps] : []
-
-              if (updatedSteps.length === 0) {
-                // Inisialisasi jika steps sebelumnya kosong
-                updatedSteps = [
-                  { level: 1, tier: 'approval_1', label: 'Approval 1', status: 'Approved' },
-                  { level: 2, tier: 'hr_approval', label: 'HR Approval', status: 'Pending' },
-                ]
-              }
-
-              if (isStep1) {
-                const s1Idx = updatedSteps.findIndex(s => s.tier === 'approval_1' || s.level === 1)
-                if (s1Idx >= 0) {
-                  updatedSteps[s1Idx] = {
-                    ...updatedSteps[s1Idx],
-                    status: isApproved ? 'Approved' : 'Rejected',
-                    approverName,
-                    actedAt: new Date().toISOString(),
-                    note: approvalNote,
-                  }
-                }
-                // Langkah berikutnya menjadi Pending
-                const nextStepIdx = updatedSteps.findIndex(s => s.level === (updatedSteps[s1Idx]?.level || 1) + 1)
-                if (nextStepIdx >= 0 && isApproved) {
-                  updatedSteps[nextStepIdx].status = 'Pending'
-                }
-              } else if (isStep2) {
-                const s2Idx = updatedSteps.findIndex(s => s.tier === 'approval_2' || (s.level === 2 && s.tier !== 'hr_approval'))
-                if (s2Idx >= 0) {
-                  updatedSteps[s2Idx] = {
-                    ...updatedSteps[s2Idx],
-                    status: isApproved ? 'Approved' : 'Rejected',
-                    approverName,
-                    actedAt: new Date().toISOString(),
-                    note: approvalNote,
-                  }
-                }
-                // Langkah HR menjadi Pending
-                const hrIdx = updatedSteps.findIndex(s => s.tier === 'hr_approval' || s.type === 'hr')
-                if (hrIdx >= 0 && isApproved) {
-                  updatedSteps[hrIdx].status = 'Pending'
-                }
-              } else if (isHRStep) {
-                const hrIdx = updatedSteps.findIndex(s => s.tier === 'hr_approval' || s.type === 'hr')
-                if (hrIdx >= 0) {
-                  updatedSteps[hrIdx] = {
-                    ...updatedSteps[hrIdx],
-                    status: isApproved ? 'Approved' : 'Rejected',
-                    approverName,
-                    actedAt: new Date().toISOString(),
-                    note: approvalNote,
-                  }
-                } else {
-                  updatedSteps.push({
-                    level: updatedSteps.length + 1,
-                    tier: 'hr_approval',
-                    label: 'HR Approval',
-                    status: isApproved ? 'Approved' : 'Rejected',
-                    approverName,
-                    actedAt: new Date().toISOString(),
-                    note: approvalNote,
-                  })
-                }
-              }
-
-              await prisma.leave.update({
-                where: { id: existingLeave.id },
-                data: {
-                  status: finalLeaveStatus,
-                  steps: updatedSteps,
-                },
-              })
-            } else if (user) {
-              await prisma.leave.create({
-                data: {
-                  userId: user.id,
-                  typeId: lt?.id || 1,
-                  typeName: leaveTypeName,
-                  startDate,
-                  endDate,
-                  days,
-                  note: reason,
-                  status: finalLeaveStatus,
-                  steps: isFinalStep ? [step1Obj, step2Obj] : [step1Obj],
-                },
-              })
-            }
-          } catch (syncErr) {
-            console.error('[Flowable -> PostgreSQL Sync] Error:', syncErr)
+            await prisma.leave.update({
+              where: { id: existingLeave.id },
+              data: {
+                status: finalLeaveStatus,
+                steps: currentSteps,
+              },
+            })
           }
         }
       }

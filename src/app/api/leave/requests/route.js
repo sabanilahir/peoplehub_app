@@ -184,27 +184,54 @@ export async function POST(req) {
 
     const days = calcDaysBetween(startDate, endDate)
 
-    // Resolve Approver 1 & Approver 2 from matrix
-    const app1Id = employee?.approver1Id || employee?.managerId || null
-    const app2Id = employee?.approver2Id || null
-
-    let approver1 = null
-    let approver2 = null
-    if (app1Id) {
-      approver1 = await prisma.employee.findUnique({
-        where: { id: app1Id },
-        select: { id: true, name: true, jobPosition: true, role: true, nik: true, odoo_id: true },
-      })
-    }
-    if (app2Id) {
-      approver2 = await prisma.employee.findUnique({
-        where: { id: app2Id },
-        select: { id: true, name: true, jobPosition: true, role: true, nik: true, odoo_id: true },
-      })
+    // Resolusi daftar approver bertingkat (mendukung Dynamic N-Tier approvalMatrix)
+    let rawMatrix = []
+    if (Array.isArray(employee?.approvalMatrix) && employee.approvalMatrix.length > 0) {
+      rawMatrix = employee.approvalMatrix.filter(m => m && m.employeeId)
+    } else {
+      // Fallback ke approver1Id dan approver2Id / managerId jika approvalMatrix belum diisi
+      const a1 = employee?.approver1Id || employee?.managerId || null
+      const a2 = employee?.approver2Id || null
+      if (a1) rawMatrix.push({ level: 1, employeeId: a1, label: 'Approval 1 (Operasional)' })
+      if (a2 && a2 !== a1) rawMatrix.push({ level: 2, employeeId: a2, label: 'Approval 2 (Manager)' })
     }
 
-    // Smart Auto-Bypass: Jika pemohon adalah Approval 1 itu sendiri (Koordinator / Lead)
-    const isSelfApprover1 = Boolean(app1Id && employee?.id === app1Id)
+    const resolvedMatrix = []
+    for (const [idx, item] of rawMatrix.entries()) {
+      const empRecord = await prisma.employee.findUnique({
+        where: { id: item.employeeId },
+        select: { id: true, name: true, jobPosition: true, position: true, role: true, nik: true, odoo_id: true },
+      })
+      if (!empRecord) continue
+
+      const uRecord = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { id: empRecord.id },
+            { employeeId: empRecord.id },
+            ...(empRecord.nik ? [{ username: empRecord.nik }] : []),
+          ],
+        },
+        select: { id: true, username: true, name: true },
+      })
+
+      let username = uRecord?.username
+      if (!username) {
+        if (empRecord.odoo_id) username = `ODOO-${empRecord.odoo_id}`
+        else if (empRecord.nik) username = empRecord.nik
+        else username = empRecord.name
+      }
+      if (!username) username = 'admin'
+
+      resolvedMatrix.push({
+        level: idx + 1,
+        employeeId: empRecord.id,
+        name: empRecord.name,
+        username,
+        jobPosition: empRecord.jobPosition || empRecord.position || 'Approver',
+        label: item.label || `Approval ${idx + 1} (${empRecord.jobPosition || empRecord.name})`,
+      })
+    }
 
     const steps = []
 
@@ -221,33 +248,33 @@ export async function POST(req) {
         note: 'Auto approve by policy',
       })
     } else {
-      // Step 1: Approval 1 (Koordinator / Team Lead / SPV)
-      if (app1Id) {
-        steps.push({
-          level: 1,
-          tier: 'approval_1',
-          type: 'coordinator',
-          label: `Approval 1 (${approver1?.jobPosition || approver1?.name || 'Koordinator / Lead'})`,
-          status: isSelfApprover1 ? 'Approved' : 'Pending',
-          approverId: app1Id,
-          approverName: approver1?.name || 'Approval 1',
-          actedAt: isSelfApprover1 ? new Date().toISOString() : null,
-          note: isSelfApprover1 ? 'Auto-Bypass: Pemohon adalah Approval 1 (Koordinator)' : '',
-        })
-      }
+      let firstPendingAssigned = false
 
-      // Step 2: Approval 2 (Manager / Dept Head)
-      if (app2Id && app2Id !== app1Id) {
+      for (const m of resolvedMatrix) {
+        const isSelf = Boolean(employee?.id && employee.id === m.employeeId)
+        let stepStatus = 'Waiting'
+        let actedAt = null
+        let note = ''
+
+        if (isSelf) {
+          stepStatus = 'Approved'
+          actedAt = new Date().toISOString()
+          note = `Auto-Bypass: Pemohon adalah ${m.label}`
+        } else if (!firstPendingAssigned) {
+          stepStatus = 'Pending'
+          firstPendingAssigned = true
+        }
+
         steps.push({
           level: steps.length + 1,
-          tier: 'approval_2',
-          type: 'manager',
-          label: `Approval 2 (${approver2?.jobPosition || approver2?.name || 'Manager / Head'})`,
-          status: isSelfApprover1 ? 'Pending' : 'Waiting',
-          approverId: app2Id,
-          approverName: approver2?.name || 'Approval 2',
-          actedAt: null,
-          note: '',
+          tier: `approval_${m.level}`,
+          type: m.level === 1 ? 'coordinator' : m.level === 2 ? 'manager' : 'director',
+          label: m.label,
+          status: stepStatus,
+          approverId: m.employeeId,
+          approverName: m.name,
+          actedAt,
+          note,
         })
       }
 
@@ -257,7 +284,7 @@ export async function POST(req) {
         tier: 'hr_approval',
         type: 'hr',
         label: 'HR Approval (Persetujuan Akhir HR)',
-        status: 'Waiting',
+        status: resolvedMatrix.length === 0 || resolvedMatrix.every(m => m.employeeId === employee?.id) ? 'Pending' : 'Waiting',
         approverId: null,
         approverName: 'HR Department',
         actedAt: null,
@@ -265,9 +292,23 @@ export async function POST(req) {
       })
     }
 
+    // Filter daftar approver aktif yang BUKAN pemohon itu sendiri (untuk alur BPMN)
+    const activeApprovers = resolvedMatrix.filter(m => m.employeeId !== employee?.id)
+
     // Validasi field dinamis dari Form Builder
     const fields = Array.isArray(leaveType.formFields) ? leaveType.formFields : []
-    const filledCustomData = { ...(customData || {}) }
+    const filledCustomData = {
+      ...(customData || {}),
+      flowableMatrix: activeApprovers.map((m, idx) => ({
+        stepIndex: idx,
+        level: m.level,
+        employeeId: m.employeeId,
+        username: m.username,
+        name: m.name,
+        label: m.label,
+      })),
+      currentMatrixIndex: 0,
+    }
     for (const f of fields) {
       if (f.required) {
         let val = filledCustomData[f.id]
@@ -323,57 +364,9 @@ export async function POST(req) {
     // Otomatis picu Flowable BPMN Engine untuk persetujuan workflow
     if (!leaveType.autoApprove) {
       try {
-        // Resolusi akun approver 1 di tabel User
-        let approver1User = null
-        if (app1Id) {
-          approver1User = await prisma.user.findFirst({
-            where: {
-              OR: [
-                { id: app1Id },
-                { employeeId: app1Id },
-                ...(approver1?.nik ? [{ username: approver1.nik }] : []),
-              ],
-            },
-            select: { id: true, username: true, name: true },
-          })
-        }
-
-        let approver1Username = approver1User?.username
-        if (!approver1Username && approver1) {
-          if (approver1.odoo_id) approver1Username = `ODOO-${approver1.odoo_id}`
-          else if (approver1.nik) approver1Username = approver1.nik
-          else approver1Username = approver1.name
-        }
-        if (!approver1Username) {
-          approver1Username = 'admin'
-        }
-
-        // Resolusi akun approver 2 di tabel User
-        let approver2User = null
-        if (app2Id) {
-          approver2User = await prisma.user.findFirst({
-            where: {
-              OR: [
-                { id: app2Id },
-                { employeeId: app2Id },
-                ...(approver2?.nik ? [{ username: approver2.nik }] : []),
-              ],
-            },
-            select: { id: true, username: true, name: true },
-          })
-        }
-
-        let approver2Username = approver2User?.username
-        if (!approver2Username && approver2) {
-          if (approver2.odoo_id) approver2Username = `ODOO-${approver2.odoo_id}`
-          else if (approver2.nik) approver2Username = approver2.nik
-          else approver2Username = approver2.name
-        }
-        if (!approver2Username) {
-          approver2Username = 'rina.marlina'
-        }
-
-        const hasApproval2 = Boolean(app2Id && app2Id !== app1Id)
+        const noOperationalApprovers = activeApprovers.length === 0
+        const firstApprover = activeApprovers[0] || null
+        const hasMoreApprovers = activeApprovers.length > 1
 
         const flowVariables = [
           { name: 'leaveId', value: String(created.id), type: 'string' },
@@ -391,18 +384,23 @@ export async function POST(req) {
           { name: 'endDate', value: endDate, type: 'string' },
           { name: 'days', value: String(days), type: 'string' },
           { name: 'reason', value: finalNote.trim() || 'Pengajuan Cuti', type: 'string' },
-          { name: 'approver1Id', value: String(app1Id || ''), type: 'string' },
-          { name: 'approver1Username', value: String(approver1Username), type: 'string' },
-          { name: 'approver1Name', value: approver1?.name || 'Approval 1', type: 'string' },
-          { name: 'approver2Id', value: String(app2Id || ''), type: 'string' },
-          { name: 'approver2Username', value: String(approver2Username), type: 'string' },
-          { name: 'approver2Name', value: approver2?.name || 'Approval 2', type: 'string' },
-          { name: 'hasApproval2', value: hasApproval2, type: 'boolean' },
-          { name: 'skipApprover1', value: isSelfApprover1, type: 'boolean' },
-          // Backward compatibility
-          { name: 'supervisorId', value: String(app1Id || ''), type: 'string' },
-          { name: 'supervisorUsername', value: String(approver1Username), type: 'string' },
           { name: 'attachment', value: String(attachment || ''), type: 'string' },
+
+          // Dynamic N-Tier Loop variables
+          { name: 'noOperationalApprovers', value: noOperationalApprovers, type: 'boolean' },
+          { name: 'hasMoreApprovers', value: hasMoreApprovers, type: 'boolean' },
+          { name: 'currentApproverUsername', value: firstApprover ? firstApprover.username : 'admin', type: 'string' },
+          { name: 'currentStepLabel', value: firstApprover ? firstApprover.label : 'HR Approval', type: 'string' },
+          { name: 'stepIndex', value: '0', type: 'string' },
+          { name: 'approved', value: true, type: 'boolean' },
+
+          // Backward compatibility variables
+          { name: 'approver1Id', value: String(resolvedMatrix[0]?.employeeId || ''), type: 'string' },
+          { name: 'approver1Username', value: String(resolvedMatrix[0]?.username || 'admin'), type: 'string' },
+          { name: 'approver1Name', value: String(resolvedMatrix[0]?.name || 'Approval 1'), type: 'string' },
+          { name: 'hasApproval2', value: resolvedMatrix.length > 1, type: 'boolean' },
+          { name: 'skipApprover1', value: noOperationalApprovers, type: 'boolean' },
+          { name: 'supervisorUsername', value: String(resolvedMatrix[0]?.username || 'admin'), type: 'string' },
         ]
 
         // Pastikan definisi LeaveRequest sudah ter-deploy di Flowable Engine
@@ -411,7 +409,7 @@ export async function POST(req) {
         const procRes = await startProcess('LeaveRequest', flowVariables)
         if (procRes.success && procRes.data?.id) {
           const updatedCustom = {
-            ...(customData || {}),
+            ...filledCustomData,
             flowableProcessInstanceId: procRes.data.id,
           }
           await prisma.leave.update({
