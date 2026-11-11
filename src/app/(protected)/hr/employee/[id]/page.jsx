@@ -1,6 +1,6 @@
 'use client'
 import Icon from '@/components/ui/Icon'
-import { useState, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useEmployeeStore, ACTION_COLOR, HISTORY_ACTIONS, HISTORY_REASONS } from '@/store/employeeStore'
 import { useStructureStore } from '@/store/structureStore'
