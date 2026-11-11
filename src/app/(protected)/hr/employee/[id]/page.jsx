@@ -135,8 +135,24 @@ export default function EmployeeProfilePage() {
   const [tab, setTab] = useState(() => TABS.includes(searchParams.get('tab')) ? searchParams.get('tab') : 'Employment')
   const [recordModal, setRecordModal] = useState(null) // { mode: 'add'|'edit', form: {...} }
   const [bioModal, setBioModal] = useState(null) // { intent: 'correct'|'update', form: {...} }
+  const [showApprovalModal, setShowApprovalModal] = useState(false)
+  const [approvalForm, setApprovalForm] = useState({
+    managerId: '',
+    approver1Id: '',
+    approver2Id: '',
+  })
 
   const emp = employees.find(e => String(e.id) === String(id))
+
+  useEffect(() => {
+    if (emp) {
+      setApprovalForm({
+        managerId: emp.managerId || '',
+        approver1Id: emp.approver1Id || '',
+        approver2Id: emp.approver2Id || '',
+      })
+    }
+  }, [emp])
 
   if (!emp) {
     return (
@@ -156,22 +172,6 @@ export default function EmployeeProfilePage() {
   const managerHeadcount = manager ? employees.filter(e => e.managerId === manager.id && e.status === 'Active').length : 0
   const approver1    = employees.find(e => e.id === emp.approver1Id)
   const approver2    = employees.find(e => e.id === emp.approver2Id)
-  const [showApprovalModal, setShowApprovalModal] = useState(false)
-  const [approvalForm, setApprovalForm] = useState({
-    managerId: emp.managerId || '',
-    approver1Id: emp.approver1Id || '',
-    approver2Id: emp.approver2Id || '',
-  })
-
-  useEffect(() => {
-    if (emp) {
-      setApprovalForm({
-        managerId: emp.managerId || '',
-        approver1Id: emp.approver1Id || '',
-        approver2Id: emp.approver2Id || '',
-      })
-    }
-  }, [emp])
 
   const directSubordinates = employees
     .filter(e => e.managerId === emp.id && e.status === 'Active')
