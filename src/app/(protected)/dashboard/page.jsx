@@ -1,6 +1,6 @@
 'use client'
 import Icon from '@/components/ui/Icon'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/store/authStore'
 import { useLeaveStore } from '@/store/leaveStore'
@@ -22,6 +22,20 @@ import { useAttendanceStore, todayStr } from '@/store/attendanceStore'
 import { shiftFor, gradeTime, toMinutes, TONE_CLASS } from '@/lib/workSchedule'
 import { useT } from '@/store/languageStore'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell, LabelList, ResponsiveContainer, PieChart, Pie, Legend } from 'recharts'
+import {
+  calculateHaversineDistance,
+  validateGpsIntegrity,
+  validateGpsTelemetry,
+  detectEmulatorEnvironment,
+} from '@/lib/geoSecurity'
+import {
+  MapPin,
+  AlertTriangle,
+  ShieldAlert,
+  Loader2,
+  X,
+  Compass,
+} from 'lucide-react'
 
 /* ── Greeting ──────────────────────────────────────────────────────────────── */
 function getGreeting(t) {
@@ -34,7 +48,22 @@ function getGreeting(t) {
 /* ── My Time Card widget ───────────────────────────────────────────────────── */
 // Backed by the same attendance record as the Clock In/Out page, so the two
 // can never disagree, and times survive a reload.
-function TimeCardWidget({ t, userId, userName, sched, record, onClockIn, onClockOut, router }) {
+function TimeCardWidget({
+  t,
+  userId,
+  userName,
+  sched,
+  record,
+  onClockIn,
+  onClockOut,
+  router,
+  gpsStatus,
+  nearestTarget,
+  distanceMeters,
+  isWithinRadius,
+  isMockGps,
+  onRetryGps,
+}) {
   const [now, setNow] = useState(null)
   useEffect(() => {
     setNow(new Date())
@@ -56,10 +85,17 @@ function TimeCardWidget({ t, userId, userName, sched, record, onClockIn, onClock
 
   const nowStr = now ? now.toLocaleTimeString('id-ID', { hour12: false }) : '--:--:--'
 
+  // Format label jarak geofencing
+  const distanceLabel = distanceMeters != null
+    ? distanceMeters > 1000
+      ? `${(distanceMeters / 1000).toFixed(1)} km`
+      : `${Math.round(distanceMeters)}m`
+    : null
+
   return (
     <div className='rounded-2xl shadow-sm overflow-hidden' style={{ background: 'linear-gradient(135deg,#052B52 0%,#039299 100%)' }}>
       {/* Live clock header — the ticking time is the focal point, not a static label */}
-      <div className='px-5 pt-4 pb-3 flex items-start justify-between'>
+      <div className='px-5 pt-4 pb-2.5 flex items-start justify-between'>
         <div>
           <p className='text-[11px] font-semibold uppercase tracking-wider text-teal-100/80'>
             {t('Jam Sekarang', 'Right Now')}
@@ -71,10 +107,60 @@ function TimeCardWidget({ t, userId, userName, sched, record, onClockIn, onClock
             </p>
           )}
         </div>
-        <button onClick={() => router.push('/ess/calendar')}
-          className='text-[11px] font-semibold text-white/70 hover:text-white transition whitespace-nowrap'>
-          {t('Detail', 'Details')} →
+        <button onClick={() => router.push('/ess/clock')}
+          className='text-[11px] font-semibold text-white/80 hover:text-white transition whitespace-nowrap bg-white/10 hover:bg-white/20 px-2.5 py-1 rounded-lg'>
+          {t('Presensi GPS', 'GPS Clock')} →
         </button>
+      </div>
+
+      {/* Geofencing Status Pill Indicator */}
+      <div className='px-4 pb-2'>
+        {gpsStatus === 'locating' ? (
+          <div className='flex items-center gap-1.5 text-[11px] text-teal-100 bg-white/10 px-2.5 py-1 rounded-xl backdrop-blur-xs'>
+            <Loader2 className='w-3 h-3 animate-spin text-teal-200' />
+            <span>Mencari koordinat GPS...</span>
+          </div>
+        ) : gpsStatus === 'denied' || gpsStatus === 'unavailable' ? (
+          <div className='flex items-center justify-between text-[11px] text-rose-100 bg-rose-500/30 border border-rose-300/40 px-2.5 py-1 rounded-xl backdrop-blur-xs'>
+            <span className='flex items-center gap-1 truncate'>
+              <AlertTriangle className='w-3 h-3 text-rose-300 flex-shrink-0' />
+              <span className='truncate'>GPS nonaktif / izin ditolak</span>
+            </span>
+            <button
+              onClick={onRetryGps}
+              className='text-[10px] underline font-bold hover:text-white ml-2 flex-shrink-0 cursor-pointer'
+            >
+              Coba Lagi
+            </button>
+          </div>
+        ) : isMockGps ? (
+          <div className='flex items-center gap-1.5 text-[11px] text-rose-100 bg-rose-500/35 border border-rose-300/40 px-2.5 py-1 rounded-xl'>
+            <ShieldAlert className='w-3 h-3 text-rose-300 flex-shrink-0' />
+            <span className='truncate'>Anomali GPS (Mode B Aktif)</span>
+          </div>
+        ) : isWithinRadius ? (
+          <div className='flex items-center justify-between text-[11px] text-emerald-100 bg-emerald-500/25 border border-emerald-400/30 px-2.5 py-1 rounded-xl'>
+            <span className='flex items-center gap-1.5 truncate'>
+              <MapPin className='w-3 h-3 text-emerald-300 flex-shrink-0' />
+              <span className='truncate font-medium'>
+                {nearestTarget?.distributorName || nearestTarget?.name || 'Area Kantor'}
+              </span>
+            </span>
+            <span className='text-[10px] font-bold text-emerald-300 font-mono ml-2 flex-shrink-0'>
+              {distanceLabel} (Radius OK)
+            </span>
+          </div>
+        ) : (
+          <div className='flex items-center justify-between text-[11px] text-amber-100 bg-amber-500/25 border border-amber-400/30 px-2.5 py-1 rounded-xl'>
+            <span className='flex items-center gap-1.5 truncate'>
+              <AlertTriangle className='w-3 h-3 text-amber-300 flex-shrink-0' />
+              <span className='truncate'>Luar Radius ({distanceLabel})</span>
+            </span>
+            <span className='text-[9px] font-bold uppercase tracking-wider bg-amber-400/20 px-1.5 py-0.5 rounded text-amber-200 ml-1.5 flex-shrink-0'>
+              Mode B
+            </span>
+          </div>
+        )}
       </div>
 
       {/* In/Out chips on a light panel, not a divided two-column table */}
@@ -86,7 +172,7 @@ function TimeCardWidget({ t, userId, userName, sched, record, onClockIn, onClock
           </p>
           {!inTime && (
             <button onClick={onClockIn} disabled={!userId}
-              className='mt-1.5 text-[11px] text-white font-semibold px-3 py-1 rounded-full transition disabled:opacity-50 bg-emerald-600 hover:bg-emerald-700'>
+              className='mt-1.5 text-[11px] text-white font-semibold px-3 py-1 rounded-full transition disabled:opacity-50 bg-emerald-600 hover:bg-emerald-700 cursor-pointer shadow-xs'>
               {t('Clock In', 'Clock In')}
             </button>
           )}
@@ -98,7 +184,7 @@ function TimeCardWidget({ t, userId, userName, sched, record, onClockIn, onClock
           </p>
           {inTime && !outTime && (
             <button onClick={onClockOut}
-              className='mt-1.5 text-[11px] text-white font-semibold px-3 py-1 rounded-full transition bg-rose-600 hover:bg-rose-700'>
+              className='mt-1.5 text-[11px] text-white font-semibold px-3 py-1 rounded-full transition bg-rose-600 hover:bg-rose-700 cursor-pointer shadow-xs'>
               {t('Clock Out', 'Clock Out')}
             </button>
           )}
@@ -522,6 +608,144 @@ export default function DashboardPage() {
   const [taskTab, setTaskTab] = useState('mytask')
   const [flowableTasks, setFlowableTasks] = useState([])
 
+  // ─── GEOFENCING & GPS STATE UNTUK TIMECARD DASHBOARD ──────────────
+  const [userTargets, setUserTargets] = useState([])
+  const [loadingTargets, setLoadingTargets] = useState(true)
+  const [gpsStatus, setGpsStatus] = useState('locating') // 'locating' | 'ready' | 'denied' | 'unavailable'
+  const [gpsCoords, setGpsCoords] = useState(null) // { lat, lng, accuracy }
+  const [gpsError, setGpsError] = useState('')
+  const [isMockGps, setIsMockGps] = useState(false)
+  const [mockGpsReason, setMockGpsReason] = useState(null)
+
+  // Mode B Warning Modal
+  const [showWarningModal, setShowWarningModal] = useState(false)
+  const [warningAction, setWarningAction] = useState('in') // 'in' | 'out'
+  const [warningReason, setWarningReason] = useState('')
+  const [submittingWarning, setSubmittingWarning] = useState(false)
+
+  // Fetch targets (HO vs Area Sales) untuk user yang login
+  useEffect(() => {
+    const employeeOrUserId = currentUser?.employeeId || currentUser?.id
+    if (!employeeOrUserId) return
+
+    let isMounted = true
+    setLoadingTargets(true)
+
+    fetch(`/api/work-locations/targets?employeeId=${employeeOrUserId}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!isMounted) return
+        if (data?.success && Array.isArray(data.targets)) {
+          setUserTargets(data.targets)
+        }
+      })
+      .catch((err) => console.warn('Gagal memuat target lokasi dashboard:', err))
+      .finally(() => {
+        if (isMounted) setLoadingTargets(false)
+      })
+
+    return () => {
+      isMounted = false
+    }
+  }, [currentUser])
+
+  // Deteksi Geolocation Browser & Anti-Fake GPS
+  const detectLocation = () => {
+    if (typeof window === 'undefined' || !navigator.geolocation) {
+      setGpsStatus('unavailable')
+      setGpsError('Browser Anda tidak mendukung akses lokasi GPS.')
+      return
+    }
+
+    setGpsStatus('locating')
+    setGpsError('')
+    setIsMockGps(false)
+    setMockGpsReason(null)
+
+    // 1. Cek integritas prototype native
+    const integrity = validateGpsIntegrity()
+    if (integrity.isTampered) {
+      setIsMockGps(true)
+      setMockGpsReason(`Deteksi modifikasi browser (${integrity.reason})`)
+    }
+
+    // 2. Cek emulator environment
+    const emu = detectEmulatorEnvironment()
+    if (emu.isEmulator) {
+      setIsMockGps(true)
+      setMockGpsReason(`Perangkat emulator terdeteksi (${emu.renderer})`)
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude, accuracy } = pos.coords
+
+        // 3. Validasi telemetri GPS
+        const tel = validateGpsTelemetry(pos.coords)
+        if (tel.isMock) {
+          setIsMockGps(true)
+          setMockGpsReason('Akurasi 0m (Mock location)')
+        }
+
+        setGpsCoords({
+          lat: latitude,
+          lng: longitude,
+          accuracy: Math.round(accuracy),
+        })
+        setGpsStatus('ready')
+      },
+      (err) => {
+        setGpsStatus(err.code === 1 ? 'denied' : 'unavailable')
+        setGpsError(
+          err.code === 1
+            ? 'Izin akses lokasi GPS ditolak oleh browser. Mohon izinkan lokasi untuk presensi geofencing.'
+            : 'Gagal mendeteksi lokasi GPS perangkat. Pastikan GPS HP/Laptop dalam keadaan aktif.'
+        )
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 12000,
+        maximumAge: 0,
+      }
+    )
+  }
+
+  useEffect(() => {
+    detectLocation()
+  }, [])
+
+  // Hitung target lokasi terdekat dan jarak
+  const { nearestTarget, distanceMeters, isWithinRadius } = useMemo(() => {
+    if (!gpsCoords || !userTargets || userTargets.length === 0) {
+      return { nearestTarget: null, distanceMeters: null, isWithinRadius: false }
+    }
+
+    let nearest = null
+    let minDistance = Infinity
+
+    userTargets.forEach((target) => {
+      const dist = calculateHaversineDistance(
+        gpsCoords.lat,
+        gpsCoords.lng,
+        target.latitude,
+        target.longitude
+      )
+      if (dist < minDistance) {
+        minDistance = dist
+        nearest = { ...target, distance: dist }
+      }
+    })
+
+    const allowedRadius = nearest?.radiusMeters || 300
+    const inRadius = minDistance <= allowedRadius
+
+    return {
+      nearestTarget: nearest,
+      distanceMeters: minDistance,
+      isWithinRadius: inRadius,
+    }
+  }, [gpsCoords, userTargets])
+
   useEffect(() => {
     if (!currentUser) return
     let isCancelled = false
@@ -887,15 +1111,117 @@ export default function DashboardPage() {
   const mySched = uid ? shiftFor(uid, attDate, { assignments, schedules, patterns, shifts }) : null
   const myAttendance = attendance.find(r => r.userId === uid && r.date === attDate) || null
 
-  const handleClockIn = () => {
+  // Format jam menit sekarang (HH:mm)
+  const nowHHMM = () => {
     const d = new Date()
-    const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-    const late = mySched ? gradeTime(time, mySched.shift.startTime, 'in').deviation > 0 : false
-    clockIn(uid, name, time, { date: attDate, status: late ? 'Late' : 'Present' })
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
   }
+
+  // Eksekusi langsung Absen Masuk (Clock In)
+  const executeClockIn = (extraNote = '') => {
+    const time = nowHHMM()
+    const late = mySched ? gradeTime(time, mySched.shift.startTime, 'in').deviation > 0 : false
+
+    const geoPayload = {
+      date: attDate,
+      status: late ? 'Late' : 'Present',
+      checkInLat: gpsCoords?.lat || null,
+      checkInLng: gpsCoords?.lng || null,
+      checkInDistance: distanceMeters != null ? Math.round(distanceMeters) : null,
+      checkInLocation: nearestTarget ? (nearestTarget.distributorName || nearestTarget.name) : 'Lokasi Terdeteksi',
+      isWithinRadius: Boolean(isWithinRadius),
+      accuracyMeters: gpsCoords?.accuracy || null,
+      isMockGps: Boolean(isMockGps),
+      mockGpsReason: mockGpsReason || null,
+      note: extraNote || null,
+    }
+
+    clockIn(uid, name, time, geoPayload)
+  }
+
+  // Eksekusi langsung Absen Pulang (Clock Out)
+  const executeClockOut = (extraNote = '') => {
+    const time = nowHHMM()
+
+    const geoPayload = {
+      date: attDate,
+      checkOutLat: gpsCoords?.lat || null,
+      checkOutLng: gpsCoords?.lng || null,
+      checkOutDistance: distanceMeters != null ? Math.round(distanceMeters) : null,
+      checkOutLocation: nearestTarget ? (nearestTarget.distributorName || nearestTarget.name) : 'Lokasi Terdeteksi',
+      isWithinRadius: Boolean(isWithinRadius),
+      accuracyMeters: gpsCoords?.accuracy || null,
+      isMockGps: Boolean(isMockGps),
+      mockGpsReason: mockGpsReason || null,
+      note: extraNote || null,
+    }
+
+    clockOut(uid, time, geoPayload)
+  }
+
+  // Handler klik tombol Clock In dari TimeCardWidget
+  const handleClockIn = () => {
+    // Jika GPS ditolak atau belum aktif, arahkan atau beri peringatan
+    if (gpsStatus === 'denied' || gpsStatus === 'unavailable') {
+      if (confirm('Akses lokasi GPS perangkat belum aktif atau ditolak oleh browser.\n\nBuka halaman presensi detail untuk periksa izin lokasi?')) {
+        router.push('/ess/clock')
+      }
+      return
+    }
+
+    // Jika di luar radius 300m atau terindikasi Fake GPS -> Buka Modal Mode B
+    if (!isWithinRadius || isMockGps) {
+      setWarningAction('in')
+      setWarningReason('')
+      setShowWarningModal(true)
+      return
+    }
+
+    // Jika dalam radius aman
+    executeClockIn()
+  }
+
+  // Handler klik tombol Clock Out dari TimeCardWidget
   const handleClockOut = () => {
-    const d = new Date()
-    clockOut(uid, `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`, { date: attDate })
+    if (gpsStatus === 'denied' || gpsStatus === 'unavailable') {
+      if (confirm('Akses lokasi GPS perangkat belum aktif atau ditolak oleh browser.\n\nBuka halaman presensi detail untuk periksa izin lokasi?')) {
+        router.push('/ess/clock')
+      }
+      return
+    }
+
+    // Jika di luar radius 300m atau terindikasi Fake GPS -> Buka Modal Mode B
+    if (!isWithinRadius || isMockGps) {
+      setWarningAction('out')
+      setWarningReason('')
+      setShowWarningModal(true)
+      return
+    }
+
+    // Jika dalam radius aman
+    executeClockOut()
+  }
+
+  // Konfirmasi submit form alasan Modal Mode B
+  const handleConfirmWarningSubmit = (e) => {
+    e.preventDefault()
+    if (!warningReason.trim()) {
+      alert('Alasan atau keterangan dinas luar wajib diisi.')
+      return
+    }
+
+    setSubmittingWarning(true)
+    try {
+      if (warningAction === 'in') {
+        executeClockIn(warningReason.trim())
+      } else {
+        executeClockOut(warningReason.trim())
+      }
+      setShowWarningModal(false)
+      setWarningReason('')
+    } finally {
+      setSubmittingWarning(false)
+    }
   }
 
   const WIDGET_NODE = {
@@ -962,14 +1288,121 @@ export default function DashboardPage() {
         </div>
         {uid && (
           <div className='w-full sm:w-80 flex-shrink-0'>
-            <TimeCardWidget t={t} userId={uid} userName={name}
-              sched={mySched} record={myAttendance} router={router}
-              onClockIn={handleClockIn} onClockOut={handleClockOut} />
+            <TimeCardWidget
+              t={t}
+              userId={uid}
+              userName={name}
+              sched={mySched}
+              record={myAttendance}
+              router={router}
+              gpsStatus={gpsStatus}
+              nearestTarget={nearestTarget}
+              distanceMeters={distanceMeters}
+              isWithinRadius={isWithinRadius}
+              isMockGps={isMockGps}
+              onRetryGps={detectLocation}
+              onClockIn={handleClockIn}
+              onClockOut={handleClockOut}
+            />
           </div>
         )}
       </div>
 
       {mainSections.map(s => s.node)}
+
+      {/* ── Modal Peringatan & Form Alasan Mode B (Presensi Luar Radius) ── */}
+      {showWarningModal && (
+        <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs'>
+          <div className='w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-150'>
+            <div className='flex items-start justify-between border-b border-gray-100 pb-3'>
+              <div className='flex items-center gap-3'>
+                <div className='w-10 h-10 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center flex-shrink-0'>
+                  <AlertTriangle className='w-5 h-5' />
+                </div>
+                <div>
+                  <h3 className='font-bold text-gray-900 text-base'>
+                    Presensi Di Luar Radius
+                  </h3>
+                  <p className='text-xs text-gray-500'>
+                    {warningAction === 'in' ? 'Absen Masuk (Clock In)' : 'Absen Pulang (Clock Out)'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type='button'
+                onClick={() => setShowWarningModal(false)}
+                className='rounded-xl p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 cursor-pointer'
+              >
+                <X className='w-5 h-5' />
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmWarningSubmit} className='mt-4 space-y-4 text-xs'>
+              {/* Alert Box Info */}
+              <div className='rounded-2xl border border-amber-200 bg-amber-50/70 p-3.5 space-y-2 text-amber-900'>
+                <div className='flex items-center justify-between font-bold text-xs'>
+                  <span>Lokasi Target:</span>
+                  <span className='font-mono text-gray-800'>
+                    {nearestTarget?.distributorName || nearestTarget?.name || 'Kantor'}
+                  </span>
+                </div>
+                <div className='flex items-center justify-between text-xs'>
+                  <span>Jarak Terdeteksi:</span>
+                  <span className='font-bold font-mono text-amber-700'>
+                    {distanceMeters > 1000 ? `${(distanceMeters / 1000).toFixed(2)} km` : `${Math.round(distanceMeters)} meter`}
+                    <span className='text-[10px] text-gray-500 font-normal ml-1'>(Maks: {nearestTarget?.radiusMeters || 300}m)</span>
+                  </span>
+                </div>
+                {isMockGps && (
+                  <div className='text-[11px] text-rose-700 bg-rose-50 p-2 rounded-xl border border-rose-200 flex items-center gap-1.5'>
+                    <ShieldAlert className='w-4 h-4 flex-shrink-0' />
+                    <span>Perhatian: Sensor GPS terindikasi anomali ({mockGpsReason}).</span>
+                  </div>
+                )}
+                <p className='text-[11px] text-amber-700 leading-relaxed border-t border-amber-200/60 pt-2'>
+                  Presensi ini tetap akan dicatat, namun ditandai berstatus <strong>"Di Luar Radius"</strong> dan dilaporkan ke HR/Atasan.
+                </p>
+              </div>
+
+              {/* Form Input Alasan Wajib */}
+              <div>
+                <label className='font-bold text-gray-800 block mb-1'>
+                  Alasan / Keterangan Dinas Luar <span className='text-rose-500'>*</span>
+                </label>
+                <textarea
+                  rows={3}
+                  value={warningReason}
+                  onChange={(e) => setWarningReason(e.target.value)}
+                  placeholder='Contoh: Kunjungan toko customer, meeting luar kantor, atau kendala sinyal GPS gedung...'
+                  required
+                  className='w-full rounded-2xl border border-gray-300 p-3 text-xs leading-relaxed focus:outline-hidden focus:ring-2 focus:ring-amber-500 bg-white'
+                />
+                <p className='text-[10px] text-gray-400 mt-1'>
+                  Keterangan ini akan langsung tampil di laporan presensi HR & atasan.
+                </p>
+              </div>
+
+              {/* Action Buttons */}
+              <div className='flex items-center justify-end gap-2 border-t border-gray-100 pt-3'>
+                <button
+                  type='button'
+                  onClick={() => setShowWarningModal(false)}
+                  className='rounded-xl border border-gray-300 px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 cursor-pointer'
+                >
+                  Batal
+                </button>
+                <button
+                  type='submit'
+                  disabled={submittingWarning || !warningReason.trim()}
+                  className='rounded-xl bg-amber-600 px-5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-amber-700 disabled:opacity-50 cursor-pointer'
+                >
+                  {submittingWarning ? 'Menyimpan...' : 'Konfirmasi & Kirim Presensi'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
