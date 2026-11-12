@@ -225,6 +225,7 @@ const HR_GROUPS = [
   { title: 'Employee', icon: ic('person'), items: [
     { label: 'Employee Data',    href: '/hr/employee',       icon: ic('person') },
     { label: 'Apply Leave (HR)', href: '/hr/apply-leave',    icon: ic('calendar') },
+    { label: 'Leave Report',     href: '/hr/leave-report',   icon: ic('chart') },
   ]},
   { title: 'Recruitment', icon: ic('briefcase'), items: [
     { label: 'Career Site Setup', href: '/hr/recruitment/career-site-setup', icon: ic('globe') },

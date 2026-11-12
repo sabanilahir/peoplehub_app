@@ -156,8 +156,8 @@ function DetailPopup({ notif, currentUser, employees, leaves, onboardings,
   const [submitting, setSubmitting] = useState(false)
   const [done,       setDone      ] = useState(false)
 
-  const leave   = notif.type === 'leave'      ? leaves.find(l => l.id === notif.recordId)      : null
-  const ob      = notif.type === 'onboarding' ? onboardings.find(o => o.id === notif.recordId) : null
+  const leave   = notif.type === 'leave'      ? leaves.find(l => String(l.id) === String(notif.recordId))      : null
+  const ob      = notif.type === 'onboarding' ? onboardings.find(o => String(o.id) === String(notif.recordId)) : null
 
   const pendingStep = leave
     ? (leave.steps  || []).find(s => s.status === 'Pending')
@@ -433,6 +433,32 @@ export default function NotificationBell() {
   const [activeItem, setActiveItem] = useState(null)
   const ref = useRef(null)
 
+  // ── 1. Muat status notifikasi yang sudah dibaca dari localStorage ──
+  useEffect(() => {
+    if (typeof window !== 'undefined' && currentUser?.id) {
+      try {
+        const stored = localStorage.getItem(`hcm-notif-read-${currentUser.id}`)
+        if (stored) {
+          const parsed = JSON.parse(stored)
+          if (Array.isArray(parsed)) setReadIds(parsed)
+        }
+      } catch (err) {
+        console.warn('[NotificationBell] Failed to load readIds from localStorage:', err)
+      }
+    }
+  }, [currentUser?.id])
+
+  // ── 2. Simpan status notifikasi yang sudah dibaca ke localStorage secara persisten ──
+  useEffect(() => {
+    if (typeof window !== 'undefined' && currentUser?.id && readIds.length > 0) {
+      try {
+        localStorage.setItem(`hcm-notif-read-${currentUser.id}`, JSON.stringify(readIds))
+      } catch (err) {
+        console.warn('[NotificationBell] Failed to persist readIds:', err)
+      }
+    }
+  }, [readIds, currentUser?.id])
+
   const refreshDbLeaves = async () => {
     if (!currentUser) return
     try {
@@ -483,11 +509,10 @@ export default function NotificationBell() {
     }
   }, [currentUser?.id, currentUser?.role])
 
+  // ── Database leaves adalah sumber kebenaran (ground truth). Hindari mencampur mock leaves usang ──
   const leaves = useMemo(() => {
     if (dbLeaves.length > 0) {
-      const dbIds = new Set(dbLeaves.map((l) => l.id))
-      const storeOnly = (storeLeaves || []).filter((l) => !dbIds.has(l.id))
-      return [...dbLeaves, ...storeOnly]
+      return dbLeaves
     }
     return storeLeaves || []
   }, [dbLeaves, storeLeaves])
@@ -510,12 +535,13 @@ export default function NotificationBell() {
       .filter(l => l.userId === uid && (l.status === 'Approved' || l.status === 'Rejected'))
       .forEach(l => {
         const actedAt = (l.steps || []).findLast?.(s => s.actedAt)?.actedAt ?? l.submittedAt
+        const dateRange = l.start === l.end ? fmtDate(l.start) : `${fmtDate(l.start)} – ${fmtDate(l.end)}`
         notifications.push({
           id: `leave-${l.status.toLowerCase()}-${l.id}`,
           icon: l.status === 'Approved' ? '✅' : '❌',
           text: l.status === 'Approved'
-            ? t(`Pengajuan cuti "${l.type}" Anda telah disetujui.`, `Your "${l.type}" leave request has been approved.`)
-            : t(`Pengajuan cuti "${l.type}" Anda telah ditolak.`,   `Your "${l.type}" leave request has been rejected.`),
+            ? t(`Pengajuan cuti "${l.type}" (${dateRange}) Anda telah disetujui.`, `Your "${l.type}" leave request (${dateRange}) has been approved.`)
+            : t(`Pengajuan cuti "${l.type}" (${dateRange}) Anda telah ditolak.`,   `Your "${l.type}" leave request (${dateRange}) has been rejected.`),
           at: actedAt, type: 'leave', recordId: l.id,
         })
       })
@@ -528,10 +554,11 @@ export default function NotificationBell() {
         return ps && canActLeave(ps, l, currentUser, employees)
       })
       .forEach(l => {
+        const dateRange = l.start === l.end ? fmtDate(l.start) : `${fmtDate(l.start)} – ${fmtDate(l.end)}`
         notifications.push({
           id: `leave-pending-${l.id}`,
           icon: '⏳',
-          text: t(`Permintaan cuti dari ${l.name} menunggu persetujuan Anda.`, `Leave request from ${l.name} is awaiting your approval.`),
+          text: t(`Permintaan cuti "${l.type}" dari ${l.name} (${dateRange}) menunggu persetujuan Anda.`, `Leave request "${l.type}" from ${l.name} (${dateRange}) is awaiting your approval.`),
           at: l.submittedAt, type: 'leave', recordId: l.id,
         })
       })

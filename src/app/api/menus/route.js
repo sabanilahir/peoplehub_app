@@ -141,6 +141,44 @@ export async function GET() {
       })
     }
 
+    // Auto-seed / Auto-heal jika menu Leave Report belum ada di tabel MenuItem
+    const hasLeaveReport = menus.some(m => m.key === 'hr-leave-report')
+    if (!hasLeaveReport && menus.length > 0) {
+      const parentHR = menus.find(m => m.key === 'hr')
+      const parentId = parentHR?.id ?? 30
+      try {
+        await prisma.menuItem.upsert({
+          where: { key: 'hr-leave-report' },
+          create: {
+            id: 313,
+            key: 'hr-leave-report',
+            label: 'Leave Report',
+            icon: 'chart',
+            href: '/hr/leave-report',
+            parentId: parentId,
+            roles: JSON.stringify(['superadmin', 'admin', 'hr', 'hr_manager', 'hr_officer']),
+            departments: JSON.stringify(['*']),
+            order: 4,
+            active: true,
+          },
+          update: {
+            label: 'Leave Report',
+            icon: 'chart',
+            href: '/hr/leave-report',
+            parentId: parentId,
+            roles: JSON.stringify(['superadmin', 'admin', 'hr', 'hr_manager', 'hr_officer']),
+            departments: JSON.stringify(['*']),
+            order: 4,
+            active: true,
+          }
+        })
+      } catch {}
+
+      menus = await prisma.menuItem.findMany({
+        orderBy: { order: 'asc' },
+      })
+    }
+
     return Response.json(menus)
   } catch {
     return dbDown()

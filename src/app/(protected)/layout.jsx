@@ -193,6 +193,7 @@ export default function ProtectedLayout({ children }) {
         hasPermission(role, 'hr_employee') ||
         hasPermission(role, 'hr_attendance') ||
         hasPermission(role, 'hr_leave') ||
+        hasPermission(role, 'hr_leave_report') ||
         hasPermission(role, 'hr_payroll') ||
         hasPermission(role, 'hr_recruitment') ||
         hasPermission(role, 'hr_onboarding') ||
