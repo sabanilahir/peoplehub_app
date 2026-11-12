@@ -234,6 +234,7 @@ export const DEFAULT_MENUS = [
   { id: 107, key: "ess-leave-balance", permissionKey: "ess_leave_balance", label: "Leave Balance", icon: "calendar", href: "/ess/leave-balance", parentId: 10, roles: '["*"]', order: 7, active: true },
   { id: 108, key: "ess-payslip", permissionKey: "ess_payslip", label: "Payslip", icon: "dollar", href: "/ess/payslip", parentId: 10, roles: '["*"]', departments: '["*"]', order: 8, active: true },
   { id: 109, key: "ess-livestream", permissionKey: "ess_livestream", label: "Live Streaming Host", icon: "video", href: "/ess/livestream", parentId: 10, roles: '["*"]', departments: '["Live Streaming","Livestream"]', order: 9, active: true },
+  { id: 110, key: "ess-overtime", permissionKey: "ess_overtime", label: "Apply Overtime", icon: "clock", href: "/ess/overtime", parentId: 10, roles: '["*"]', departments: '["*"]', order: 10, active: true },
 
   { id: 20, key: "lms", label: "Learning", icon: "book", roles: '["hr_officer","hr_manager","manager","superadmin"]', order: 3, active: true },
   { id: 201, key: "lms-dashboard", permissionKey: "lms_dashboard", label: "Dashboard", icon: "book", href: "/ess/learning/dashboard", parentId: 20, roles: '["hr_officer","hr_manager","manager","superadmin"]', order: 1, active: true },
@@ -266,6 +267,7 @@ export const DEFAULT_MENUS = [
   { id: 402, key: "mss-leave", permissionKey: "mss_leave", label: "Approve Leave", icon: "calendar", href: "/mss/approve-leave", parentId: 40, roles: '["manager","hr_manager","superadmin"]', order: 2, active: true },
   { id: 403, key: "mss-performance", permissionKey: "mss_performance", label: "Performance", icon: "trending", href: "/mss/performance", parentId: 40, roles: '["manager","hr_manager","superadmin"]', order: 3, active: true },
   { id: 404, key: "mss-talent", permissionKey: "mss_talent", label: "Talent Review", icon: "star", href: "/mss/talent", parentId: 40, roles: '["manager","hr_manager","superadmin"]', order: 4, active: true },
+  { id: 405, key: "mss-approve-overtime", permissionKey: "mss_approve_overtime", label: "Approve Overtime", icon: "checkCircle", href: "/mss/approve-overtime", parentId: 40, roles: '["manager","supervisor","hr_manager","superadmin"]', departments: '["*"]', order: 5, active: true },
 
   { id: 50, key: "sysadmin", label: "System", icon: "settings", roles: '["superadmin"]', order: 6, active: true },
   { id: 501, key: "sysadmin-users", permissionKey: "system_users", label: "User Management", icon: "users", href: "/sysadmin/users", parentId: 50, roles: '["superadmin"]', order: 1, active: true },

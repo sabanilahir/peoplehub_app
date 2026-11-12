@@ -28,6 +28,7 @@ export const DEFAULT_PERMISSIONS = [
   { id: 107, key: 'ess_leave_balance', label: 'Leave Balance', group: 'ess' },
   { id: 108, key: 'ess_payslip', label: 'Payslip', group: 'ess' },
   { id: 109, key: 'ess_livestream', label: 'Live Streaming Host', group: 'ess' },
+  { id: 110, key: 'ess_overtime', label: 'Apply Overtime (Pengajuan Lembur)', group: 'ess' },
 
   // ==================== 2. Learning (LMS) ====================
   { id: 201, key: 'lms_dashboard', label: 'Dashboard', group: 'lms' },
@@ -59,6 +60,7 @@ export const DEFAULT_PERMISSIONS = [
   { id: 402, key: 'mss_leave', label: 'Approve Leave', group: 'mss' },
   { id: 403, key: 'mss_performance', label: 'Performance', group: 'mss' },
   { id: 404, key: 'mss_talent', label: 'Talent Review', group: 'mss' },
+  { id: 405, key: 'mss_approve_overtime', label: 'Approve Overtime (Persetujuan Lembur)', group: 'mss' },
 
   // ==================== 5. System ====================
   { id: 501, key: 'system_users', label: 'User Management', group: 'sysadmin' },
@@ -95,6 +97,9 @@ const PERM_ALIASES = {
   ess_leave_view: 'ess_leave_balance',
   ess_leave: 'ess_leave_apply',
   ess_payslip_view: 'ess_payslip',
+  ess_overtime_apply: 'ess_overtime',
+  mss_overtime_approve: 'mss_approve_overtime',
+  mss_overtime: 'mss_approve_overtime',
   hr_employee_view: 'hr_employee',
   hr_employee_add: 'hr_employee',
   hr_employee_edit: 'hr_employee',
