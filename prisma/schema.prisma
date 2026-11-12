@@ -183,6 +183,7 @@ model Employee {
   assignments ScheduleAssignment[]
   attendance  Attendance[]
   overtimes   OvertimeRecord[]
+  workLocationTargets WorkLocationTarget[]
 
   @@index([nik])
   @@index([managerId])
@@ -316,6 +317,23 @@ model Attendance {
   lateMinutes   Int      @default(0)
   penaltyAmount Int      @default(0)
   note          String?
+
+  // Field Geofencing & Lokasi
+  checkInLat       Float?
+  checkInLng       Float?
+  checkInDistance  Int?     // Jarak dalam meter saat clock in
+  checkInLocation  String?  // Nama target lokasi saat clock in
+  checkOutLat      Float?
+  checkOutLng      Float?
+  checkOutDistance Int?     // Jarak dalam meter saat clock out
+  checkOutLocation String?  // Nama target lokasi saat clock out
+  isWithinRadius   Boolean  @default(true) // false jika di luar radius
+
+  // Field Audit Telemetri Anti-Fake GPS
+  accuracyMeters   Float?   // Akurasi sensor GPS saat presensi
+  isMockGps        Boolean  @default(false) // Flag terdeteksi fake GPS
+  mockGpsReason    String?  // Alasan deteksi jika ada anomali
+
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -604,6 +622,33 @@ model OdooWorkLocation {
   last_sync_at       DateTime?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
+}
+
+// --- WORK LOCATION TARGETS & DISTRIBUTORS (GEOFENCING) ---
+model WorkLocationTarget {
+  id              Int       @id @default(autoincrement())
+  code            String?   // 'HO', 'DIST-01', dst.
+  name            String    // Nama Lokasi: 'Head Office (HO)' atau Nama Distributor
+  type            String    @default("sales_distributor") // 'head_office' | 'sales_distributor' | 'warehouse' | 'branch'
+  employeeId      Int?      // Link ke Employee.id untuk penugasan spesifik
+  employeeName    String?   // Cache nama karyawan untuk kemudahan pencarian
+  distributorName String?   // Nama Distributor (PT Rezeki Kita, dsb.)
+  address         String    // Alamat lengkap kantor distributor
+  city            String?   // Kota
+  province        String?   // Provinsi
+  latitude        Float     // Koordinat Latitude
+  longitude       Float     // Koordinat Longitude
+  radiusMeters    Int       @default(300) // Radius batas absen (default: 300m)
+  active          Boolean   @default(true)
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  employee        Employee? @relation(fields: [employeeId], references: [id])
+
+  @@index([employeeId])
+  @@index([type])
+  @@index([active])
 }
 
 

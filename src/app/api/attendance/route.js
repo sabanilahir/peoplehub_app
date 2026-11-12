@@ -127,10 +127,22 @@ export async function POST(req) {
       status = calc.status
       lateMinutes = calc.lateMinutes
       penaltyAmount = calc.penaltyAmount
-      if (calc.penaltyLabel) {
+      if (body.note) {
+        note = calc.penaltyLabel ? `${calc.penaltyLabel} | ${body.note}` : body.note
+      } else if (calc.penaltyLabel) {
         note = calc.penaltyLabel
       }
     }
+
+    // Ekstrak parameter geofencing dan anti-fake GPS
+    const checkInLat = body.checkInLat != null ? parseFloat(body.checkInLat) : (body.lat != null ? parseFloat(body.lat) : null)
+    const checkInLng = body.checkInLng != null ? parseFloat(body.checkInLng) : (body.lng != null ? parseFloat(body.lng) : null)
+    const checkInDistance = body.checkInDistance != null ? Number(body.checkInDistance) : (body.distance != null ? Number(body.distance) : null)
+    const checkInLocation = body.checkInLocation || body.targetLocationName || null
+    const isWithinRadius = body.isWithinRadius !== undefined ? Boolean(body.isWithinRadius) : true
+    const accuracyMeters = body.accuracyMeters != null ? parseFloat(body.accuracyMeters) : (body.accuracy != null ? parseFloat(body.accuracy) : null)
+    const isMockGps = Boolean(body.isMockGps)
+    const mockGpsReason = body.mockGpsReason || null
 
     // upsert: kalau sudah ada record hari ini, update — jangan buat duplikat
     const record = await prisma.attendance.upsert({
@@ -149,6 +161,14 @@ export async function POST(req) {
         lateMinutes,
         penaltyAmount,
         note: note,
+        checkInLat,
+        checkInLng,
+        checkInDistance,
+        checkInLocation,
+        isWithinRadius,
+        accuracyMeters,
+        isMockGps,
+        mockGpsReason,
       },
       update: {
         checkIn: body.checkIn ?? undefined,
@@ -157,6 +177,14 @@ export async function POST(req) {
         lateMinutes: body.checkIn ? lateMinutes : undefined,
         penaltyAmount: body.checkIn ? penaltyAmount : undefined,
         note: note ?? undefined,
+        checkInLat: checkInLat ?? undefined,
+        checkInLng: checkInLng ?? undefined,
+        checkInDistance: checkInDistance ?? undefined,
+        checkInLocation: checkInLocation ?? undefined,
+        isWithinRadius: body.isWithinRadius !== undefined ? isWithinRadius : undefined,
+        accuracyMeters: accuracyMeters ?? undefined,
+        isMockGps: body.isMockGps !== undefined ? isMockGps : undefined,
+        mockGpsReason: mockGpsReason ?? undefined,
       },
     })
     return Response.json(record, { status: 201 })

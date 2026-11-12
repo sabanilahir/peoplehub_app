@@ -22,14 +22,51 @@ import {
   Warehouse,
   Briefcase,
   Video,
+  Search,
+  Navigation,
+  ExternalLink,
+  ShieldCheck,
+  Check,
+  Loader2,
+  RotateCcw,
 } from 'lucide-react'
 
 export default function WorkLocationSettingsPage() {
+  const [activeTab, setActiveTab] = useState('rules') // 'rules' | 'geofencing'
+
   const [configs, setConfigs] = useState([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
-  // Modal Create / Edit
+  // Geofencing Target Locations State
+  const [targets, setTargets] = useState([])
+  const [loadingTargets, setLoadingTargets] = useState(false)
+  const [targetSearch, setTargetSearch] = useState('')
+  const [employees, setEmployees] = useState([])
+
+  // Modal Target Create / Edit
+  const [showTargetModal, setShowTargetModal] = useState(false)
+  const [savingTarget, setSavingTarget] = useState(false)
+  const [geocodingLoading, setGeocodingLoading] = useState(false)
+  const [targetForm, setTargetForm] = useState({
+    id: null,
+    code: '',
+    name: '',
+    type: 'sales_distributor',
+    employeeId: '',
+    employeeName: '',
+    distributorName: '',
+    address: '',
+    city: '',
+    province: '',
+    latitude: '',
+    longitude: '',
+    radiusMeters: 300,
+    active: true,
+    notes: '',
+  })
+
+  // Modal Rules Create / Edit
   const [showModal, setShowModal] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [locationCode, setLocationCode] = useState('')
@@ -67,9 +104,165 @@ export default function WorkLocationSettingsPage() {
     }
   }
 
+  // Fetch all targets (HO & Area Sales Distributors)
+  const fetchTargets = async () => {
+    try {
+      setLoadingTargets(true)
+      const res = await fetch('/api/work-locations/targets?active=false')
+      const data = await res.json()
+      if (data.success) {
+        setTargets(data.targets || [])
+      }
+    } catch (err) {
+      console.error('Error fetching targets:', err)
+    } finally {
+      setLoadingTargets(false)
+    }
+  }
+
+  // Fetch all employees for dropdown
+  const fetchEmployees = async () => {
+    try {
+      const res = await fetch('/api/employees?limit=500')
+      const data = await res.json()
+      if (Array.isArray(data)) {
+        setEmployees(data)
+      }
+    } catch (err) {}
+  }
+
   useEffect(() => {
     fetchConfigs()
+    fetchTargets()
+    fetchEmployees()
   }, [])
+
+  // Geocoding handler
+  const handleGeocode = async (addressQuery) => {
+    if (!addressQuery) {
+      alert('Silakan masukkan alamat atau kota distributor terlebih dahulu')
+      return
+    }
+    try {
+      setGeocodingLoading(true)
+      const res = await fetch('/api/work-locations/geocode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: addressQuery }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setTargetForm((prev) => ({
+          ...prev,
+          latitude: data.latitude,
+          longitude: data.longitude,
+        }))
+        alert(`Koordinat ditemukan!\nLat: ${data.latitude}\nLng: ${data.longitude}\nLokasi: ${data.displayName}`)
+      } else {
+        alert(data.error || 'Lokasi tidak ditemukan. Coba tambahkan nama kota/kecamatan.')
+      }
+    } catch (err) {
+      alert('Gagal menghubungi layanan geocoding peta')
+    } finally {
+      setGeocodingLoading(false)
+    }
+  }
+
+  // Open Create Target Modal
+  const handleOpenTargetCreate = (type = 'sales_distributor') => {
+    setTargetForm({
+      id: null,
+      code: `DIST-${String(targets.length + 1).padStart(2, '0')}`,
+      name: '',
+      type,
+      employeeId: '',
+      employeeName: '',
+      distributorName: '',
+      address: '',
+      city: '',
+      province: '',
+      latitude: '',
+      longitude: '',
+      radiusMeters: 300,
+      active: true,
+      notes: '',
+    })
+    setShowTargetModal(true)
+  }
+
+  // Open Edit Target Modal
+  const handleOpenTargetEdit = (target) => {
+    setTargetForm({
+      id: target.id,
+      code: target.code || '',
+      name: target.name || '',
+      type: target.type || 'sales_distributor',
+      employeeId: target.employeeId ? String(target.employeeId) : '',
+      employeeName: target.employeeName || '',
+      distributorName: target.distributorName || '',
+      address: target.address || '',
+      city: target.city || '',
+      province: target.province || '',
+      latitude: target.latitude !== undefined ? target.latitude : '',
+      longitude: target.longitude !== undefined ? target.longitude : '',
+      radiusMeters: target.radiusMeters || 300,
+      active: target.active,
+      notes: target.notes || '',
+    })
+    setShowTargetModal(true)
+  }
+
+  // Save Target Location
+  const handleSaveTarget = async (e) => {
+    e.preventDefault()
+    if (!targetForm.name || targetForm.latitude === '' || targetForm.longitude === '') {
+      alert('Nama lokasi, latitude, dan longitude wajib diisi')
+      return
+    }
+
+    try {
+      setSavingTarget(true)
+      const url = targetForm.id
+        ? `/api/work-locations/targets/${targetForm.id}`
+        : '/api/work-locations/targets'
+      const method = targetForm.id ? 'PUT' : 'POST'
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(targetForm),
+      })
+      const data = await res.json()
+
+      if (data.success) {
+        setShowTargetModal(false)
+        fetchTargets()
+      } else {
+        alert(data.error || 'Gagal menyimpan target lokasi')
+      }
+    } catch (err) {
+      console.error(err)
+      alert('Terjadi kesalahan jaringan')
+    } finally {
+      setSavingTarget(false)
+    }
+  }
+
+  // Delete Target Location
+  const handleDeleteTarget = async (id, name) => {
+    if (!confirm(`Hapus titik lokasi distributor "${name}"?`)) return
+    try {
+      const res = await fetch(`/api/work-locations/targets/${id}`, { method: 'DELETE' })
+      const data = await res.json()
+      if (data.success) {
+        fetchTargets()
+      } else {
+        alert(data.error || 'Gagal menghapus lokasi')
+      }
+    } catch (err) {
+      console.error(err)
+    }
+  }
 
   // Open Create Modal
   const handleOpenCreate = () => {
@@ -238,21 +431,66 @@ export default function WorkLocationSettingsPage() {
       {/* Page Header */}
       <PageHeader
         icon='🏢'
-        title='Konfigurasi Jam Kerja, Denda & Reward Kehadiran (Parameterize)'
-        subtitle='Aturan kerja 100% parameter-driven untuk HO, Area Sales (Others), Gudang, dan Livestream (Manhattan).'
+        title='Konfigurasi Lokasi Kerja & Geofencing Presensi'
+        subtitle='Manajemen aturan jam kerja, denda keterlambatan, koordinat Head Office, serta titik distributor Area Sales (Radius 300m).'
         actions={
-          <button
-            onClick={handleOpenCreate}
-            className='inline-flex items-center gap-2 rounded-xl bg-teal-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-teal-700 transition'
-          >
-            <Plus className='w-4 h-4' />
-            Tambah Lokasi / Bagian
-          </button>
+          activeTab === 'rules' ? (
+            <button
+              onClick={handleOpenCreate}
+              className='inline-flex items-center gap-2 rounded-xl bg-teal-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-teal-700 transition'
+            >
+              <Plus className='w-4 h-4' />
+              Tambah Aturan Lokasi
+            </button>
+          ) : (
+            <button
+              onClick={() => handleOpenTargetCreate('sales_distributor')}
+              className='inline-flex items-center gap-2 rounded-xl bg-teal-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-teal-700 transition'
+            >
+              <Plus className='w-4 h-4' />
+              Tambah Titik Distributor
+            </button>
+          )
         }
       />
 
-      {/* Top StatCards */}
-      <div className='grid grid-cols-1 gap-4 sm:grid-cols-4'>
+      {/* Tab Navigation */}
+      <div className='flex items-center gap-3 border-b border-gray-200 pb-3'>
+        <button
+          onClick={() => setActiveTab('rules')}
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-bold rounded-xl transition ${
+            activeTab === 'rules'
+              ? 'bg-teal-600 text-white shadow-xs'
+              : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 bg-white border border-gray-200'
+          }`}
+        >
+          <Clock className='w-4 h-4' />
+          Aturan Jam Kerja, Toleransi & Denda
+        </button>
+        <button
+          onClick={() => setActiveTab('geofencing')}
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-bold rounded-xl transition ${
+            activeTab === 'geofencing'
+              ? 'bg-teal-600 text-white shadow-xs'
+              : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 bg-white border border-gray-200'
+          }`}
+        >
+          <MapPin className='w-4 h-4' />
+          Geofencing & Koordinat (HO & Area Sales)
+          <span
+            className={`text-[11px] px-2 py-0.5 rounded-full font-semibold ${
+              activeTab === 'geofencing' ? 'bg-teal-700 text-white' : 'bg-gray-100 text-gray-700'
+            }`}
+          >
+            {targets.length || 23}
+          </span>
+        </button>
+      </div>
+
+      {activeTab === 'rules' && (
+        <>
+          {/* Top StatCards */}
+          <div className='grid grid-cols-1 gap-4 sm:grid-cols-4'>
         <StatCard
           icon='📍'
           label='Total Bagian / Lokasi'
@@ -449,6 +687,278 @@ export default function WorkLocationSettingsPage() {
           })
         )}
       </div>
+      </>
+      )}
+
+      {/* ── TAB 2: GEOFENCING & TITIK LOKASI (HO & AREA SALES) ── */}
+      {activeTab === 'geofencing' && (
+        <div className='space-y-6'>
+          {/* Top Geofencing StatCards */}
+          <div className='grid grid-cols-1 gap-4 sm:grid-cols-4'>
+            <StatCard
+              icon='📍'
+              label='Total Titik Lokasi'
+              value={`${targets.length} Titik`}
+              hint='1 Head Office + 22 Distributor Sales'
+              tone='brand'
+            />
+            <StatCard
+              icon='🎯'
+              label='Radius Toleransi'
+              value='300 Meter'
+              hint='Batas maksimal geofencing absensi'
+              tone='blue'
+            />
+            <StatCard
+              icon='⚠️'
+              label='Kebijakan Luar Radius'
+              value='Mode B (Berperingatan)'
+              hint='Wajib catatan dinas luar jika > 300m'
+              tone='amber'
+            />
+            <StatCard
+              icon='👥'
+              label='Area Sales Terhubung'
+              value={`${new Set(targets.filter(t => t.employeeId).map(t => t.employeeId)).size} Karyawan`}
+              hint='Dept: Sales Offline (22 Titik)'
+              tone='green'
+            />
+          </div>
+
+          {/* Head Office (HO) Static Target Card */}
+          {(() => {
+            const ho = targets.find((t) => t.type === 'head_office') || {
+              name: 'Head Office (HO)',
+              address: 'Jl. Terusan Bandengan Ruko Harmoni Mas Blok E No. 26, Pejagalan, Penjaringan, Jakarta Utara',
+              latitude: -6.1373,
+              longitude: 106.7840,
+              radiusMeters: 300,
+              active: true,
+            }
+            return (
+              <div className='rounded-2xl border-2 border-teal-200 bg-gradient-to-r from-teal-50/80 via-white to-blue-50/50 p-5 shadow-xs'>
+                <div className='flex flex-col sm:flex-row sm:items-center justify-between gap-4'>
+                  <div className='flex items-start gap-3.5'>
+                    <div className='w-12 h-12 rounded-xl bg-teal-600 text-white flex items-center justify-center flex-shrink-0 shadow-xs'>
+                      <Building2 className='w-6 h-6' />
+                    </div>
+                    <div>
+                      <div className='flex items-center gap-2'>
+                        <h3 className='font-bold text-gray-900 text-base'>{ho.name}</h3>
+                        <span className='text-[10px] bg-teal-100 text-teal-800 font-bold px-2.5 py-0.5 rounded-full border border-teal-200'>
+                          Pusat Head Office
+                        </span>
+                        <span className='text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full'>
+                          Radius {ho.radiusMeters || 300}m
+                        </span>
+                      </div>
+                      <p className='text-xs text-gray-600 mt-1 flex items-center gap-1.5'>
+                        <MapPin className='w-3.5 h-3.5 text-gray-400 flex-shrink-0' />
+                        {ho.address || 'Alamat kantor pusat HO belum diisi'}
+                      </p>
+                      <div className='flex items-center gap-4 mt-2 text-xs font-mono text-gray-500'>
+                        <span>Latitude: <strong className='text-gray-800'>{ho.latitude}</strong></span>
+                        <span>Longitude: <strong className='text-gray-800'>{ho.longitude}</strong></span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className='flex items-center gap-2 flex-shrink-0'>
+                    <a
+                      href={`https://www.google.com/maps?q=${ho.latitude},${ho.longitude}`}
+                      target='_blank'
+                      rel='noreferrer'
+                      className='inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-300 bg-white text-xs font-semibold text-gray-700 hover:bg-gray-50 transition shadow-2xs'
+                    >
+                      <ExternalLink className='w-3.5 h-3.5 text-gray-500' />
+                      Buka di Google Maps
+                    </a>
+                    {ho.id && (
+                      <button
+                        onClick={() => handleOpenTargetEdit(ho)}
+                        className='inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-teal-600 text-white text-xs font-semibold hover:bg-teal-700 transition shadow-2xs'
+                      >
+                        <Edit2 className='w-3.5 h-3.5' />
+                        Ubah Titik HO
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )
+          })()}
+
+          {/* Area Sales Distributors Management Table */}
+          <div className='rounded-2xl border border-gray-200 bg-white shadow-xs overflow-hidden'>
+            <div className='p-4 border-b border-gray-100 flex flex-col md:flex-row md:items-center justify-between gap-3 bg-gray-50/50'>
+              <div>
+                <h3 className='font-bold text-gray-900 flex items-center gap-2'>
+                  <Briefcase className='w-4 h-4 text-blue-600' />
+                  Titik Lokasi Distributor Area Sales (20 Karyawan / 22 Titik)
+                </h3>
+                <p className='text-xs text-gray-500 mt-0.5'>
+                  Presensi sales divalidasi geofencing terhadap titik kantor distributor yang ditugaskan (Mendukung multi-distributor).
+                </p>
+              </div>
+
+              <div className='flex items-center gap-3'>
+                <div className='relative'>
+                  <Search className='w-4 h-4 text-gray-400 absolute left-3 top-2.5' />
+                  <input
+                    type='text'
+                    value={targetSearch}
+                    onChange={(e) => setTargetSearch(e.target.value)}
+                    placeholder='Cari sales / distributor / kota...'
+                    className='pl-9 pr-3.5 py-1.5 border border-gray-200 rounded-xl text-xs w-64 focus:outline-hidden focus:ring-2 focus:ring-teal-500 bg-white'
+                  />
+                </div>
+                <button
+                  onClick={() => handleOpenTargetCreate('sales_distributor')}
+                  className='inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 text-white rounded-xl text-xs font-semibold hover:bg-blue-700 transition shadow-2xs'
+                >
+                  <Plus className='w-3.5 h-3.5' />
+                  Tambah Titik
+                </button>
+              </div>
+            </div>
+
+            {/* Table */}
+            <div className='overflow-x-auto'>
+              <table className='w-full text-left border-collapse text-xs'>
+                <thead>
+                  <tr className='border-b border-gray-200 bg-gray-50 text-[11px] font-bold text-gray-500 uppercase tracking-wider'>
+                    <th className='py-3 px-4 w-12 text-center'>No</th>
+                    <th className='py-3 px-4'>Karyawan Sales</th>
+                    <th className='py-3 px-4'>Distributor & Kota</th>
+                    <th className='py-3 px-4'>Alamat Kantor Distributor</th>
+                    <th className='py-3 px-4'>Koordinat (Lat, Lng)</th>
+                    <th className='py-3 px-4 text-center'>Radius</th>
+                    <th className='py-3 px-4 text-center'>Status</th>
+                    <th className='py-3 px-4 text-right'>Aksi</th>
+                  </tr>
+                </thead>
+                <tbody className='divide-y divide-gray-100'>
+                  {loadingTargets ? (
+                    <tr>
+                      <td colSpan={8} className='py-12 text-center text-gray-400'>
+                        Memuat data titik distributor...
+                      </td>
+                    </tr>
+                  ) : (() => {
+                    const salesTargets = targets.filter((t) => t.type === 'sales_distributor')
+                    const filtered = salesTargets.filter((t) => {
+                      if (!targetSearch) return true
+                      const s = targetSearch.toLowerCase()
+                      return (
+                        (t.employeeName || '').toLowerCase().includes(s) ||
+                        (t.distributorName || '').toLowerCase().includes(s) ||
+                        (t.name || '').toLowerCase().includes(s) ||
+                        (t.city || '').toLowerCase().includes(s) ||
+                        (t.address || '').toLowerCase().includes(s)
+                      )
+                    })
+
+                    // Hitung jumlah distributor per employee
+                    const empCounts = {}
+                    salesTargets.forEach((t) => {
+                      if (t.employeeId) empCounts[t.employeeId] = (empCounts[t.employeeId] || 0) + 1
+                    })
+
+                    if (filtered.length === 0) {
+                      return (
+                        <tr>
+                          <td colSpan={8} className='py-12 text-center text-gray-400'>
+                            Tidak ada titik distributor yang cocok dengan pencarian.
+                          </td>
+                        </tr>
+                      )
+                    }
+
+                    return filtered.map((t, idx) => {
+                      const isMulti = t.employeeId && empCounts[t.employeeId] > 1
+                      return (
+                        <tr key={t.id} className='hover:bg-teal-50/20 transition'>
+                          <td className='py-3 px-4 text-center text-gray-400 font-mono'>{idx + 1}</td>
+                          <td className='py-3 px-4'>
+                            <div className='flex items-center gap-2'>
+                              <div className='w-7 h-7 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-[10px] flex-shrink-0'>
+                                {(t.employeeName || 'S').slice(0, 2).toUpperCase()}
+                              </div>
+                              <div>
+                                <p className='font-bold text-gray-900'>{t.employeeName || t.employee?.name || 'Belum Ditugaskan'}</p>
+                                <div className='flex items-center gap-1.5 mt-0.5'>
+                                  <span className='text-[10px] text-gray-400 font-mono'>ID: {t.employeeId || '-'}</span>
+                                  {isMulti && (
+                                    <span className='text-[9px] bg-purple-100 text-purple-700 font-bold px-1.5 py-0.2 rounded'>
+                                      2 Distributor
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className='py-3 px-4'>
+                            <p className='font-semibold text-gray-800'>{t.distributorName || t.name}</p>
+                            <span className='inline-block text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded-md font-medium mt-0.5'>
+                              {t.city || 'Nasional'}
+                            </span>
+                          </td>
+                          <td className='py-3 px-4 max-w-xs'>
+                            <p className='text-gray-600 line-clamp-2 leading-relaxed text-[11px]'>{t.address || '-'}</p>
+                          </td>
+                          <td className='py-3 px-4 font-mono text-[11px] text-gray-600'>
+                            <div>Lat: <span className='text-gray-800'>{t.latitude}</span></div>
+                            <div>Lng: <span className='text-gray-800'>{t.longitude}</span></div>
+                          </td>
+                          <td className='py-3 px-4 text-center'>
+                            <span className='px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 font-semibold border border-teal-200 text-[10px]'>
+                              {t.radiusMeters || 300}m
+                            </span>
+                          </td>
+                          <td className='py-3 px-4 text-center'>
+                            <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
+                              t.active ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-gray-100 text-gray-500'
+                            }`}>
+                              {t.active ? 'Aktif' : 'Nonaktif'}
+                            </span>
+                          </td>
+                          <td className='py-3 px-4 text-right'>
+                            <div className='flex items-center justify-end gap-1.5'>
+                              <a
+                                href={`https://www.google.com/maps?q=${t.latitude},${t.longitude}`}
+                                target='_blank'
+                                rel='noreferrer'
+                                className='p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition'
+                                title='Lihat Titik di Google Maps'
+                              >
+                                <ExternalLink className='w-4 h-4' />
+                              </a>
+                              <button
+                                onClick={() => handleOpenTargetEdit(t)}
+                                className='p-1.5 text-gray-400 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition'
+                                title='Edit Titik Distributor'
+                              >
+                                <Edit2 className='w-4 h-4' />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteTarget(t.id, t.distributorName || t.name)}
+                                className='p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition'
+                                title='Hapus Titik'
+                              >
+                                <Trash2 className='w-4 h-4' />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })
+                  })()}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Modal Dialog: Tambah / Edit Konfigurasi ── */}
       {showModal && (
@@ -724,6 +1234,253 @@ export default function WorkLocationSettingsPage() {
                   className='rounded-xl bg-teal-600 px-5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-teal-700 disabled:opacity-50'
                 >
                   {saving ? 'Menyimpan...' : 'Simpan Konfigurasi'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal Dialog: Tambah / Edit Titik Lokasi & Distributor Geofencing ── */}
+      {showTargetModal && (
+        <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs overflow-y-auto'>
+          <div className='w-full max-w-2xl rounded-3xl bg-white p-6 shadow-2xl max-h-[90vh] overflow-y-auto my-8'>
+            <div className='flex items-center justify-between border-b border-gray-100 pb-4'>
+              <div>
+                <h3 className='text-lg font-bold text-gray-900'>
+                  {targetForm.id ? 'Edit Titik Lokasi & Distributor' : 'Tambah Titik Lokasi & Distributor'}
+                </h3>
+                <p className='text-xs text-gray-500'>
+                  Konfigurasi koordinat GPS dan radius geofencing presensi (Head Office & Area Sales).
+                </p>
+              </div>
+              <button
+                onClick={() => setShowTargetModal(false)}
+                className='rounded-xl p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700'
+              >
+                <X className='w-5 h-5' />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveTarget} className='mt-4 space-y-4 text-xs'>
+              {/* Tipe Lokasi */}
+              <div>
+                <label className='font-semibold text-gray-700'>Tipe Target Lokasi:</label>
+                <div className='mt-1 flex items-center gap-4'>
+                  <label className='flex items-center gap-2 cursor-pointer text-xs'>
+                    <input
+                      type='radio'
+                      name='targetType'
+                      value='sales_distributor'
+                      checked={targetForm.type === 'sales_distributor'}
+                      onChange={(e) => setTargetForm({ ...targetForm, type: e.target.value })}
+                      className='text-teal-600 focus:ring-teal-500'
+                    />
+                    <span>Distributor Area Sales</span>
+                  </label>
+                  <label className='flex items-center gap-2 cursor-pointer text-xs'>
+                    <input
+                      type='radio'
+                      name='targetType'
+                      value='head_office'
+                      checked={targetForm.type === 'head_office'}
+                      onChange={(e) => setTargetForm({ ...targetForm, type: e.target.value, name: 'Head Office (HO)' })}
+                      className='text-teal-600 focus:ring-teal-500'
+                    />
+                    <span>Kantor Pusat Head Office (HO)</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Nama Lokasi / Titik */}
+              <div className='grid grid-cols-2 gap-3'>
+                <div>
+                  <label className='font-semibold text-gray-700'>Nama Titik Lokasi / Label:</label>
+                  <input
+                    type='text'
+                    value={targetForm.name}
+                    onChange={(e) => setTargetForm({ ...targetForm, name: e.target.value })}
+                    placeholder='Contoh: PT Rezeki Kita (Banjarmasin)'
+                    required
+                    className='mt-1 w-full rounded-xl border border-gray-300 p-2 text-xs'
+                  />
+                </div>
+                <div>
+                  <label className='font-semibold text-gray-700'>Nama Distributor Resmi:</label>
+                  <input
+                    type='text'
+                    value={targetForm.distributorName}
+                    onChange={(e) => setTargetForm({ ...targetForm, distributorName: e.target.value })}
+                    placeholder='Contoh: PT Rezeki Kita'
+                    className='mt-1 w-full rounded-xl border border-gray-300 p-2 text-xs'
+                  />
+                </div>
+              </div>
+
+              {/* Karyawan yang Ditugaskan (jika tipe sales) */}
+              {targetForm.type === 'sales_distributor' && (
+                <div>
+                  <label className='font-semibold text-gray-700'>Karyawan Sales yang Ditugaskan:</label>
+                  <select
+                    value={targetForm.employeeId}
+                    onChange={(e) => {
+                      const empId = e.target.value
+                      const selectedEmp = employees.find((emp) => String(emp.id) === String(empId))
+                      setTargetForm({
+                        ...targetForm,
+                        employeeId: empId,
+                        employeeName: selectedEmp ? selectedEmp.name : '',
+                      })
+                    }}
+                    className='mt-1 w-full rounded-xl border border-gray-300 p-2 text-xs bg-white'
+                  >
+                    <option value=''>-- Pilih Karyawan Sales --</option>
+                    {employees.map((emp) => (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.name} (ID: {emp.id}) — {emp.dept || 'Sales'} ({emp.location || 'Others'})
+                      </option>
+                    ))}
+                  </select>
+                  <p className='text-[10px] text-gray-400 mt-1'>
+                    Karyawan dapat memiliki lebih dari 1 titik distributor (seperti Fety Susiani & Putry Rinjani).
+                  </p>
+                </div>
+              )}
+
+              {/* Kota & Provinsi */}
+              <div className='grid grid-cols-2 gap-3'>
+                <div>
+                  <label className='font-semibold text-gray-700'>Kota / Kabupaten:</label>
+                  <input
+                    type='text'
+                    value={targetForm.city}
+                    onChange={(e) => setTargetForm({ ...targetForm, city: e.target.value })}
+                    placeholder='Contoh: Banjarmasin / Gambut'
+                    className='mt-1 w-full rounded-xl border border-gray-300 p-2 text-xs'
+                  />
+                </div>
+                <div>
+                  <label className='font-semibold text-gray-700'>Provinsi:</label>
+                  <input
+                    type='text'
+                    value={targetForm.province}
+                    onChange={(e) => setTargetForm({ ...targetForm, province: e.target.value })}
+                    placeholder='Contoh: Kalimantan Selatan'
+                    className='mt-1 w-full rounded-xl border border-gray-300 p-2 text-xs'
+                  />
+                </div>
+              </div>
+
+              {/* Alamat Lengkap */}
+              <div>
+                <div className='flex items-center justify-between'>
+                  <label className='font-semibold text-gray-700'>Alamat Kantor Distributor:</label>
+                  <button
+                    type='button'
+                    onClick={() => handleGeocode(targetForm.address || `${targetForm.distributorName} ${targetForm.city}`)}
+                    disabled={geocodingLoading}
+                    className='text-[11px] font-bold text-teal-700 hover:text-teal-900 flex items-center gap-1'
+                  >
+                    {geocodingLoading ? <Loader2 className='w-3 h-3 animate-spin' /> : <Compass className='w-3 h-3' />}
+                    Cari Koordinat dari Alamat
+                  </button>
+                </div>
+                <textarea
+                  rows={2}
+                  value={targetForm.address}
+                  onChange={(e) => setTargetForm({ ...targetForm, address: e.target.value })}
+                  placeholder='Masukkan alamat lengkap kantor distributor...'
+                  required
+                  className='mt-1 w-full rounded-xl border border-gray-300 p-2 text-xs'
+                />
+              </div>
+
+              {/* Koordinat GPS & Radius */}
+              <div className='grid grid-cols-3 gap-3 bg-gray-50 p-3 rounded-2xl border border-gray-200'>
+                <div>
+                  <label className='font-semibold text-gray-700'>Latitude:</label>
+                  <input
+                    type='number'
+                    step='any'
+                    value={targetForm.latitude}
+                    onChange={(e) => setTargetForm({ ...targetForm, latitude: e.target.value })}
+                    placeholder='Contoh: -3.4047'
+                    required
+                    className='mt-1 w-full rounded-xl border border-gray-300 p-2 text-xs font-mono bg-white'
+                  />
+                </div>
+                <div>
+                  <label className='font-semibold text-gray-700'>Longitude:</label>
+                  <input
+                    type='number'
+                    step='any'
+                    value={targetForm.longitude}
+                    onChange={(e) => setTargetForm({ ...targetForm, longitude: e.target.value })}
+                    placeholder='Contoh: 114.6706'
+                    required
+                    className='mt-1 w-full rounded-xl border border-gray-300 p-2 text-xs font-mono bg-white'
+                  />
+                </div>
+                <div>
+                  <label className='font-semibold text-gray-700'>Radius (Meter):</label>
+                  <input
+                    type='number'
+                    value={targetForm.radiusMeters}
+                    onChange={(e) => setTargetForm({ ...targetForm, radiusMeters: Number(e.target.value) })}
+                    placeholder='300'
+                    required
+                    className='mt-1 w-full rounded-xl border border-gray-300 p-2 text-xs font-mono bg-white'
+                  />
+                </div>
+              </div>
+
+              {/* Preview Map Link */}
+              {targetForm.latitude && targetForm.longitude && (
+                <div className='flex items-center justify-between text-xs text-teal-700 bg-teal-50 px-3 py-2 rounded-xl border border-teal-200'>
+                  <span className='flex items-center gap-1.5'>
+                    <MapPin className='w-3.5 h-3.5' />
+                    Titik siap: {targetForm.latitude}, {targetForm.longitude} (Radius {targetForm.radiusMeters}m)
+                  </span>
+                  <a
+                    href={`https://www.google.com/maps?q=${targetForm.latitude},${targetForm.longitude}`}
+                    target='_blank'
+                    rel='noreferrer'
+                    className='font-bold flex items-center gap-1 underline hover:text-teal-900'
+                  >
+                    Buka Google Maps <ExternalLink className='w-3 h-3' />
+                  </a>
+                </div>
+              )}
+
+              {/* Checkbox Aktif & Notes */}
+              <div className='flex items-center gap-2'>
+                <input
+                  type='checkbox'
+                  id='targetActive'
+                  checked={targetForm.active}
+                  onChange={(e) => setTargetForm({ ...targetForm, active: e.target.checked })}
+                  className='rounded border-gray-300 text-teal-600 focus:ring-teal-500'
+                />
+                <label htmlFor='targetActive' className='text-xs font-semibold text-gray-700 cursor-pointer'>
+                  Aktifkan titik geofencing ini untuk absensi karyawan
+                </label>
+              </div>
+
+              {/* Submit Buttons */}
+              <div className='flex items-center justify-end gap-2 border-t border-gray-100 pt-3'>
+                <button
+                  type='button'
+                  onClick={() => setShowTargetModal(false)}
+                  className='rounded-xl border border-gray-300 px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50'
+                >
+                  Batal
+                </button>
+                <button
+                  type='submit'
+                  disabled={savingTarget}
+                  className='rounded-xl bg-teal-600 px-5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-teal-700 disabled:opacity-50'
+                >
+                  {savingTarget ? 'Menyimpan...' : 'Simpan Titik Lokasi'}
                 </button>
               </div>
             </form>

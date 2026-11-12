@@ -359,6 +359,18 @@ export default function HRAttendancePage() {
         employeeName: r.employee?.name,
         employeeDept: r.employee?.dept,
         employeeLocation: r.employee?.location,
+        checkInLat: r.checkInLat,
+        checkInLng: r.checkInLng,
+        checkInDistance: r.checkInDistance,
+        checkInLocation: r.checkInLocation,
+        checkOutLat: r.checkOutLat,
+        checkOutLng: r.checkOutLng,
+        checkOutDistance: r.checkOutDistance,
+        checkOutLocation: r.checkOutLocation,
+        isWithinRadius: r.isWithinRadius,
+        accuracyMeters: r.accuracyMeters,
+        isMockGps: r.isMockGps,
+        mockGpsReason: r.mockGpsReason,
       })
     }
 
@@ -377,6 +389,18 @@ export default function HRAttendancePage() {
           penaltyAmount: r.penaltyAmount || 0,
           note: r.note || '',
           employeeName: r.name,
+          checkInLat: r.checkInLat,
+          checkInLng: r.checkInLng,
+          checkInDistance: r.checkInDistance,
+          checkInLocation: r.checkInLocation,
+          checkOutLat: r.checkOutLat,
+          checkOutLng: r.checkOutLng,
+          checkOutDistance: r.checkOutDistance,
+          checkOutLocation: r.checkOutLocation,
+          isWithinRadius: r.isWithinRadius,
+          accuracyMeters: r.accuracyMeters,
+          isMockGps: r.isMockGps,
+          mockGpsReason: r.mockGpsReason,
         })
       }
     }
@@ -644,7 +668,11 @@ export default function HRAttendancePage() {
         'Status',
         'Terlambat (Menit)',
         'Denda Keterlambatan (Rp)',
-        'Catatan / Tier',
+        'Lokasi Target Presensi',
+        'Jarak Check-In (Meter)',
+        'Status Geofencing',
+        'Mock/Fake GPS',
+        'Catatan / Alasan',
       ]
       const rows = filteredRecords.map((r) => [
         r.nik,
@@ -657,6 +685,10 @@ export default function HRAttendancePage() {
         r.status,
         r.lateMinutes || 0,
         r.penaltyAmount || 0,
+        r.checkInLocation || '-',
+        r.checkInDistance != null ? Math.round(r.checkInDistance) : '-',
+        r.isWithinRadius === true ? 'Dalam Radius (<=300m)' : r.isWithinRadius === false ? 'Luar Radius (>300m)' : '-',
+        r.isMockGps ? `Ya (${r.mockGpsReason || 'Detected'})` : 'Tidak',
         r.note || '-',
       ])
       const filename = `Log_Presensi_Harian_${periodLabel}_${new Date().toISOString().slice(0, 10)}`
@@ -679,6 +711,10 @@ export default function HRAttendancePage() {
       'Status',
       'Terlambat (Menit)',
       'Denda Keterlambatan (Rp)',
+      'Lokasi Target Presensi',
+      'Jarak Check-In (Meter)',
+      'Status Geofencing',
+      'Mock/Fake GPS',
       'Catatan / Keterangan',
     ]
 
@@ -698,6 +734,10 @@ export default function HRAttendancePage() {
         r.status,
         r.lateMinutes || 0,
         r.penaltyAmount || 0,
+        r.checkInLocation || '-',
+        r.checkInDistance != null ? Math.round(r.checkInDistance) : '-',
+        r.isWithinRadius === true ? 'Dalam Radius (<=300m)' : r.isWithinRadius === false ? 'Luar Radius (>300m)' : '-',
+        r.isMockGps ? `Ya (${r.mockGpsReason || 'Detected'})` : 'Tidak',
         r.note || '-',
       ]
     })
@@ -1413,18 +1453,45 @@ export default function HRAttendancePage() {
 
                       {/* Jam Masuk */}
                       <Td>
-                        <span
-                          className={`text-xs font-mono font-semibold ${
-                            isLate ? 'text-amber-600' : r.checkIn ? 'text-emerald-700' : 'text-gray-400'
-                          }`}
-                        >
-                          {r.checkIn || '—'}
-                        </span>
+                        <div className="flex flex-col gap-0.5">
+                          <span
+                            className={`text-xs font-mono font-semibold ${
+                              isLate ? 'text-amber-600' : r.checkIn ? 'text-emerald-700' : 'text-gray-400'
+                            }`}
+                          >
+                            {r.checkIn || '—'}
+                          </span>
+                          {r.checkInLocation && (
+                            <span className="text-[10px] text-gray-500 font-medium truncate max-w-[150px]" title={r.checkInLocation}>
+                              📍 {r.checkInLocation}
+                            </span>
+                          )}
+                          {r.isMockGps ? (
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-rose-100 text-rose-700 border border-rose-200 w-fit" title={r.mockGpsReason || 'Terdeteksi indikasi mock/fake GPS'}>
+                              🚨 Mock GPS
+                            </span>
+                          ) : r.isWithinRadius === false || (r.checkInDistance != null && r.checkInDistance > 300) ? (
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-200 w-fit" title={`Jarak: ${Math.round(r.checkInDistance || 0)}m dari titik target (Batas: 300m)`}>
+                              ⚠️ Luar Radius ({Math.round(r.checkInDistance || 0)}m)
+                            </span>
+                          ) : r.checkInDistance != null ? (
+                            <span className="inline-flex items-center gap-0.5 text-[9px] font-medium text-emerald-700">
+                              ✓ {Math.round(r.checkInDistance)}m
+                            </span>
+                          ) : null}
+                        </div>
                       </Td>
 
                       {/* Jam Pulang */}
                       <Td>
-                        <span className="text-xs font-mono text-gray-600">{r.checkOut || '—'}</span>
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-xs font-mono text-gray-600">{r.checkOut || '—'}</span>
+                          {r.checkOutDistance != null && (
+                            <span className={`text-[9px] font-medium ${r.checkOutDistance > 300 ? 'text-amber-700' : 'text-gray-400'}`}>
+                              {r.checkOutDistance > 300 ? `⚠️ ${Math.round(r.checkOutDistance)}m` : `✓ ${Math.round(r.checkOutDistance)}m`}
+                            </span>
+                          )}
+                        </div>
                       </Td>
 
                       {/* Status */}
@@ -1438,11 +1505,15 @@ export default function HRAttendancePage() {
                           <div>
                             <span className="text-xs font-semibold text-amber-700">{r.lateMinutes} mnt</span>
                             {r.note && (
-                              <p className="text-[10px] text-gray-400 max-w-[140px] truncate" title={r.note}>
+                              <p className="text-[10px] text-gray-500 max-w-[150px] truncate" title={r.note}>
                                 {r.note}
                               </p>
                             )}
                           </div>
+                        ) : r.note ? (
+                          <p className="text-[10px] text-gray-500 max-w-[150px] truncate" title={r.note}>
+                            {r.note}
+                          </p>
                         ) : (
                           <span className="text-xs text-gray-400">—</span>
                         )}
@@ -1588,12 +1659,12 @@ export default function HRAttendancePage() {
                       <thead className="bg-gray-50 text-gray-600 border-b border-gray-200 font-semibold">
                         <tr>
                           <th className="py-2.5 px-3">Tanggal</th>
-                          <th className="py-2.5 px-2">Masuk</th>
+                          <th className="py-2.5 px-2">Masuk & Lokasi</th>
                           <th className="py-2.5 px-2">Pulang</th>
                           <th className="py-2.5 px-2">Status</th>
                           <th className="py-2.5 px-2">Keterlambatan</th>
                           <th className="py-2.5 px-2">Denda</th>
-                          <th className="py-2.5 px-3">Catatan</th>
+                          <th className="py-2.5 px-3">Catatan / Alasan</th>
                           <th className="py-2.5 px-2 text-right">Aksi</th>
                         </tr>
                       </thead>
@@ -1612,16 +1683,43 @@ export default function HRAttendancePage() {
                                   <span className="text-[10px] text-gray-400 ml-1.5 font-normal">({dayLabel})</span>
                                 )}
                               </td>
-                              <td className="py-2 px-2 font-mono font-semibold">
-                                <span
-                                  className={
-                                    isLate ? 'text-amber-600' : r.checkIn ? 'text-emerald-700' : 'text-gray-400'
-                                  }
-                                >
-                                  {r.checkIn || '—'}
-                                </span>
+                              <td className="py-2 px-2">
+                                <div className="flex flex-col gap-0.5">
+                                  <span
+                                    className={`font-mono font-semibold ${
+                                      isLate ? 'text-amber-600' : r.checkIn ? 'text-emerald-700' : 'text-gray-400'
+                                    }`}
+                                  >
+                                    {r.checkIn || '—'}
+                                  </span>
+                                  {r.checkInLocation && (
+                                    <span className="text-[10px] text-gray-500 font-medium truncate max-w-[140px]" title={r.checkInLocation}>
+                                      📍 {r.checkInLocation}
+                                    </span>
+                                  )}
+                                  {r.isMockGps ? (
+                                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-rose-100 text-rose-700 border border-rose-200 w-fit">
+                                      🚨 Mock GPS
+                                    </span>
+                                  ) : r.isWithinRadius === false || (r.checkInDistance != null && r.checkInDistance > 300) ? (
+                                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-200 w-fit">
+                                      ⚠️ Luar ({Math.round(r.checkInDistance || 0)}m)
+                                    </span>
+                                  ) : r.checkInDistance != null ? (
+                                    <span className="text-[9px] text-emerald-700 font-medium">
+                                      ✓ {Math.round(r.checkInDistance)}m
+                                    </span>
+                                  ) : null}
+                                </div>
                               </td>
-                              <td className="py-2 px-2 font-mono text-gray-600">{r.checkOut || '—'}</td>
+                              <td className="py-2 px-2 font-mono text-gray-600">
+                                {r.checkOut || '—'}
+                                {r.checkOutDistance != null && (
+                                  <span className="block text-[9px] text-gray-400">
+                                    {Math.round(r.checkOutDistance)}m
+                                  </span>
+                                )}
+                              </td>
                               <td className="py-2 px-2">
                                 <StatusBadge tone={STATUS_TONES[r.status] || 'default'}>{r.status}</StatusBadge>
                               </td>
@@ -1646,7 +1744,7 @@ export default function HRAttendancePage() {
                                 )}
                               </td>
                               <td
-                                className="py-2 px-3 text-[11px] text-gray-500 max-w-[150px] truncate"
+                                className="py-2 px-3 text-[11px] text-gray-600 max-w-[160px] truncate"
                                 title={r.note || ''}
                               >
                                 {r.note || '—'}

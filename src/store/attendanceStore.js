@@ -90,38 +90,38 @@ export const useAttendanceStore = create(persist(
       get().records.find(r => r.userId === userId && r.date === date) || null,
 
     // Clock In: satu kali per hari per user (clock-in pertama yang berlaku)
-    clockIn: (userId, name, time, { date = todayStr(), status = 'Present' } = {}) => {
+    clockIn: (userId, name, time, { date = todayStr(), status = 'Present', ...geoOptions } = {}) => {
       set((s) => {
         const existing = s.records.find(r => r.userId === userId && r.date === date)
         if (existing) {
           // Never overwrite an earlier clock-in; the first one of the day stands.
           if (existing.checkIn && existing.checkIn !== '-') return s
           // Update record yang ada (belum punya checkIn)
-          persistToDb('PUT', `/api/attendance/${existing.id}`, { checkIn: time, status })
+          persistToDb('PUT', `/api/attendance/${existing.id}`, { checkIn: time, status, ...geoOptions })
           return {
             records: s.records.map(r =>
-              r === existing ? { ...r, checkIn: time, status } : r
+              r === existing ? { ...r, checkIn: time, status, ...geoOptions } : r
             ),
           }
         }
         // Buat record baru
         const newId = _id++
-        const newRecord = { id: newId, userId, empId: userId, name, date, checkIn: time, checkOut: null, status }
-        persistToDb('POST', '/api/attendance', { empId: userId, date, checkIn: time, status })
+        const newRecord = { id: newId, userId, empId: userId, name, date, checkIn: time, checkOut: null, status, ...geoOptions }
+        persistToDb('POST', '/api/attendance', { empId: userId, date, checkIn: time, status, ...geoOptions })
         return { records: [...s.records, newRecord] }
       })
     },
 
     // Clock Out: isi checkOut pada record hari ini
-    clockOut: (userId, time, { date = todayStr() } = {}) => {
+    clockOut: (userId, time, { date = todayStr(), ...geoOptions } = {}) => {
       set((s) => {
         const existing = s.records.find(r => r.userId === userId && r.date === date)
         if (existing) {
-          persistToDb('PUT', `/api/attendance/${existing.id}`, { checkOut: time })
+          persistToDb('PUT', `/api/attendance/${existing.id}`, { checkOut: time, ...geoOptions })
         }
         return {
           records: s.records.map(r =>
-            r.userId === userId && r.date === date ? { ...r, checkOut: time } : r,
+            r.userId === userId && r.date === date ? { ...r, checkOut: time, ...geoOptions } : r,
           ),
         }
       })
