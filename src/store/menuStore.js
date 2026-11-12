@@ -246,21 +246,22 @@ export const DEFAULT_MENUS = [
   { id: 30, key: "hr", label: "HR", icon: "users", roles: '["hr","hr_officer","hr_manager","superadmin"]', order: 4, active: true },
   { id: 301, key: "hr-employee", permissionKey: "hr_employee", label: "Employee Data", icon: "users", href: "/hr/employee", parentId: 30, roles: '["hr","hr_officer","hr_manager","superadmin"]', order: 1, active: true },
   { id: 311, key: "hr-attendance", permissionKey: "hr_attendance", label: "Attendance Management", icon: "calendarClock", href: "/hr/attendance", parentId: 30, roles: '["hr","hr_officer","hr_manager","superadmin"]', departments: '["*"]', order: 2, active: true },
-  { id: 302, key: "hr-leave", permissionKey: "hr_leave", label: "Leave Management", icon: "calendar", href: "/hr/apply-leave", parentId: 30, roles: '["hr","hr_officer","hr_manager","superadmin"]', order: 3, active: true },
-  { id: 313, key: "hr-leave-report", permissionKey: "hr_leave_report", label: "Leave Report (Laporan Cuti)", icon: "chart", href: "/hr/leave-report", parentId: 30, roles: '["hr","hr_officer","hr_manager","superadmin"]', order: 4, active: true },
-  { id: 314, key: "hr-overtime", permissionKey: "hr_overtime", label: "Overtime Management", icon: "clock", href: "/hr/overtime", parentId: 30, roles: '["hr","hr_officer","hr_manager","superadmin"]', order: 5, active: true },
-  { id: 303, key: "hr-recruitment", permissionKey: "hr_recruitment", label: "Recruitment", icon: "userCheck", href: "/hr/recruitment/job-requisition", parentId: 30, roles: '["hr","hr_manager","superadmin"]', order: 6, active: true },
-  { id: 304, key: "hr-onboarding", permissionKey: "hr_onboarding", label: "Onboarding", icon: "clipboard", href: "/hr/onboarding/tracker", parentId: 30, roles: '["hr","hr_manager","superadmin"]', order: 5, active: true },
-  { id: 305, key: "hr-payroll", permissionKey: "hr_payroll", label: "Payroll", icon: "dollar", href: "/hr/payroll/ho-calculator", parentId: 30, roles: '["hr","hr_manager","superadmin"]', order: 6, active: true },
+  { id: 315, key: "hr-geofencing", permissionKey: "hr_geofencing", label: "Geofencing & Lokasi Sales", icon: "mapPin", href: "/sysadmin/settings/work-location?tab=geofencing", parentId: 30, roles: '["hr","hr_officer","hr_manager","superadmin"]', departments: '["*"]', order: 3, active: true },
+  { id: 302, key: "hr-leave", permissionKey: "hr_leave", label: "Leave Management", icon: "calendar", href: "/hr/apply-leave", parentId: 30, roles: '["hr","hr_officer","hr_manager","superadmin"]', order: 4, active: true },
+  { id: 313, key: "hr-leave-report", permissionKey: "hr_leave_report", label: "Leave Report (Laporan Cuti)", icon: "chart", href: "/hr/leave-report", parentId: 30, roles: '["hr","hr_officer","hr_manager","superadmin"]', order: 5, active: true },
+  { id: 314, key: "hr-overtime", permissionKey: "hr_overtime", label: "Overtime Management", icon: "clock", href: "/hr/overtime", parentId: 30, roles: '["hr","hr_officer","hr_manager","superadmin"]', order: 6, active: true },
+  { id: 303, key: "hr-recruitment", permissionKey: "hr_recruitment", label: "Recruitment", icon: "userCheck", href: "/hr/recruitment/job-requisition", parentId: 30, roles: '["hr","hr_manager","superadmin"]', order: 7, active: true },
+  { id: 304, key: "hr-onboarding", permissionKey: "hr_onboarding", label: "Onboarding", icon: "clipboard", href: "/hr/onboarding/tracker", parentId: 30, roles: '["hr","hr_manager","superadmin"]', order: 8, active: true },
+  { id: 305, key: "hr-payroll", permissionKey: "hr_payroll", label: "Payroll", icon: "dollar", href: "/hr/payroll/ho-calculator", parentId: 30, roles: '["hr","hr_manager","superadmin"]', order: 9, active: true },
   { id: 3050, key: "hr-payroll-ho-calculator", permissionKey: "hr_payroll_ho_calculator", label: "Kalkulator Payroll HO", icon: "calculator", href: "/hr/payroll/ho-calculator", parentId: 305, roles: '["hr","hr_manager","superadmin"]', order: 1, active: true },
   { id: 3051, key: "hr-payroll-odoo-sync", permissionKey: "hr_payroll_odoo_sync", label: "Integrasi Odoo Payroll", icon: "link", href: "/hr/payroll/odoo-sync", parentId: 305, roles: '["hr","hr_manager","superadmin"]', order: 2, active: true },
   { id: 3052, key: "hr-payroll-setup", permissionKey: "hr_payroll_setup", label: "Setup Komponen Gaji", icon: "settings", href: "/hr/payroll/setup", parentId: 305, roles: '["hr","hr_manager","superadmin"]', order: 3, active: true },
-  { id: 306, key: "hr-performance", permissionKey: "hr_performance", label: "Performance", icon: "trending", href: "/hr/performance", parentId: 30, roles: '["hr","hr_manager","superadmin"]', order: 7, active: true },
-  { id: 307, key: "hr-talent", permissionKey: "hr_talent", label: "Talent", icon: "star", href: "/hr/talent", parentId: 30, roles: '["hr","hr_manager","superadmin"]', order: 8, active: true },
-  { id: 308, key: "hr-org-chart", permissionKey: "hr_org_chart", label: "Org Chart", icon: "building", href: "/hr/org-chart", parentId: 30, roles: '["*"]', order: 9, active: true },
-  { id: 309, key: "hr-livestream-schedule", permissionKey: "hr_livestream_schedule", label: "Livestream Schedule", icon: "calendarcheck", href: "/hr/livestream/schedule", parentId: 30, roles: '["hr","hr_officer","hr_manager","superadmin"]', order: 10, active: true },
-  { id: 310, key: "hr-livestream-payroll", permissionKey: "hr_livestream_payroll", label: "Livestream Payroll", icon: "coins", href: "/hr/livestream/payroll", parentId: 30, roles: '["hr","hr_manager","superadmin"]', order: 11, active: true },
-  { id: 312, key: "hr-holiday-calendar", permissionKey: "hr_holiday_calendar", label: "Kalender Hari Libur", icon: "calendar", href: "/hr/absence/holiday-calendar", parentId: 30, roles: '["hr","hr_officer","hr_manager","superadmin"]', departments: '["*"]', order: 12, active: true },
+  { id: 306, key: "hr-performance", permissionKey: "hr_performance", label: "Performance", icon: "trending", href: "/hr/performance", parentId: 30, roles: '["hr","hr_manager","superadmin"]', order: 10, active: true },
+  { id: 307, key: "hr-talent", permissionKey: "hr_talent", label: "Talent", icon: "star", href: "/hr/talent", parentId: 30, roles: '["hr","hr_manager","superadmin"]', order: 11, active: true },
+  { id: 308, key: "hr-org-chart", permissionKey: "hr_org_chart", label: "Org Chart", icon: "building", href: "/hr/org-chart", parentId: 30, roles: '["*"]', order: 12, active: true },
+  { id: 309, key: "hr-livestream-schedule", permissionKey: "hr_livestream_schedule", label: "Livestream Schedule", icon: "calendarcheck", href: "/hr/livestream/schedule", parentId: 30, roles: '["hr","hr_officer","hr_manager","superadmin"]', order: 13, active: true },
+  { id: 310, key: "hr-livestream-payroll", permissionKey: "hr_livestream_payroll", label: "Livestream Payroll", icon: "coins", href: "/hr/livestream/payroll", parentId: 30, roles: '["hr","hr_manager","superadmin"]', order: 14, active: true },
+  { id: 312, key: "hr-holiday-calendar", permissionKey: "hr_holiday_calendar", label: "Kalender Hari Libur", icon: "calendar", href: "/hr/absence/holiday-calendar", parentId: 30, roles: '["hr","hr_officer","hr_manager","superadmin"]', departments: '["*"]', order: 15, active: true },
 
   { id: 40, key: "mss", label: "MSS", icon: "briefcase", roles: '["manager","hr_manager","superadmin"]', order: 5, active: true },
   { id: 401, key: "mss-attendance", permissionKey: "mss_attendance", label: "Team Attendance", icon: "calendar", href: "/mss/team-attendance", parentId: 40, roles: '["manager","hr_manager","superadmin"]', order: 1, active: true },
@@ -269,7 +270,7 @@ export const DEFAULT_MENUS = [
   { id: 404, key: "mss-talent", permissionKey: "mss_talent", label: "Talent Review", icon: "star", href: "/mss/talent", parentId: 40, roles: '["manager","hr_manager","superadmin"]', order: 4, active: true },
   { id: 405, key: "mss-approve-overtime", permissionKey: "mss_approve_overtime", label: "Approve Overtime", icon: "checkCircle", href: "/mss/approve-overtime", parentId: 40, roles: '["manager","supervisor","hr_manager","superadmin"]', departments: '["*"]', order: 5, active: true },
 
-  { id: 50, key: "sysadmin", label: "System", icon: "settings", roles: '["superadmin"]', order: 6, active: true },
+  { id: 50, key: "sysadmin", label: "System", icon: "settings", roles: '["superadmin","hr_manager","hr"]', order: 6, active: true },
   { id: 501, key: "sysadmin-users", permissionKey: "system_users", label: "User Management", icon: "users", href: "/sysadmin/users", parentId: 50, roles: '["superadmin"]', order: 1, active: true },
   { id: 508, key: "sysadmin-odoo", permissionKey: "system_odoo", label: "Odoo API", icon: "link", href: "/sysadmin/users/odoo-api", parentId: 50, roles: '["superadmin"]', order: 2, active: true },
   { id: 502, key: "sysadmin-role", permissionKey: "system_role", label: "Role", icon: "shield", href: "/sysadmin/role", parentId: 50, roles: '["superadmin"]', order: 3, active: true },
@@ -279,7 +280,7 @@ export const DEFAULT_MENUS = [
   { id: 506, key: "sysadmin-settings", permissionKey: "system_settings", label: "Settings", icon: "settings", href: "/sysadmin/settings/master-lookup", parentId: 50, roles: '["superadmin"]', order: 7, active: true },
   { id: 507, key: "sysadmin-branding", permissionKey: "system_branding", label: "Branding", icon: "building", href: "/sysadmin/branding/company-logo", parentId: 50, roles: '["superadmin"]', order: 8, active: true },
   { id: 509, key: "sysadmin-workflow-entry", permissionKey: "system_workflow_entry", label: "Workflow Engine", icon: "gitbranch", href: "/sysadmin/workflow", parentId: 50, roles: '["superadmin","sysadmin"]', order: 9, active: true },
-  { id: 516, key: "sysadmin-work-location", permissionKey: "system_work_location", label: "Aturan Jam Kerja & Lokasi", icon: "clock", href: "/sysadmin/settings/work-location", parentId: 50, roles: '["superadmin"]', order: 10, active: true },
+  { id: 516, key: "sysadmin-work-location", permissionKey: "system_work_location", label: "Aturan Jam Kerja & Lokasi", icon: "clock", href: "/sysadmin/settings/work-location", parentId: 50, roles: '["superadmin","hr_manager","hr"]', order: 10, active: true },
 
   // Workflow Management (Flowable + BPMN.js)
   { id: 510, key: "sysadmin-workflow", label: "Workflow Engine", icon: "gitbranch", roles: '["superadmin","sysadmin","hr_manager","hr","hr_officer"]', order: 9, active: true },
@@ -360,8 +361,10 @@ export function isMenuAllowedForUser(m, role, hasPermissionFn, userDept) {
 export function resolveMenuPermissionKey(m) {
   if (!m) return ''
   if (m.permissionKey) return m.permissionKey
-  const def = DEFAULT_MENUS.find(d => d.key === m.key || (d.href && d.href === m.href))
-  if (def?.permissionKey) return def.permissionKey
+  const defByKey = DEFAULT_MENUS.find(d => d.key === m.key)
+  if (defByKey?.permissionKey) return defByKey.permissionKey
+  const defByHref = DEFAULT_MENUS.find(d => d.href && d.href === m.href)
+  if (defByHref?.permissionKey) return defByHref.permissionKey
   return m.key?.replace(/-/g, '_') || ''
 }
 
@@ -519,7 +522,7 @@ export const useMenuStore = create(
     }),
     {
       name: "hcm-menus",
-      version: 4,
+      version: 5,
       migrate: (persistedState, version) => {
         const existing = persistedState?.menus || []
         const existingKeys = new Set(existing.map((m) => m.key))
@@ -530,6 +533,15 @@ export const useMenuStore = create(
           }
           if (m.key === 'sysadmin-workflow-userlists') {
             return { ...m, roles: '["superadmin","sysadmin","hr_manager","hr","hr_officer"]', permissionKey: 'workflow_engine_userlists' }
+          }
+          if (m.key === 'sysadmin') {
+            return { ...m, roles: '["superadmin","hr_manager","hr"]' }
+          }
+          if (m.key === 'sysadmin-work-location') {
+            return { ...m, roles: '["superadmin","hr_manager","hr"]', permissionKey: 'system_work_location' }
+          }
+          if (m.key === 'hr-geofencing') {
+            return { ...m, roles: '["hr","hr_officer","hr_manager","superadmin"]', permissionKey: 'hr_geofencing' }
           }
           if (m.key === 'hr-payroll') {
             return { ...m, href: '/hr/payroll/ho-calculator' }

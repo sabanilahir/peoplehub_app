@@ -290,6 +290,110 @@ export async function GET() {
       })
     }
 
+    // Auto-seed / Auto-heal jika menu Geofencing, Kalender Hari Libur, atau Aturan Jam Kerja & Lokasi belum ada di tabel MenuItem
+    const hasHrGeofencing = menus.some((m) => m.key === 'hr-geofencing')
+    const hasHrHoliday = menus.some((m) => m.key === 'hr-holiday-calendar')
+    const hasSysWorkLocation = menus.some((m) => m.key === 'sysadmin-work-location')
+
+    if ((!hasHrGeofencing || !hasHrHoliday || !hasSysWorkLocation) && menus.length > 0) {
+      const hrParent = menus.find((m) => m.key === 'hr')
+      const sysParent = menus.find((m) => m.key === 'sysadmin')
+
+      if (!hasHrGeofencing && hrParent) {
+        try {
+          await prisma.menuItem.upsert({
+            where: { key: 'hr-geofencing' },
+            create: {
+              id: 315,
+              key: 'hr-geofencing',
+              label: 'Geofencing & Lokasi Sales',
+              icon: 'mapPin',
+              href: '/sysadmin/settings/work-location?tab=geofencing',
+              parentId: hrParent.id,
+              roles: JSON.stringify(['superadmin', 'admin', 'hr', 'hr_manager', 'hr_officer']),
+              departments: JSON.stringify(['*']),
+              order: 3,
+              active: true,
+            },
+            update: {
+              label: 'Geofencing & Lokasi Sales',
+              icon: 'mapPin',
+              href: '/sysadmin/settings/work-location?tab=geofencing',
+              parentId: hrParent.id,
+              roles: JSON.stringify(['superadmin', 'admin', 'hr', 'hr_manager', 'hr_officer']),
+              departments: JSON.stringify(['*']),
+              order: 3,
+              active: true,
+            },
+          })
+        } catch {}
+      }
+
+      if (!hasHrHoliday && hrParent) {
+        try {
+          await prisma.menuItem.upsert({
+            where: { key: 'hr-holiday-calendar' },
+            create: {
+              id: 312,
+              key: 'hr-holiday-calendar',
+              label: 'Kalender Hari Libur',
+              icon: 'calendar',
+              href: '/hr/absence/holiday-calendar',
+              parentId: hrParent.id,
+              roles: JSON.stringify(['superadmin', 'admin', 'hr', 'hr_manager', 'hr_officer']),
+              departments: JSON.stringify(['*']),
+              order: 15,
+              active: true,
+            },
+            update: {
+              label: 'Kalender Hari Libur',
+              icon: 'calendar',
+              href: '/hr/absence/holiday-calendar',
+              parentId: hrParent.id,
+              roles: JSON.stringify(['superadmin', 'admin', 'hr', 'hr_manager', 'hr_officer']),
+              departments: JSON.stringify(['*']),
+              order: 15,
+              active: true,
+            },
+          })
+        } catch {}
+      }
+
+      if (!hasSysWorkLocation && sysParent) {
+        try {
+          await prisma.menuItem.upsert({
+            where: { key: 'sysadmin-work-location' },
+            create: {
+              id: 516,
+              key: 'sysadmin-work-location',
+              label: 'Aturan Jam Kerja & Lokasi',
+              icon: 'clock',
+              href: '/sysadmin/settings/work-location',
+              parentId: sysParent.id,
+              roles: JSON.stringify(['superadmin', 'hr_manager', 'hr']),
+              departments: JSON.stringify(['*']),
+              order: 10,
+              active: true,
+            },
+            update: {
+              label: 'Aturan Jam Kerja & Lokasi',
+              icon: 'clock',
+              href: '/sysadmin/settings/work-location',
+              parentId: sysParent.id,
+              roles: JSON.stringify(['superadmin', 'hr_manager', 'hr']),
+              departments: JSON.stringify(['*']),
+              order: 10,
+              active: true,
+            },
+          })
+        } catch {}
+      }
+
+      menus = await prisma.menuItem.findMany({
+        orderBy: { order: 'asc' },
+      })
+    }
+
     return Response.json(menus)
   } catch {
     return dbDown()

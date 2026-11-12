@@ -30,9 +30,11 @@ function PermissionContent() {
     deletePermission,
     getByGroup,
     getRolePermissions,
+    syncFromMenus,
+    syncRolesFromBackend,
     reset,
   } = usePermissionStore()
-  const { menus } = useMenuStore()
+  const { menus, syncFromDatabase } = useMenuStore()
   const { roles: storeRoles, fetchRoles } = useRoleStore()
 
   const [selectedRole, setSelectedRole] = useState(roleParam || 'superadmin')
@@ -50,10 +52,19 @@ function PermissionContent() {
   const [newPerm, setNewPerm] = useState({ key: '', label: '', group: 'ess' })
   const [savedNotice, setSavedNotice] = useState(false)
 
-  // Ambil data role dari database saat mount
+  // Ambil data role & menu dari database saat mount
   useEffect(() => {
     fetchRoles()
-  }, [fetchRoles])
+    syncRolesFromBackend()
+    syncFromDatabase()
+  }, [fetchRoles, syncRolesFromBackend, syncFromDatabase])
+
+  // Otomatis rekonsiliasi seluruh sub-menu dari useMenuStore ke daftar permissions
+  useEffect(() => {
+    if (Array.isArray(menus) && menus.length > 0) {
+      syncFromMenus(menus)
+    }
+  }, [menus, syncFromMenus])
 
   // Sinkronkan selectedRole jika query parameter ?role berubah
   useEffect(() => {
@@ -193,19 +204,13 @@ function PermissionContent() {
 
   // Sinkronkan otomatis permission dari default sistem, database, dan menu kustom
   const handleSyncFromMenus = async () => {
-    let addedCount = 0
-    const existingKeys = new Set(permissions.map((p) => p.key))
+    await syncFromDatabase()
+    await syncRolesFromBackend()
+    const latestMenus = useMenuStore.getState().menus || menus
+    let addedCount = syncFromMenus(latestMenus)
+    const existingKeys = new Set((usePermissionStore.getState().permissions || []).map((p) => p.key))
 
-    // 1. Dari DEFAULT_PERMISSIONS (termasuk Apply Overtime, Approve Overtime, Overtime Management)
-    DEFAULT_PERMISSIONS.forEach((dp) => {
-      if (!existingKeys.has(dp.key)) {
-        addPermission(dp)
-        existingKeys.add(dp.key)
-        addedCount++
-      }
-    })
-
-    // 2. Dari tabel database /api/permissions
+    // Dari tabel database /api/permissions
     try {
       const res = await fetch('/api/permissions')
       if (res.ok) {
@@ -228,24 +233,6 @@ function PermissionContent() {
     } catch (e) {
       console.warn('[PermissionPage] Sync API error:', e)
     }
-
-    // 3. Dari menus
-    menus.forEach((m) => {
-      if (!m.parentId) return // section root
-      const permKey = m.permissionKey || m.key.replace(/-/g, '_')
-      if (!existingKeys.has(permKey)) {
-        const parent = menus.find((p) => p.id === m.parentId)
-        const groupKey = parent?.key || 'sysadmin'
-
-        addPermission({
-          key: permKey,
-          label: m.label,
-          group: groupKey,
-        })
-        existingKeys.add(permKey)
-        addedCount++
-      }
-    })
 
     triggerNotice()
     alert(

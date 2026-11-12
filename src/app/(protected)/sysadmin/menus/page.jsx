@@ -1,6 +1,7 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useMenuStore, ICON_MAP } from '@/store/menuStore'
+import { usePermissionStore } from '@/store/permissionStore'
 import { X, Plus, Edit2, Trash2, Save, Search, RotateCcw, Home, User, Users, Settings, BookOpen, Briefcase, Clock, Calendar, DollarSign, TrendingUp, Star, Award, Clipboard, UserCheck, Building2, Target, AlertCircle, CheckCircle, Trophy, Shield, Key, FileText, Bell, Link, Mail, Phone, MapPin, UsersRound, BookMarked, GraduationCap, AwardIcon, FolderKanban, Kanban, MessageSquare, Send, PieChart, BarChart3, LineChart, Activity, Heart, PlusCircle, MinusCircle, Edit, Eye, EyeOff, Lock, Unlock, Database, Server, Wifi, WifiOff, Globe, Monitor, Smartphone, Tablet, Printer, Download, Upload, Share2, Copy, Trash, Archive, Inbox, SendHorizontal, Clock4, CalendarClock, CalendarDays, CalendarCheck, UserPlus, UserMinus, UserX, Users2, Building, BuildingIcon, Landmark, Receipt, CreditCard, Wallet, ShoppingCart, Package, Box, ArchiveIcon, FolderOpen, Folder, File, FileCheck, FileX, FilePlus, FileEdit, Image, Video, Music, Mic, Camera, VideoIcon, GitBranch, Palette, ListChecks, CheckSquare } from 'lucide-react'
 
 const ICON_OPTIONS = [
@@ -142,13 +143,24 @@ const emptyForm = {
 }
 
 export default function MenuManagementPage() {
-  const { menus, addMenu, updateMenu, deleteMenu, toggleActive, resetToDefault } = useMenuStore()
+  const { menus, addMenu, updateMenu, deleteMenu, toggleActive, resetToDefault, syncFromDatabase } = useMenuStore()
+  const { syncFromMenus, deletePermission } = usePermissionStore()
   const [search, setSearch] = useState('')
   const [filterParent, setFilterParent] = useState('all')
   const [showModal, setShowModal] = useState(false)
   const [editingMenu, setEditingMenu] = useState(null)
   const [form, setForm] = useState(emptyForm)
   const [showIconPicker, setShowIconPicker] = useState(false)
+
+  useEffect(() => {
+    syncFromDatabase()
+  }, [syncFromDatabase])
+
+  useEffect(() => {
+    if (Array.isArray(menus) && menus.length > 0) {
+      syncFromMenus(menus)
+    }
+  }, [menus, syncFromMenus])
 
   // Parent sections (menu level 1 yang tampil sebagai ikon di sidebar)
   const parentSections = menus.filter(m => !m.parentId).sort((a, b) => a.order - b.order)
@@ -219,14 +231,16 @@ export default function MenuManagementPage() {
     setForm({ ...form, departments: filtered })
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.label.trim()) {
       alert("Label is required")
       return
     }
     const parentId = form.parentId ? parseInt(form.parentId) : null
+    const menuKey = form.key.trim() || form.label.toLowerCase().replace(/[^a-z0-9]/g, '-')
     const menuData = {
-      key: form.key.trim() || form.label.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+      key: menuKey,
+      permissionKey: editingMenu?.permissionKey || menuKey.replace(/-/g, '_'),
       label: form.label.trim(),
       icon: form.icon || 'clipboard',
       href: form.href?.trim() || null,
@@ -236,14 +250,23 @@ export default function MenuManagementPage() {
       order: Number(form.order) || 1,
       active: form.active,
     }
-    editingMenu ? updateMenu(editingMenu.id, menuData) : addMenu(menuData)
+    if (editingMenu) {
+      await updateMenu(editingMenu.id, menuData)
+    } else {
+      await addMenu(menuData)
+    }
+    syncFromMenus(useMenuStore.getState().menus)
     setShowModal(false)
     setForm(emptyForm)
   }
 
-  const handleDelete = (menu) => {
+  const handleDelete = async (menu) => {
     if (confirm("Delete menu \"" + menu.label + "\"?")) {
-      deleteMenu(menu.id)
+      await deleteMenu(menu.id)
+      const permKey = menu.permissionKey || menu.key?.replace(/-/g, '_')
+      if (permKey) {
+        deletePermission(permKey)
+      }
     }
   }
 

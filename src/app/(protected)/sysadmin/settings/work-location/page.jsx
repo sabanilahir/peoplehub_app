@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import {
   PageHeader,
   StatCard,
@@ -31,8 +32,16 @@ import {
   RotateCcw,
 } from 'lucide-react'
 
-export default function WorkLocationSettingsPage() {
-  const [activeTab, setActiveTab] = useState('rules') // 'rules' | 'geofencing'
+function WorkLocationSettingsContent() {
+  const searchParams = useSearchParams()
+  const tabParam = searchParams.get('tab')
+  const [activeTab, setActiveTab] = useState(tabParam === 'geofencing' ? 'geofencing' : 'rules') // 'rules' | 'geofencing'
+
+  useEffect(() => {
+    if (tabParam === 'geofencing' || tabParam === 'rules') {
+      setActiveTab(tabParam)
+    }
+  }, [tabParam])
 
   const [configs, setConfigs] = useState([])
   const [loading, setLoading] = useState(true)
@@ -1488,5 +1497,13 @@ export default function WorkLocationSettingsPage() {
         </div>
       )}
     </div>
+  )
+}
+
+export default function WorkLocationSettingsPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-xs text-gray-400">Memuat pengaturan lokasi kerja & geofencing...</div>}>
+      <WorkLocationSettingsContent />
+    </Suspense>
   )
 }

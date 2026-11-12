@@ -17,17 +17,25 @@ export default function DynamicSidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const { currentUser } = useAuthStore()
-  const { getSections, getItems, syncFromDatabase, dbLoaded, loading } = useMenuStore()
-  const { hasPermission } = usePermissionStore()
+  const { menus, getSections, getItems, syncFromDatabase, dbLoaded, loading } = useMenuStore()
+  const { permissions, rolePermissions, hasPermission, syncFromMenus, syncRolesFromBackend } = usePermissionStore()
   const role = currentUser?.role || 'employee'
   const dept = currentUser?.dept || ''
   const [openId, setOpenId] = useState(null)
   const [expandedSubIds, setExpandedSubIds] = useState({})
 
-  // Auto-load dari PostgreSQL saat pertama kali
+  // Auto-load menu & role permissions dari PostgreSQL saat pertama kali
   useEffect(() => {
     syncFromDatabase()
-  }, [])
+    syncRolesFromBackend()
+  }, [syncFromDatabase, syncRolesFromBackend])
+
+  // Otomatis rekonsiliasi menu ke daftar permission setiap kali daftar menu berubah
+  useEffect(() => {
+    if (Array.isArray(menus) && menus.length > 0) {
+      syncFromMenus(menus)
+    }
+  }, [menus, syncFromMenus])
 
   // Reset open menu saat pathname berubah
   useEffect(() => {
@@ -63,7 +71,18 @@ export default function DynamicSidebar() {
 
   const isItemActive = (href) => {
     if (!href) return false
-    return pathname === href || (href !== '/dashboard' && pathname.startsWith(href))
+    const [basePath, queryStr] = href.split('?')
+    if (queryStr) {
+      if (pathname !== basePath) return false
+      if (typeof window !== 'undefined') {
+        return window.location.search.includes(queryStr)
+      }
+      return false
+    }
+    if (basePath === '/sysadmin/settings/work-location' && typeof window !== 'undefined' && window.location.search.includes('tab=geofencing')) {
+      return false
+    }
+    return pathname === basePath || (basePath !== '/dashboard' && pathname.startsWith(basePath))
   }
 
   const isSectionActive = (section) => {

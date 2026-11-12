@@ -40,6 +40,7 @@ export const DEFAULT_PERMISSIONS = [
   // ==================== 3. HR ====================
   { id: 301, key: 'hr_employee', label: 'Employee Data', group: 'hr' },
   { id: 311, key: 'hr_attendance', label: 'Attendance Management', group: 'hr' },
+  { id: 316, key: 'hr_geofencing', label: 'Geofencing & Lokasi (HO & Area Sales)', group: 'hr' },
   { id: 302, key: 'hr_leave', label: 'Leave Management', group: 'hr' },
   { id: 313, key: 'hr_leave_report', label: 'Leave Report', group: 'hr' },
   { id: 314, key: 'hr_overtime', label: 'Overtime Management', group: 'hr' },
@@ -109,10 +110,8 @@ const PERM_ALIASES = {
   hr_leave_approve: 'hr_leave',
   hr_recruitment_view: 'hr_recruitment',
   hr_payroll_view: 'hr_payroll',
-  hr_payroll_ho_calculator: 'hr_payroll',
-  hr_payroll_odoo_sync: 'hr_payroll',
-  hr_payroll_setup: 'hr_payroll',
   hr_org_view: 'hr_org_chart',
+  hr_geofencing_view: 'hr_geofencing',
   mss_team_view: 'mss_attendance',
   mss_leave_approve: 'mss_leave',
   mss_performance_view: 'mss_performance',
@@ -173,6 +172,7 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     ...LMS_KEYS,
     'hr_employee',
     'hr_attendance',
+    'hr_geofencing',
     'hr_leave',
     'hr_leave_report',
     'hr_overtime',
@@ -180,6 +180,8 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     'hr_onboarding',
     'hr_org_chart',
     'hr_livestream_schedule',
+    'hr_holiday_calendar',
+    'system_work_location',
     ...WORKFLOW_KEYS,
     'workflow_engine_userlists',
   ],
@@ -191,11 +193,13 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     'lms_courses',
     'hr_employee',
     'hr_attendance',
+    'hr_geofencing',
     'hr_leave',
     'hr_leave_report',
     'hr_overtime',
     'hr_org_chart',
     'hr_livestream_schedule',
+    'hr_holiday_calendar',
     'workflow_tasks',
     'workflow_my_requests',
     'workflow_engine_userlists',
@@ -319,19 +323,43 @@ export const usePermissionStore = create(
       },
 
       addPermission: (permission) => {
-        const newId = Math.max(0, ...get().permissions.map(p => p.id || 0)) + 1
-        set(s => ({ permissions: [...s.permissions, { ...permission, id: newId }] }))
+        if (!permission || !permission.key) return
+        const exists = get().permissions.some(p => p.key === permission.key)
+        if (exists) {
+          set(s => ({
+            permissions: s.permissions.map(p =>
+              p.key === permission.key
+                ? { ...p, label: permission.label || p.label, group: permission.group || p.group }
+                : p
+            ),
+          }))
+          return
+        }
+        const newId = permission.id || Math.max(0, ...get().permissions.map(p => p.id || 0)) + 1
+        set(s => {
+          const updatedPerms = [...s.permissions, { ...permission, id: newId }]
+          return {
+            permissions: updatedPerms,
+            rolePermissions: {
+              ...s.rolePermissions,
+              superadmin: updatedPerms.map(p => p.key),
+            },
+          }
+        })
       },
 
-      deletePermission: (id) => {
-        const perm = get().permissions.find(p => p.id === id)
+      deletePermission: (idOrKey) => {
+        const perm = get().permissions.find(p => p.id === idOrKey || p.key === idOrKey)
         if (!perm) return
         set(s => {
           const newRolePerms = {}
           Object.keys(s.rolePermissions).forEach(role => {
-            newRolePerms[role] = s.rolePermissions[role].filter(k => k !== perm.key)
+            newRolePerms[role] = (s.rolePermissions[role] || []).filter(k => k !== perm.key)
           })
-          return { permissions: s.permissions.filter(p => p.id !== id), rolePermissions: newRolePerms }
+          return {
+            permissions: s.permissions.filter(p => p.id !== perm.id && p.key !== perm.key),
+            rolePermissions: newRolePerms,
+          }
         })
       },
 
@@ -350,6 +378,143 @@ export const usePermissionStore = create(
               superadmin: updated.map(p => p.key),
             }
           }))
+        }
+      },
+
+      // Sinkronkan otomatis seluruh sub-menu dari useMenuStore ke daftar permissions
+      syncFromMenus: (menus = []) => {
+        if (!Array.isArray(menus) || menus.length === 0) return 0
+        const validGroupKeys = new Set(PERMISSION_GROUPS.map(g => g.key))
+
+        const resolveRootGroup = (menuItem) => {
+          let curr = menuItem
+          let safety = 0
+          while (curr?.parentId && safety < 10) {
+            const parent = menus.find(m => m.id === curr.parentId)
+            if (!parent) break
+            curr = parent
+            safety++
+          }
+          if (curr?.key && validGroupKeys.has(curr.key)) {
+            return curr.key
+          }
+          return 'sysadmin'
+        }
+
+        const currentPerms = [...(get().permissions || [])]
+        const existingKeys = new Set(currentPerms.map(p => p.key))
+        const newRolePerms = { ...get().rolePermissions }
+        let addedCount = 0
+
+        // 1. Pastikan semua DEFAULT_PERMISSIONS ada
+        DEFAULT_PERMISSIONS.forEach(dp => {
+          if (!existingKeys.has(dp.key)) {
+            currentPerms.push(dp)
+            existingKeys.add(dp.key)
+            addedCount++
+          }
+        })
+
+        // 2. Pastikan semua sub-menu dari menus masuk ke permissions
+        menus.forEach(m => {
+          if (!m.parentId && m.key !== 'dashboard') return
+          const defPerm = DEFAULT_PERMISSIONS.find(
+            dp => dp.key === m.permissionKey || dp.key === m.key?.replace(/-/g, '_')
+          )
+          const permKey = m.permissionKey || defPerm?.key || m.key?.replace(/-/g, '_')
+          if (!permKey) return
+
+          const groupKey = defPerm?.group || resolveRootGroup(m)
+
+          if (!existingKeys.has(permKey)) {
+            const newId = m.id || Math.max(0, ...currentPerms.map(p => p.id || 0)) + 1
+            currentPerms.push({
+              id: newId,
+              key: permKey,
+              label: m.label,
+              group: groupKey,
+              isCustom: !defPerm,
+            })
+            existingKeys.add(permKey)
+            addedCount++
+
+            // Otomatis berikan akses awal ke role yang tercantum pada menu.roles
+            let menuRoles = []
+            try {
+              menuRoles = typeof m.roles === 'string' ? JSON.parse(m.roles) : (Array.isArray(m.roles) ? m.roles : [])
+            } catch {}
+
+            if (menuRoles.includes('*')) {
+              Object.keys(newRolePerms).forEach(rKey => {
+                if (!newRolePerms[rKey].includes(permKey)) {
+                  newRolePerms[rKey] = [...newRolePerms[rKey], permKey]
+                }
+              })
+            } else {
+              menuRoles.forEach(rKey => {
+                if (newRolePerms[rKey] && !newRolePerms[rKey].includes(permKey)) {
+                  newRolePerms[rKey] = [...newRolePerms[rKey], permKey]
+                }
+              })
+            }
+          }
+        })
+
+        if (addedCount > 0) {
+          newRolePerms.superadmin = currentPerms.map(p => p.key)
+          set({
+            permissions: currentPerms,
+            rolePermissions: newRolePerms,
+          })
+        }
+        return addedCount
+      },
+
+      // Sinkronkan rolePermissions dari tabel Role di PostgreSQL (/api/roles)
+      syncRolesFromBackend: async () => {
+        try {
+          const res = await fetch('/api/roles')
+          if (!res.ok) return
+          const dbRoles = await res.json()
+          if (!Array.isArray(dbRoles) || dbRoles.length === 0) return
+
+          set(s => {
+            const nextRolePerms = { ...s.rolePermissions }
+            let changed = false
+
+            dbRoles.forEach(r => {
+              const rKey = (r.key || r.name || '').toLowerCase()
+              if (!rKey || rKey === 'superadmin') return
+              if (Array.isArray(r.permissions) && r.permissions.length > 0) {
+                nextRolePerms[rKey] = r.permissions
+                changed = true
+              }
+            })
+
+            // Pastikan fitur-fitur wajib (overtime & geofencing) tetap ter-assign untuk role standar jika belum ada
+            const requiredRoleFeatures = {
+              mss_approve_overtime: ['manager', 'supervisor', 'hr_manager', 'superadmin'],
+              ess_overtime: ['staff', 'employee', 'senior_staff', 'supervisor', 'manager', 'hr', 'hr_officer', 'hr_manager', 'superadmin'],
+              hr_overtime: ['hr', 'hr_officer', 'hr_manager', 'superadmin'],
+              hr_geofencing: ['hr', 'hr_officer', 'hr_manager', 'superadmin'],
+              hr_holiday_calendar: ['hr', 'hr_officer', 'hr_manager', 'superadmin'],
+              system_work_location: ['hr', 'hr_manager', 'superadmin'],
+            }
+
+            Object.entries(requiredRoleFeatures).forEach(([permKey, roles]) => {
+              roles.forEach(role => {
+                if (nextRolePerms[role] && !nextRolePerms[role].includes(permKey)) {
+                  nextRolePerms[role] = [...nextRolePerms[role], permKey]
+                  changed = true
+                }
+              })
+            })
+
+            nextRolePerms.superadmin = (s.permissions || DEFAULT_PERMISSIONS).map(p => p.key)
+            return changed ? { rolePermissions: nextRolePerms } : s
+          })
+        } catch (e) {
+          console.warn('[usePermissionStore] Gagal syncRolesFromBackend:', e?.message)
         }
       },
 
@@ -395,14 +560,17 @@ export const usePermissionStore = create(
         // Superadmin always has access to all permissions
         mergedRolePerms.superadmin = allKeys
 
-        // Ensure roles have appropriate overtime permissions
-        const overtimeRoles = {
+        // Ensure roles have appropriate overtime & geofencing permissions
+        const requiredRoleFeatures = {
           mss_approve_overtime: ['manager', 'supervisor', 'hr_manager', 'superadmin'],
           ess_overtime: ['staff', 'employee', 'senior_staff', 'supervisor', 'manager', 'hr', 'hr_officer', 'hr_manager', 'superadmin'],
           hr_overtime: ['hr', 'hr_officer', 'hr_manager', 'superadmin'],
+          hr_geofencing: ['hr', 'hr_officer', 'hr_manager', 'superadmin'],
+          hr_holiday_calendar: ['hr', 'hr_officer', 'hr_manager', 'superadmin'],
+          system_work_location: ['hr', 'hr_manager', 'superadmin'],
         }
 
-        Object.entries(overtimeRoles).forEach(([permKey, roles]) => {
+        Object.entries(requiredRoleFeatures).forEach(([permKey, roles]) => {
           roles.forEach(role => {
             if (mergedRolePerms[role] && !mergedRolePerms[role].includes(permKey)) {
               mergedRolePerms[role] = [...mergedRolePerms[role], permKey]
