@@ -84,7 +84,16 @@ export const useLeaveStore = create(persist((set, get) => ({
 
   updateStatus: (id, status) =>
     set((s) => ({
-      leaves: s.leaves.map((l) => (l.id === id ? { ...l, status } : l)),
+      leaves: s.leaves.map((l) => {
+        if (l.id !== id) return l
+        const steps = (l.steps || []).map(step => {
+          if (status === 'Rejected' && step.status === 'Pending') {
+            return { ...step, status: 'Rejected' }
+          }
+          return step
+        })
+        return { ...l, status, steps }
+      }),
     })),
 
   // Approve a specific step

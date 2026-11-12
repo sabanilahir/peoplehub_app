@@ -230,6 +230,27 @@ export async function POST(request, props) {
               },
             })
           }
+
+          // Sinkronkan juga ke AppState hcm-leave-v1 agar cache Zustand di database selalu konsisten
+          try {
+            const stateRow = await prisma.appState.findUnique({ where: { key: 'hcm-leave-v1' } })
+            if (stateRow?.value) {
+              const sData = JSON.parse(stateRow.value)
+              if (Array.isArray(sData?.state?.leaves)) {
+                const sIdx = sData.state.leaves.findIndex((l) => l.id === existingLeave.id)
+                if (sIdx >= 0) {
+                  sData.state.leaves[sIdx].status = finalLeaveStatus
+                  sData.state.leaves[sIdx].steps = currentSteps
+                  await prisma.appState.update({
+                    where: { key: 'hcm-leave-v1' },
+                    data: { value: JSON.stringify(sData) },
+                  })
+                }
+              }
+            }
+          } catch (syncErr) {
+            console.warn('[flowable task complete] Failed to sync AppState hcm-leave-v1:', syncErr.message)
+          }
         }
       }
     } else {

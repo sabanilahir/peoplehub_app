@@ -3,6 +3,7 @@ import Icon from '@/components/ui/Icon'
 import { useState, useEffect } from 'react'
 import { useAuthStore } from '@/store/authStore'
 import { useEmployeeStore } from '@/store/employeeStore'
+import { useLeaveStore } from '@/store/leaveStore'
 import { daysBetween } from '@/utils/dateUtils'
 import WorkflowMonitor from '@/components/WorkflowMonitor'
 import { useT } from '@/store/languageStore'
@@ -147,6 +148,9 @@ export default function ApproveLeavePage() {
           `Permohonan cuti ${task.applicantName || getTaskVar(task, 'employeeName')} berhasil disetujui!`,
           'success'
         )
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('leave-status-updated', { detail: { action: 'approve' } }))
+        }
         await Promise.all([loadFlowableTasks(), loadLeaves()])
       } else {
         flashToast(data.error || 'Gagal menyetujui tugas workflow', 'error')
@@ -184,6 +188,9 @@ export default function ApproveLeavePage() {
         flashToast(`Permohonan cuti ${task.applicantName || getTaskVar(task, 'employeeName')} ditolak.`, 'warning')
         setFlowableRejectId(null)
         setFlowableRejectNote('')
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('leave-status-updated', { detail: { action: 'reject' } }))
+        }
         await Promise.all([loadFlowableTasks(), loadLeaves()])
       } else {
         flashToast(data.error || 'Gagal menolak tugas workflow', 'error')

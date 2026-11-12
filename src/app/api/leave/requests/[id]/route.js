@@ -4,6 +4,29 @@ import { deleteProcessInstance, getTasks, completeTask } from '@/lib/flowable/cl
 
 export const dynamic = 'force-dynamic'
 
+// Helper untuk sinkronisasi record hcm-leave-v1 di AppState
+async function syncAppStateLeave(leaveId, status, steps) {
+  try {
+    const row = await prisma.appState.findUnique({ where: { key: 'hcm-leave-v1' } })
+    if (row?.value) {
+      const data = JSON.parse(row.value)
+      if (Array.isArray(data?.state?.leaves)) {
+        const idx = data.state.leaves.findIndex((l) => l.id === Number(leaveId))
+        if (idx !== -1) {
+          data.state.leaves[idx].status = status
+          if (steps) data.state.leaves[idx].steps = steps
+          await prisma.appState.update({
+            where: { key: 'hcm-leave-v1' },
+            data: { value: JSON.stringify(data) },
+          })
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[syncAppStateLeave warning]:', e.message)
+  }
+}
+
 export async function GET(req, { params }) {
   try {
     const { id } = await params
@@ -62,6 +85,7 @@ export async function PUT(req, { params }) {
         where: { id: Number(id) },
         data: { status: 'Withdrawn' },
       })
+      await syncAppStateLeave(id, 'Withdrawn', null)
       return Response.json({ success: true, data: updated })
     }
 
@@ -115,6 +139,7 @@ export async function PUT(req, { params }) {
           steps,
         },
       })
+      await syncAppStateLeave(id, 'Rejected', steps)
       return Response.json({ success: true, data: updated })
     }
 
@@ -144,6 +169,7 @@ export async function PUT(req, { params }) {
               steps,
             },
           })
+          await syncAppStateLeave(id, 'Pending', steps)
           return Response.json({ success: true, data: updated })
         }
       }
@@ -156,6 +182,7 @@ export async function PUT(req, { params }) {
           steps,
         },
       })
+      await syncAppStateLeave(id, 'Approved', steps)
       return Response.json({ success: true, data: updated })
     }
   } catch (error) {

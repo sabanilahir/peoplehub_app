@@ -190,6 +190,9 @@ function DetailPopup({ notif, currentUser, employees, leaves, onboardings,
           console.warn('[DetailPopup] PUT /api/leave/requests error:', apiErr)
         }
         leaveApprove(leave.id, pendingStep?.level, currentUser.id, currentUser.name, note)
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('leave-status-updated', { detail: { leaveId: leave.id, status: 'Approved' } }))
+        }
         onLeaveUpdated?.()
       }
       if (ob) {
@@ -221,6 +224,9 @@ function DetailPopup({ notif, currentUser, employees, leaves, onboardings,
           console.warn('[DetailPopup] PUT /api/leave/requests error:', apiErr)
         }
         leaveReject(leave.id, pendingStep?.level, currentUser.id, currentUser.name, note)
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('leave-status-updated', { detail: { leaveId: leave.id, status: 'Rejected' } }))
+        }
         onLeaveUpdated?.()
       }
       if (ob) {
@@ -461,7 +467,20 @@ export default function NotificationBell() {
   useEffect(() => {
     refreshDbLeaves()
     const timer = setInterval(refreshDbLeaves, 30000)
-    return () => clearInterval(timer)
+
+    const onLeaveUpdated = () => {
+      refreshDbLeaves()
+    }
+    if (typeof window !== 'undefined') {
+      window.addEventListener('leave-status-updated', onLeaveUpdated)
+    }
+
+    return () => {
+      clearInterval(timer)
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('leave-status-updated', onLeaveUpdated)
+      }
+    }
   }, [currentUser?.id, currentUser?.role])
 
   const leaves = useMemo(() => {
@@ -501,7 +520,9 @@ export default function NotificationBell() {
         })
       })
 
+    // Hanya pengajuan cuti yang masih berstatus 'Pending' secara keseluruhan yang memerlukan tindakan persetujuan
     leaves
+      .filter(l => l.status === 'Pending')
       .filter(l => {
         const ps = (l.steps || []).find(s => s.status === 'Pending')
         return ps && canActLeave(ps, l, currentUser, employees)
