@@ -54,6 +54,7 @@ export const DEFAULT_PERMISSIONS = [
   { id: 308, key: 'hr_org_chart', label: 'Org Chart', group: 'hr' },
   { id: 309, key: 'hr_livestream_schedule', label: 'Livestream Schedule', group: 'hr' },
   { id: 310, key: 'hr_livestream_payroll', label: 'Livestream Payroll', group: 'hr' },
+  { id: 315, key: 'hr_holiday_calendar', label: 'Kalender Hari Libur', group: 'hr' },
 
   // ==================== 4. MSS ====================
   { id: 401, key: 'mss_attendance', label: 'Team Attendance', group: 'mss' },
@@ -336,6 +337,22 @@ export const usePermissionStore = create(
 
       reset: () => set({ permissions: DEFAULT_PERMISSIONS, rolePermissions: DEFAULT_ROLE_PERMISSIONS }),
 
+      syncDefaults: () => {
+        const current = get().permissions || []
+        const currentKeys = new Set(current.map(p => p.key))
+        const missing = DEFAULT_PERMISSIONS.filter(p => !currentKeys.has(p.key))
+        if (missing.length > 0) {
+          const updated = [...current, ...missing]
+          set(s => ({
+            permissions: updated,
+            rolePermissions: {
+              ...s.rolePermissions,
+              superadmin: updated.map(p => p.key),
+            }
+          }))
+        }
+      },
+
       syncToDatabase: async () => {
         try {
           const perms = get().permissions
@@ -350,6 +367,56 @@ export const usePermissionStore = create(
     {
       name: 'hcm-permissions-v2',
       storage: createJSONStorage(() => dbStorage),
+      merge: (persistedState, currentState) => {
+        if (!persistedState || typeof persistedState !== 'object') {
+          return currentState
+        }
+
+        const persistedPerms = Array.isArray(persistedState.permissions)
+          ? [...persistedState.permissions]
+          : []
+        const existingKeys = new Set(persistedPerms.map(p => p.key))
+
+        // Auto-merge any missing permissions from DEFAULT_PERMISSIONS
+        DEFAULT_PERMISSIONS.forEach(defPerm => {
+          if (!existingKeys.has(defPerm.key)) {
+            persistedPerms.push(defPerm)
+            existingKeys.add(defPerm.key)
+          }
+        })
+
+        // Auto-merge role permissions
+        const mergedRolePerms = {
+          ...DEFAULT_ROLE_PERMISSIONS,
+          ...(persistedState.rolePermissions || {})
+        }
+
+        const allKeys = persistedPerms.map(p => p.key)
+        // Superadmin always has access to all permissions
+        mergedRolePerms.superadmin = allKeys
+
+        // Ensure roles have appropriate overtime permissions
+        const overtimeRoles = {
+          mss_approve_overtime: ['manager', 'supervisor', 'hr_manager', 'superadmin'],
+          ess_overtime: ['staff', 'employee', 'senior_staff', 'supervisor', 'manager', 'hr', 'hr_officer', 'hr_manager', 'superadmin'],
+          hr_overtime: ['hr', 'hr_officer', 'hr_manager', 'superadmin'],
+        }
+
+        Object.entries(overtimeRoles).forEach(([permKey, roles]) => {
+          roles.forEach(role => {
+            if (mergedRolePerms[role] && !mergedRolePerms[role].includes(permKey)) {
+              mergedRolePerms[role] = [...mergedRolePerms[role], permKey]
+            }
+          })
+        })
+
+        return {
+          ...currentState,
+          ...persistedState,
+          permissions: persistedPerms,
+          rolePermissions: mergedRolePerms,
+        }
+      }
     }
   )
 )

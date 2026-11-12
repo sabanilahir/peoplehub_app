@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Shield, ChevronDown, ChevronRight, Plus, X, Key, RotateCcw, Check, Sparkles } from 'lucide-react'
-import { usePermissionStore, PERMISSION_GROUPS } from '@/store/permissionStore'
+import { usePermissionStore, PERMISSION_GROUPS, DEFAULT_PERMISSIONS } from '@/store/permissionStore'
 import { useMenuStore, ICON_MAP } from '@/store/menuStore'
 import { useRoleStore } from '@/store/roleStore'
 
@@ -92,12 +92,37 @@ function PermissionContent() {
     return getRolePermissions(selectedRole)
   }, [rolePermissions, selectedRole, getRolePermissions])
 
-  // Auto-upgrade jika data lokal di browser masih versi lama yang kurang dari 35 item
+  // Auto-reconcile jika ada permission default (seperti overtime) yang belum ada di local store
   useEffect(() => {
-    if (typeof window !== 'undefined' && permissions && permissions.length < 35) {
-      reset()
+    if (!permissions || !Array.isArray(permissions)) return
+    const currentKeys = new Set(permissions.map((p) => p.key))
+    const missing = DEFAULT_PERMISSIONS.filter((p) => !currentKeys.has(p.key))
+    if (missing.length > 0) {
+      missing.forEach((p) => addPermission(p))
     }
-  }, [permissions, reset])
+  }, [permissions, addPermission])
+
+  // Sinkronkan permission dari database backend saat pertama kali load
+  useEffect(() => {
+    fetch('/api/permissions')
+      .then((res) => (res.ok ? res.json() : []))
+      .then((dbPerms) => {
+        if (!Array.isArray(dbPerms)) return
+        const currentKeys = new Set(permissions.map((p) => p.key))
+        dbPerms.forEach((dp) => {
+          if (dp.key && !currentKeys.has(dp.key)) {
+            addPermission({
+              id: dp.id,
+              key: dp.key,
+              label: dp.name || dp.label || dp.key,
+              group: dp.group || dp.module || 'ess',
+            })
+            currentKeys.add(dp.key)
+          }
+        })
+      })
+      .catch((err) => console.warn('[PermissionPage] Gagal sinkron DB permissions:', err))
+  }, [])
 
   // Simpan perubahan permissions ke PostgreSQL backend
   const persistPermissionsToBackend = async (roleKey, updatedPerms) => {
@@ -166,11 +191,45 @@ function PermissionContent() {
     }
   }
 
-  // Sinkronkan otomatis permission dari item menu kustom jika belum ada
-  const handleSyncFromMenus = () => {
+  // Sinkronkan otomatis permission dari default sistem, database, dan menu kustom
+  const handleSyncFromMenus = async () => {
     let addedCount = 0
     const existingKeys = new Set(permissions.map((p) => p.key))
 
+    // 1. Dari DEFAULT_PERMISSIONS (termasuk Apply Overtime, Approve Overtime, Overtime Management)
+    DEFAULT_PERMISSIONS.forEach((dp) => {
+      if (!existingKeys.has(dp.key)) {
+        addPermission(dp)
+        existingKeys.add(dp.key)
+        addedCount++
+      }
+    })
+
+    // 2. Dari tabel database /api/permissions
+    try {
+      const res = await fetch('/api/permissions')
+      if (res.ok) {
+        const dbPerms = await res.json()
+        if (Array.isArray(dbPerms)) {
+          dbPerms.forEach((dp) => {
+            if (dp.key && !existingKeys.has(dp.key)) {
+              addPermission({
+                id: dp.id,
+                key: dp.key,
+                label: dp.name || dp.label || dp.key,
+                group: dp.group || dp.module || 'ess',
+              })
+              existingKeys.add(dp.key)
+              addedCount++
+            }
+          })
+        }
+      }
+    } catch (e) {
+      console.warn('[PermissionPage] Sync API error:', e)
+    }
+
+    // 3. Dari menus
     menus.forEach((m) => {
       if (!m.parentId) return // section root
       const permKey = m.permissionKey || m.key.replace(/-/g, '_')
@@ -188,10 +247,11 @@ function PermissionContent() {
       }
     })
 
+    triggerNotice()
     alert(
       addedCount > 0
-        ? `Berhasil menyinkronkan ${addedCount} sub-menu baru ke permission!`
-        : 'Semua sub-menu sudah tersinkronisasi.'
+        ? `Berhasil menyinkronkan ${addedCount} sub-menu & permission baru!`
+        : 'Semua sub-menu dan permission sudah tersinkronisasi.'
     )
   }
 
