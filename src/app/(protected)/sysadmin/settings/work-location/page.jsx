@@ -2,6 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
+import { useEmployeeStore } from '@/store/employeeStore'
 import {
   PageHeader,
   StatCard,
@@ -25,6 +26,7 @@ import {
   Video,
   Search,
   Navigation,
+  Compass,
   ExternalLink,
   ShieldCheck,
   Check,
@@ -48,10 +50,31 @@ function WorkLocationSettingsContent() {
   const [saving, setSaving] = useState(false)
 
   // Geofencing Target Locations State
+  const storeEmployees = useEmployeeStore((s) => s.employees)
   const [targets, setTargets] = useState([])
   const [loadingTargets, setLoadingTargets] = useState(false)
   const [targetSearch, setTargetSearch] = useState('')
   const [employees, setEmployees] = useState([])
+  const [toastMsg, setToastMsg] = useState(null)
+
+  const showToast = (msg) => {
+    setToastMsg(msg)
+    setTimeout(() => setToastMsg(null), 4000)
+  }
+
+  // Merge API employees with Zustand store employees so dropdown is always populated
+  const availableEmployees = (() => {
+    const map = new Map()
+    ;(storeEmployees || []).forEach((emp) => {
+      if (emp?.id) map.set(String(emp.id), emp)
+    })
+    ;(employees || []).forEach((emp) => {
+      if (emp?.id) map.set(String(emp.id), emp)
+    })
+    return Array.from(map.values()).sort((a, b) =>
+      String(a.name || '').localeCompare(String(b.name || ''))
+    )
+  })()
 
   // Modal Target Create / Edit
   const [showTargetModal, setShowTargetModal] = useState(false)
@@ -136,6 +159,8 @@ function WorkLocationSettingsContent() {
       const data = await res.json()
       if (Array.isArray(data)) {
         setEmployees(data)
+      } else if (Array.isArray(data?.employees)) {
+        setEmployees(data.employees)
       }
     } catch (err) {}
   }
@@ -166,7 +191,7 @@ function WorkLocationSettingsContent() {
           latitude: data.latitude,
           longitude: data.longitude,
         }))
-        alert(`Koordinat ditemukan!\nLat: ${data.latitude}\nLng: ${data.longitude}\nLokasi: ${data.displayName}`)
+        showToast(`✅ Koordinat ditemukan: ${data.latitude}, ${data.longitude}`)
       } else {
         alert(data.error || 'Lokasi tidak ditemukan. Coba tambahkan nama kota/kecamatan.')
       }
@@ -177,12 +202,37 @@ function WorkLocationSettingsContent() {
     }
   }
 
+  // Ambil koordinat GPS dari perangkat saat ini
+  const handleUseCurrentGPS = () => {
+    if (!navigator.geolocation) {
+      alert('Browser Anda tidak mendukung fitur Geolocation GPS')
+      return
+    }
+    setGeocodingLoading(true)
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setTargetForm((prev) => ({
+          ...prev,
+          latitude: Number(pos.coords.latitude.toFixed(6)),
+          longitude: Number(pos.coords.longitude.toFixed(6)),
+        }))
+        setGeocodingLoading(false)
+        showToast(`📍 Koordinat GPS saat ini berhasil diambil (${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)})`)
+      },
+      (err) => {
+        setGeocodingLoading(false)
+        alert('Gagal mengambil lokasi GPS: ' + (err.message || 'Pastikan izin lokasi browser aktif'))
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    )
+  }
+
   // Open Create Target Modal
   const handleOpenTargetCreate = (type = 'sales_distributor') => {
     setTargetForm({
       id: null,
-      code: `DIST-${String(targets.length + 1).padStart(2, '0')}`,
-      name: '',
+      code: type === 'head_office' ? 'HO-MAIN' : `DIST-${String(targets.length + 1).padStart(2, '0')}`,
+      name: type === 'head_office' ? 'Head Office (HO)' : '',
       type,
       employeeId: '',
       employeeName: '',
@@ -201,10 +251,16 @@ function WorkLocationSettingsContent() {
 
   // Open Edit Target Modal
   const handleOpenTargetEdit = (target) => {
+    const existingHo =
+      target.type === 'head_office' && !target.id
+        ? targets.find((t) => t.type === 'head_office')
+        : null
+    const resolvedId = target.id || existingHo?.id || null
+
     setTargetForm({
-      id: target.id,
-      code: target.code || '',
-      name: target.name || '',
+      id: resolvedId,
+      code: target.code || existingHo?.code || (target.type === 'head_office' ? 'HO-MAIN' : ''),
+      name: target.name || (target.type === 'head_office' ? 'Head Office (HO)' : ''),
       type: target.type || 'sales_distributor',
       employeeId: target.employeeId ? String(target.employeeId) : '',
       employeeName: target.employeeName || '',
@@ -215,7 +271,7 @@ function WorkLocationSettingsContent() {
       latitude: target.latitude !== undefined ? target.latitude : '',
       longitude: target.longitude !== undefined ? target.longitude : '',
       radiusMeters: target.radiusMeters || 300,
-      active: target.active,
+      active: target.active !== undefined ? target.active : true,
       notes: target.notes || '',
     })
     setShowTargetModal(true)
@@ -224,34 +280,70 @@ function WorkLocationSettingsContent() {
   // Save Target Location
   const handleSaveTarget = async (e) => {
     e.preventDefault()
-    if (!targetForm.name || targetForm.latitude === '' || targetForm.longitude === '') {
-      alert('Nama lokasi, latitude, dan longitude wajib diisi')
+
+    const resolvedName = (
+      targetForm.name ||
+      targetForm.distributorName ||
+      (targetForm.type === 'head_office' ? 'Head Office (HO)' : '')
+    ).trim()
+
+    const latNum = parseFloat(String(targetForm.latitude).replace(',', '.'))
+    const lngNum = parseFloat(String(targetForm.longitude).replace(',', '.'))
+
+    if (!resolvedName || Number.isNaN(latNum) || Number.isNaN(lngNum)) {
+      alert('Nama lokasi/distributor, latitude, dan longitude wajib diisi dengan format angka yang benar')
       return
     }
 
     try {
       setSavingTarget(true)
-      const url = targetForm.id
-        ? `/api/work-locations/targets/${targetForm.id}`
+
+      // Jika tipe head_office namun targetForm.id kosong, cek apakah sudah ada record head_office di database
+      let targetId = targetForm.id
+      if (!targetId && targetForm.type === 'head_office') {
+        const existingHo = targets.find((t) => t.type === 'head_office')
+        if (existingHo?.id) targetId = existingHo.id
+      }
+
+      const url = targetId
+        ? `/api/work-locations/targets/${targetId}`
         : '/api/work-locations/targets'
-      const method = targetForm.id ? 'PUT' : 'POST'
+      const method = targetId ? 'PUT' : 'POST'
+
+      const payload = {
+        ...targetForm,
+        id: targetId,
+        name: resolvedName,
+        distributorName:
+          targetForm.type === 'head_office'
+            ? targetForm.distributorName || 'Kantor Pusat Head Office'
+            : targetForm.distributorName || resolvedName,
+        latitude: latNum,
+        longitude: lngNum,
+        radiusMeters: Number(targetForm.radiusMeters) || 300,
+      }
 
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(targetForm),
+        body: JSON.stringify(payload),
       })
       const data = await res.json()
 
       if (data.success) {
         setShowTargetModal(false)
-        fetchTargets()
+        await fetchTargets()
+        showToast(
+          targetId
+            ? `✅ Titik lokasi "${resolvedName}" berhasil diperbarui!`
+            : `✅ Titik lokasi baru "${resolvedName}" berhasil ditambahkan!`
+        )
       } else {
         alert(data.error || 'Gagal menyimpan target lokasi')
       }
     } catch (err) {
       console.error(err)
-      alert('Terjadi kesalahan jaringan')
+      alert('Terjadi kesalahan jaringan saat menyimpan titik lokasi')
     } finally {
       setSavingTarget(false)
     }
@@ -699,6 +791,16 @@ function WorkLocationSettingsContent() {
       </>
       )}
 
+      {/* ── Toast Notification Banner ── */}
+      {toastMsg && (
+        <div className='rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-semibold text-emerald-800 flex items-center justify-between shadow-xs'>
+          <span>{toastMsg}</span>
+          <button onClick={() => setToastMsg(null)} className='text-emerald-600 hover:text-emerald-900'>
+            <X className='w-4 h-4' />
+          </button>
+        </div>
+      )}
+
       {/* ── TAB 2: GEOFENCING & TITIK LOKASI (HO & AREA SALES) ── */}
       {activeTab === 'geofencing' && (
         <div className='space-y-6'>
@@ -708,7 +810,7 @@ function WorkLocationSettingsContent() {
               icon='📍'
               label='Total Titik Lokasi'
               value={`${targets.length} Titik`}
-              hint='1 Head Office + 22 Distributor Sales'
+              hint={`1 Head Office + ${targets.filter((t) => t.type !== 'head_office').length} Distributor Sales`}
               tone='brand'
             />
             <StatCard
@@ -729,7 +831,7 @@ function WorkLocationSettingsContent() {
               icon='👥'
               label='Area Sales Terhubung'
               value={`${new Set(targets.filter(t => t.employeeId).map(t => t.employeeId)).size} Karyawan`}
-              hint='Dept: Sales Offline (22 Titik)'
+              hint={`Dept: Sales Offline (${targets.filter((t) => t.type !== 'head_office').length} Titik)`}
               tone='green'
             />
           </div>
@@ -737,8 +839,13 @@ function WorkLocationSettingsContent() {
           {/* Head Office (HO) Static Target Card */}
           {(() => {
             const ho = targets.find((t) => t.type === 'head_office') || {
+              type: 'head_office',
+              code: 'HO-MAIN',
               name: 'Head Office (HO)',
+              distributorName: 'Kantor Pusat Head Office',
               address: 'Jl. Terusan Bandengan Ruko Harmoni Mas Blok E No. 26, Pejagalan, Penjaringan, Jakarta Utara',
+              city: 'Jakarta Utara',
+              province: 'DKI Jakarta',
               latitude: -6.1373,
               longitude: 106.7840,
               radiusMeters: 300,
@@ -782,15 +889,14 @@ function WorkLocationSettingsContent() {
                       <ExternalLink className='w-3.5 h-3.5 text-gray-500' />
                       Buka di Google Maps
                     </a>
-                    {ho.id && (
-                      <button
-                        onClick={() => handleOpenTargetEdit(ho)}
-                        className='inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-teal-600 text-white text-xs font-semibold hover:bg-teal-700 transition shadow-2xs'
-                      >
-                        <Edit2 className='w-3.5 h-3.5' />
-                        Ubah Titik HO
-                      </button>
-                    )}
+                    <button
+                      type='button'
+                      onClick={() => handleOpenTargetEdit(ho)}
+                      className='inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-teal-600 text-white text-xs font-semibold hover:bg-teal-700 transition shadow-2xs cursor-pointer'
+                    >
+                      <Edit2 className='w-3.5 h-3.5' />
+                      Ubah Titik HO
+                    </button>
                   </div>
                 </div>
               </div>
@@ -1302,28 +1408,54 @@ function WorkLocationSettingsContent() {
               </div>
 
               {/* Nama Lokasi / Titik */}
-              <div className='grid grid-cols-2 gap-3'>
+              <div className='grid grid-cols-1 sm:grid-cols-2 gap-3'>
                 <div>
-                  <label className='font-semibold text-gray-700'>Nama Titik Lokasi / Label:</label>
+                  <label className='font-semibold text-gray-700'>
+                    {targetForm.type === 'head_office' ? 'Nama Kantor Pusat (HO):' : 'Nama Titik Lokasi / Label:'}
+                  </label>
                   <input
                     type='text'
                     value={targetForm.name}
                     onChange={(e) => setTargetForm({ ...targetForm, name: e.target.value })}
-                    placeholder='Contoh: PT Rezeki Kita (Banjarmasin)'
+                    placeholder={
+                      targetForm.type === 'head_office'
+                        ? 'Contoh: Head Office (HO)'
+                        : 'Contoh: PT Rezeki Kita (Banjarmasin)'
+                    }
                     required
                     className='mt-1 w-full rounded-xl border border-gray-300 p-2 text-xs'
                   />
                 </div>
-                <div>
-                  <label className='font-semibold text-gray-700'>Nama Distributor Resmi:</label>
-                  <input
-                    type='text'
-                    value={targetForm.distributorName}
-                    onChange={(e) => setTargetForm({ ...targetForm, distributorName: e.target.value })}
-                    placeholder='Contoh: PT Rezeki Kita'
-                    className='mt-1 w-full rounded-xl border border-gray-300 p-2 text-xs'
-                  />
-                </div>
+                {targetForm.type === 'sales_distributor' ? (
+                  <div>
+                    <label className='font-semibold text-gray-700'>Nama Distributor Resmi:</label>
+                    <input
+                      type='text'
+                      value={targetForm.distributorName}
+                      onChange={(e) => {
+                        const val = e.target.value
+                        setTargetForm((prev) => ({
+                          ...prev,
+                          distributorName: val,
+                          name: !prev.id && (!prev.name || prev.name === prev.distributorName) ? val : prev.name,
+                        }))
+                      }}
+                      placeholder='Contoh: PT Rezeki Kita'
+                      className='mt-1 w-full rounded-xl border border-gray-300 p-2 text-xs'
+                    />
+                  </div>
+                ) : (
+                  <div>
+                    <label className='font-semibold text-gray-700'>Kode Lokasi HO:</label>
+                    <input
+                      type='text'
+                      value={targetForm.code || 'HO-MAIN'}
+                      onChange={(e) => setTargetForm({ ...targetForm, code: e.target.value })}
+                      placeholder='HO-MAIN'
+                      className='mt-1 w-full rounded-xl border border-gray-300 p-2 text-xs font-mono bg-gray-50'
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Karyawan yang Ditugaskan (jika tipe sales) */}
@@ -1334,7 +1466,7 @@ function WorkLocationSettingsContent() {
                     value={targetForm.employeeId}
                     onChange={(e) => {
                       const empId = e.target.value
-                      const selectedEmp = employees.find((emp) => String(emp.id) === String(empId))
+                      const selectedEmp = availableEmployees.find((emp) => String(emp.id) === String(empId))
                       setTargetForm({
                         ...targetForm,
                         employeeId: empId,
@@ -1344,7 +1476,7 @@ function WorkLocationSettingsContent() {
                     className='mt-1 w-full rounded-xl border border-gray-300 p-2 text-xs bg-white'
                   >
                     <option value=''>-- Pilih Karyawan Sales --</option>
-                    {employees.map((emp) => (
+                    {availableEmployees.map((emp) => (
                       <option key={emp.id} value={emp.id}>
                         {emp.name} (ID: {emp.id}) — {emp.dept || 'Sales'} ({emp.location || 'Others'})
                       </option>
@@ -1364,7 +1496,7 @@ function WorkLocationSettingsContent() {
                     type='text'
                     value={targetForm.city}
                     onChange={(e) => setTargetForm({ ...targetForm, city: e.target.value })}
-                    placeholder='Contoh: Banjarmasin / Gambut'
+                    placeholder={targetForm.type === 'head_office' ? 'Contoh: Jakarta Utara' : 'Contoh: Banjarmasin / Gambut'}
                     className='mt-1 w-full rounded-xl border border-gray-300 p-2 text-xs'
                   />
                 </div>
@@ -1374,7 +1506,7 @@ function WorkLocationSettingsContent() {
                     type='text'
                     value={targetForm.province}
                     onChange={(e) => setTargetForm({ ...targetForm, province: e.target.value })}
-                    placeholder='Contoh: Kalimantan Selatan'
+                    placeholder={targetForm.type === 'head_office' ? 'Contoh: DKI Jakarta' : 'Contoh: Kalimantan Selatan'}
                     className='mt-1 w-full rounded-xl border border-gray-300 p-2 text-xs'
                   />
                 </div>
@@ -1382,23 +1514,36 @@ function WorkLocationSettingsContent() {
 
               {/* Alamat Lengkap */}
               <div>
-                <div className='flex items-center justify-between'>
-                  <label className='font-semibold text-gray-700'>Alamat Kantor Distributor:</label>
-                  <button
-                    type='button'
-                    onClick={() => handleGeocode(targetForm.address || `${targetForm.distributorName} ${targetForm.city}`)}
-                    disabled={geocodingLoading}
-                    className='text-[11px] font-bold text-teal-700 hover:text-teal-900 flex items-center gap-1'
-                  >
-                    {geocodingLoading ? <Loader2 className='w-3 h-3 animate-spin' /> : <Compass className='w-3 h-3' />}
-                    Cari Koordinat dari Alamat
-                  </button>
+                <div className='flex flex-wrap items-center justify-between gap-2'>
+                  <label className='font-semibold text-gray-700'>
+                    {targetForm.type === 'head_office' ? 'Alamat Kantor Pusat HO:' : 'Alamat Kantor Distributor:'}
+                  </label>
+                  <div className='flex items-center gap-3'>
+                    <button
+                      type='button'
+                      onClick={handleUseCurrentGPS}
+                      disabled={geocodingLoading}
+                      className='text-[11px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 cursor-pointer'
+                    >
+                      <Navigation className='w-3 h-3' />
+                      Ambil GPS Saat Ini
+                    </button>
+                    <button
+                      type='button'
+                      onClick={() => handleGeocode(targetForm.address || `${targetForm.distributorName || targetForm.name} ${targetForm.city}`)}
+                      disabled={geocodingLoading}
+                      className='text-[11px] font-bold text-teal-700 hover:text-teal-900 flex items-center gap-1 cursor-pointer'
+                    >
+                      {geocodingLoading ? <Loader2 className='w-3 h-3 animate-spin' /> : <Compass className='w-3 h-3' />}
+                      Cari Koordinat dari Alamat
+                    </button>
+                  </div>
                 </div>
                 <textarea
                   rows={2}
                   value={targetForm.address}
                   onChange={(e) => setTargetForm({ ...targetForm, address: e.target.value })}
-                  placeholder='Masukkan alamat lengkap kantor distributor...'
+                  placeholder='Masukkan alamat lengkap kantor...'
                   required
                   className='mt-1 w-full rounded-xl border border-gray-300 p-2 text-xs'
                 />
