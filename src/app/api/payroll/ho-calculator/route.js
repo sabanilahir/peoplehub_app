@@ -2,6 +2,7 @@
 import { prisma } from '@/lib/prisma'
 import { getCutoffDateRange } from '@/lib/odooPayrollService'
 import { getWorkingDaysFromDb, calculateWorkingDays } from '@/lib/workdayCalculator'
+import { syncOdooWages } from '@/lib/odooWageService'
 import {
   calcHoOvertimeRate,
   calcHoOvertimeFee,
@@ -374,8 +375,17 @@ export async function GET(req) {
  */
 export async function POST(req) {
   try {
-    const body = await req.json()
+    const body = await req.json().catch(() => ({}))
     const { action } = body
+
+    if (action === 'sync_odoo_wages') {
+      const result = await syncOdooWages()
+      return Response.json({
+        success: true,
+        message: `Sinkronisasi selesai: ${result.updatedCount} karyawan diperbarui gajinya dari Odoo Wage (${result.unchangedCount} tetap).`,
+        ...result,
+      })
+    }
 
     return Response.json({ success: true, message: `Action ${action || 'default'} diterima.` })
   } catch (error) {

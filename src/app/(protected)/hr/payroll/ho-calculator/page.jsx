@@ -48,6 +48,7 @@ export default function HoPayrollCalculatorPage() {
   const [otStatusFilter, setOtStatusFilter] = useState('all') // 'all' | 'Approved' | 'Pending' | 'Rejected'
   const [searchQuery, setSearchQuery] = useState('')
   const [actionMsg, setActionMsg] = useState(null)
+  const [syncingWage, setSyncingWage] = useState(false)
 
   // Pagination states
   const [rekapPage, setRekapPage] = useState(1)
@@ -119,6 +120,30 @@ export default function HoPayrollCalculatorPage() {
   useEffect(() => {
     fetchData()
   }, [])
+
+  // Sync Wages from Odoo
+  const handleSyncOdooWages = async () => {
+    try {
+      setSyncingWage(true)
+      const res = await fetch('/api/payroll/ho-calculator', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'sync_odoo_wages' }),
+      })
+      const json = await res.json()
+      if (json.success) {
+        flash(json.message || 'Sinkronisasi Basic Salary dari Odoo Wage berhasil!')
+        await fetchData(dateFrom, dateTo, overrideWorkingDays)
+      } else {
+        flash(json.error || 'Gagal sinkronisasi wage dari Odoo.', 'error')
+      }
+    } catch (err) {
+      console.error(err)
+      flash('Terjadi kesalahan jaringan saat sync wage Odoo.', 'error')
+    } finally {
+      setSyncingWage(false)
+    }
+  }
 
   // Handle Submit New Overtime
   const handleSubmitOvertime = async (e) => {
@@ -410,9 +435,17 @@ export default function HoPayrollCalculatorPage() {
               icon="🔄"
               variant="secondary"
               onClick={() => fetchData(dateFrom, dateTo, overrideWorkingDays)}
-              disabled={loading}
+              disabled={loading || syncingWage}
             >
               Hitung Ulang
+            </ActionButton>
+            <ActionButton
+              icon="⚡"
+              variant="primary"
+              onClick={handleSyncOdooWages}
+              disabled={loading || syncingWage}
+            >
+              {syncingWage ? 'Menarik Wage Odoo...' : 'Tarik Wage Odoo'}
             </ActionButton>
           </div>
 
@@ -591,7 +624,12 @@ export default function HoPayrollCalculatorPage() {
                       </div>
                       <div className="text-xs text-gray-500 font-mono">{e.nik || `ID: ${e.empId}`} · {e.position}</div>
                     </Td>
-                    <Td align="right" className="font-semibold text-gray-900">{fmtRp(e.grossSalary)}</Td>
+                    <Td align="right" className="font-semibold text-gray-900">
+                      {fmtRp(e.grossSalary)}
+                      {(!e.grossSalary || e.grossSalary === 0) && (
+                        <div className="text-[10px] text-amber-600 font-normal">Belum ada wage</div>
+                      )}
+                    </Td>
                     <Td align="right" className="text-gray-600">{fmtRp(e.basicSalary)}</Td>
                     <Td align="right" className="text-gray-600">{fmtRp(e.transportAllowance)}</Td>
                     <Td align="right" className="text-gray-600">{fmtRp(e.nonPermanentAllowance ?? e.kpiAllowance)}</Td>

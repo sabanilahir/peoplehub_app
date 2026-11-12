@@ -373,6 +373,14 @@ export async function syncOdooWages() {
     if (!contract) continue
 
     const odooWage = Math.round(Number(contract.wage) || 0)
+
+    // Proteksi: Jika wage di Odoo bernilai 0 namun karyawan sudah memiliki gaji di PeopleHub,
+    // jangan menimpa gaji positif lokal dengan 0 (karena belum semua kontrak diinput di Odoo)
+    if (odooWage === 0 && emp.salary > 0) {
+      unchangedCount++
+      continue
+    }
+
     if (odooWage !== emp.salary) {
       await prisma.employee.update({
         where: { id: emp.id },
