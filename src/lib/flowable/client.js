@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { LEAVE_REQUEST_BPMN_XML } from './definitions/leaveRequestBpmn.js'
+import { OVERTIME_REQUEST_BPMN_XML } from './definitions/overtimeRequestBpmn.js'
 
 // Flowable REST API Client
 // Base URL - can be overridden via env or settings
@@ -28,6 +29,16 @@ const createClient = (username = 'admin', password = 'test') => {
 
 // Default client
 export const flowableClient = createClient()
+
+// Request interceptor to ensure dynamic base URL and credentials
+flowableClient.interceptors.request.use((config) => {
+  config.baseURL = getBaseUrl()
+  config.headers.Authorization = getAuthHeader(
+    process.env.FLOWABLE_USER || 'admin',
+    process.env.FLOWABLE_PASSWORD || 'test'
+  )
+  return config
+})
 
 // -- Process Definitions --------------------------------------------------------
 
@@ -103,7 +114,7 @@ export const startProcess = async (processDefinitionKey, variables = []) => {
       variables: variables.map(v => ({
         name: v.name,
         value: v.value,
-        type: v.type || 'string',
+        type: v.type || (typeof v.value === 'boolean' ? 'boolean' : typeof v.value === 'number' ? (Number.isInteger(v.value) ? 'integer' : 'double') : 'string'),
       })),
     }
     const response = await flowableClient.post('/runtime/process-instances', payload)
@@ -196,7 +207,7 @@ export const completeTask = async (taskId, variables = []) => {
       variables: variables.map(v => ({
         name: v.name,
         value: v.value,
-        type: v.type || 'string',
+        type: v.type || (typeof v.value === 'boolean' ? 'boolean' : typeof v.value === 'number' ? (Number.isInteger(v.value) ? 'integer' : 'double') : 'string'),
       })),
     }
     const response = await flowableClient.post(`/runtime/tasks/${taskId}`, payload)
@@ -365,6 +376,31 @@ export const ensureLeaveProcessDeployed = async () => {
   }
 }
 
+/**
+ * Memastikan definisi proses Persetujuan Lembur (overtime-request-process) sudah ter-deploy di Flowable Engine.
+ */
+export const ensureOvertimeProcessDeployed = async () => {
+  try {
+    const defsRes = await getProcessDefinitions({ key: 'overtime-request-process', latest: true })
+    if (defsRes.success && Array.isArray(defsRes.data?.data) && defsRes.data.data.length > 0) {
+      return { success: true, message: 'Overtime process already deployed', data: defsRes.data.data[0] }
+    }
+    const defsLegacyRes = await getProcessDefinitions({ key: 'OvertimeRequest', latest: true })
+    if (defsLegacyRes.success && Array.isArray(defsLegacyRes.data?.data) && defsLegacyRes.data.data.length > 0) {
+      return { success: true, message: 'Overtime process already deployed', data: defsLegacyRes.data.data[0] }
+    }
+
+    const deployRes = await deployProcess(OVERTIME_REQUEST_BPMN_XML, 'Persetujuan Lembur Karyawan', 'overtime-request-process')
+    if (deployRes.success) {
+      console.log('[Flowable Auto-Bootstrap] Successfully deployed overtime-request-process definition.')
+    }
+    return deployRes
+  } catch (err) {
+    console.error('[Flowable Auto-Bootstrap Overtime error]:', err.message)
+    return { success: false, error: err.message }
+  }
+}
+
 // -- Utility ------------------------------------------------------------------
 export const testConnection = async (username = 'admin', password = 'test') => {
   try {
@@ -389,6 +425,7 @@ export default {
   getProcessInstances,
   deleteProcessInstance,
   ensureLeaveProcessDeployed,
+  ensureOvertimeProcessDeployed,
   
   // Tasks
   getTasks,

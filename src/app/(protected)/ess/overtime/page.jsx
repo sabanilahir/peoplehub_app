@@ -18,6 +18,8 @@ import {
   EmptyState,
 } from '@/components/ui'
 import { parseOvertimeDuration, calcHoOvertimeFee, calcWarehouseOvertime } from '@/lib/hoPayrollEngine'
+import BpmnViewerComponent from '@/components/workflow/BpmnViewer'
+import { OVERTIME_REQUEST_BPMN_XML } from '@/lib/flowable/definitions/overtimeRequestBpmn'
 
 export default function EssOvertimePage() {
   const t = useT()
@@ -27,6 +29,10 @@ export default function EssOvertimePage() {
   const [submitting, setSubmitting] = useState(false)
   const [overtimes, setOvertimes] = useState([])
   const [msg, setMsg] = useState(null)
+
+  // State untuk Workflow Modal BPMN
+  const [selectedWorkflow, setSelectedWorkflow] = useState(null)
+  const [isWorkflowModalOpen, setIsWorkflowModalOpen] = useState(false)
 
   // Form pengajuan lembur
   const todayStr = new Date().toISOString().split('T')[0]
@@ -397,9 +403,26 @@ export default function EssOvertimePage() {
                     {ot.taskNote || '-'}
                   </Td>
                   <Td>
-                    <StatusBadge status={statusColor}>
-                      {ot.status || 'Pending'}
-                    </StatusBadge>
+                    <div className="flex flex-col gap-1 items-start">
+                      <StatusBadge status={statusColor}>
+                        {ot.status || 'Pending'}
+                      </StatusBadge>
+                      {ot.customData?.flowableProcessInstanceId ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedWorkflow(ot)
+                            setIsWorkflowModalOpen(true)
+                          }}
+                          className="text-[10px] font-bold text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 px-1.5 py-0.5 rounded transition flex items-center gap-1"
+                          title="Lihat Alur Workflow BPMN Flowable"
+                        >
+                          <span>⚡</span> Workflow
+                        </button>
+                      ) : (
+                        <span className="text-[10px] font-mono text-gray-400">Standard</span>
+                      )}
+                    </div>
                   </Td>
                   <Td className="text-center">
                     {ot.status === 'Pending' ? (
@@ -419,6 +442,76 @@ export default function EssOvertimePage() {
           </DataTable>
         )}
       </SectionCard>
+
+      {/* Modal Alur Workflow Flowable BPMN */}
+      {isWorkflowModalOpen && selectedWorkflow && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-4xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] flex flex-col animate-in fade-in zoom-in duration-150">
+            <div className="flex items-center justify-between border-b pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-teal-100 text-teal-700 flex items-center justify-center font-bold">
+                  ⚡
+                </div>
+                <div>
+                  <h3 className="font-bold text-gray-900 text-base">
+                    Alur Workflow Persetujuan Lembur (Flowable BPMN 2.0)
+                  </h3>
+                  <p className="text-xs text-gray-500">
+                    Instance ID:{' '}
+                    <span className="font-mono text-teal-700 font-semibold">
+                      {selectedWorkflow.customData?.flowableProcessInstanceId}
+                    </span>{' '}
+                    • Penyetuju Atasan:{' '}
+                    <strong className="text-gray-800">
+                      {selectedWorkflow.customData?.approverName || 'Atasan Langsung'}
+                    </strong>
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setIsWorkflowModalOpen(false)
+                  setSelectedWorkflow(null)
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <Icon name="x" size={18} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-auto bg-gray-50 rounded-xl p-2 border border-gray-200">
+              <BpmnViewerComponent xml={OVERTIME_REQUEST_BPMN_XML} height="360px" />
+            </div>
+
+            <div className="flex items-center justify-between pt-2 border-t text-xs text-gray-500">
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                  <span>
+                    Status Pengajuan: <strong>{selectedWorkflow.status}</strong>
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-blue-500"></span>
+                  <span>
+                    Durasi: <strong>{selectedWorkflow.totalHours} jam</strong>
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsWorkflowModalOpen(false)
+                  setSelectedWorkflow(null)
+                }}
+                className="px-4 py-1.5 text-xs font-semibold bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-700 transition"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -7,6 +7,12 @@ import {
   resolveEmployeeOvertimeRate,
   parseOvertimeDuration,
 } from '@/lib/hoPayrollEngine'
+import {
+  ensureOvertimeProcessDeployed,
+  startProcess,
+  getTasks,
+  completeTask,
+} from '@/lib/flowable/client'
 
 export const dynamic = 'force-dynamic'
 
@@ -117,6 +123,7 @@ export async function POST(req) {
         location: true,
         workLocationCode: true,
         position: true,
+        approver1Id: true,
       },
     })
 
@@ -200,6 +207,56 @@ export async function POST(req) {
       },
     })
 
+    // Otomatis picu Flowable BPMN Workflow Engine untuk persetujuan lembur
+    try {
+      await ensureOvertimeProcessDeployed()
+
+      let approverUsername = 'admin'
+      let approverName = 'Supervisor / Manager'
+      if (employee.approver1Id) {
+        const approverUser = await prisma.user.findFirst({
+          where: { employeeId: employee.approver1Id },
+          select: { username: true, name: true },
+        })
+        if (approverUser) {
+          approverUsername = approverUser.username
+          approverName = approverUser.name || approverUser.username
+        }
+      }
+
+      const flowVars = [
+        { name: 'overtimeId', value: String(created.id) },
+        { name: 'empId', value: String(employee.id) },
+        { name: 'employeeName', value: employee.name },
+        { name: 'date', value: created.date },
+        { name: 'dayName', value: created.dayName || '' },
+        { name: 'startTime', value: created.startTime },
+        { name: 'endTime', value: created.endTime },
+        { name: 'totalHours', value: String(created.totalHours) },
+        { name: 'totalFee', value: String(created.totalFee) },
+        { name: 'taskNote', value: created.taskNote || '' },
+        { name: 'currentApproverUsername', value: approverUsername },
+        { name: 'currentApproverId', value: String(employee.approver1Id || '') },
+        { name: 'currentStepLabel', value: `Persetujuan Lembur: ${approverName}` },
+      ]
+
+      const procRes = await startProcess('overtime-request-process', flowVars)
+      if (procRes.success && procRes.data?.id) {
+        const customData = {
+          flowableProcessInstanceId: procRes.data.id,
+          approverUsername,
+          approverName,
+        }
+        await prisma.overtimeRecord.update({
+          where: { id: created.id },
+          data: { customData },
+        })
+        created.customData = customData
+      }
+    } catch (flowErr) {
+      console.warn('[Flowable Overtime startProcess warning]:', flowErr.message)
+    }
+
     return Response.json({ success: true, data: created }, { status: 201 })
   } catch (error) {
     console.error('[API /api/overtime POST] Error:', error)
@@ -249,6 +306,32 @@ export async function PUT(req) {
     } else if (taskNote !== undefined) {
       updateData.taskNote = taskNote
     }
+
+    // Selesaikan (complete) User Task di Flowable BPMN jika instance aktif
+    const procId = existing.customData?.flowableProcessInstanceId
+    if (procId && (status === 'Approved' || status === 'Rejected')) {
+      try {
+        const tasksRes = await getTasks({ processInstanceId: procId })
+        if (tasksRes.success && Array.isArray(tasksRes.data?.data) && tasksRes.data.data.length > 0) {
+          const taskId = tasksRes.data.data[0].id
+          await completeTask(taskId, [
+            { name: 'approved', value: status === 'Approved' },
+            { name: 'rejectReason', value: rejectReason || '' },
+          ])
+        }
+      } catch (flowErr) {
+        console.warn('[Flowable Overtime completeTask warning]:', flowErr.message)
+      }
+    }
+
+    const updatedCustom = {
+      ...(typeof existing.customData === 'object' && existing.customData !== null ? existing.customData : {}),
+      status: status || existing.status,
+      approvedById: approvedById !== undefined ? (approvedById ? Number(approvedById) : null) : existing.approvedById,
+      decidedAt: new Date().toISOString(),
+      rejectReason: rejectReason || null,
+    }
+    updateData.customData = updatedCustom
 
     if (startTime || endTime) {
       const s = startTime || existing.startTime
