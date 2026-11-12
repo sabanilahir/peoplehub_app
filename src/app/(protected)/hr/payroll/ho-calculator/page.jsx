@@ -49,6 +49,21 @@ export default function HoPayrollCalculatorPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [actionMsg, setActionMsg] = useState(null)
 
+  // Pagination states
+  const [rekapPage, setRekapPage] = useState(1)
+  const [rekapPageSize, setRekapPageSize] = useState(15)
+  const [otPage, setOtPage] = useState(1)
+  const [otPageSize, setOtPageSize] = useState(15)
+
+  // Auto-reset page when filter changes
+  useEffect(() => {
+    setRekapPage(1)
+  }, [searchQuery])
+
+  useEffect(() => {
+    setOtPage(1)
+  }, [otStatusFilter])
+
   // Modal Overtime
   const [otModalOpen, setOtModalOpen] = useState(false)
   const [otSubmitting, setOtSubmitting] = useState(false)
@@ -83,6 +98,8 @@ export default function HoPayrollCalculatorPage() {
       const json = await res.json()
       if (json.success) {
         setData(json)
+        setRekapPage(1)
+        setOtPage(1)
         if (!dateFrom && json.range?.dateFrom) setDateFrom(json.range.dateFrom)
         if (!dateTo && json.range?.dateTo) setDateTo(json.range.dateTo)
         if (!overrideWorkingDays && json.range?.workingDays) {
@@ -255,6 +272,26 @@ export default function HoPayrollCalculatorPage() {
         (e.dept && e.dept.toLowerCase().includes(q))
     )
   }, [data.employees, searchQuery])
+
+  // Pagination for Rekapitulasi Payroll
+  const totalRekapPages = Math.max(1, Math.ceil(filteredEmployees.length / rekapPageSize))
+  const paginatedEmployees = useMemo(() => {
+    const start = (rekapPage - 1) * rekapPageSize
+    return filteredEmployees.slice(start, start + rekapPageSize)
+  }, [filteredEmployees, rekapPage, rekapPageSize])
+
+  // Filtered & Paginated overtimes
+  const filteredOvertimes = useMemo(() => {
+    return (data.tables?.overtimes || []).filter(
+      (ot) => otStatusFilter === 'all' || ot.status === otStatusFilter
+    )
+  }, [data.tables?.overtimes, otStatusFilter])
+
+  const totalOtPages = Math.max(1, Math.ceil(filteredOvertimes.length / otPageSize))
+  const paginatedOvertimes = useMemo(() => {
+    const start = (otPage - 1) * otPageSize
+    return filteredOvertimes.slice(start, start + otPageSize)
+  }, [filteredOvertimes, otPage, otPageSize])
 
   // Export CSV
   const handleExport = () => {
@@ -531,51 +568,112 @@ export default function HoPayrollCalculatorPage() {
               { label: 'Prorata Status' },
             ]}
           >
-            {filteredEmployees.map((e, idx) => (
-              <Tr key={e.empId} className={e.name === 'Rama' ? 'bg-amber-50/50' : ''}>
-                <Td className="text-gray-400 font-mono text-xs">{idx + 1}</Td>
-                <Td>
-                  <div className="font-bold text-gray-900 flex items-center gap-1.5">
-                    {e.name}
-                    {e.name === 'Rama' && (
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-200 text-amber-900">
-                        Sampel Excel
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-xs text-gray-500 font-mono">{e.nik || `ID: ${e.empId}`} · {e.position}</div>
-                </Td>
-                <Td align="right" className="font-semibold text-gray-900">{fmtRp(e.grossSalary)}</Td>
-                <Td align="right" className="text-gray-600">{fmtRp(e.basicSalary)}</Td>
-                <Td align="right" className="text-gray-600">{fmtRp(e.transportAllowance)}</Td>
-                <Td align="right" className="text-gray-600">{fmtRp(e.nonPermanentAllowance ?? e.kpiAllowance)}</Td>
-                <Td align="right" className="font-semibold text-emerald-600">
-                  {e.totalOvertimeFee > 0 ? `+${fmtRp(e.totalOvertimeFee)}` : '-'}
-                  {e.totalOvertimeHours > 0 && (
-                    <div className="text-[10px] text-gray-400">{e.totalOvertimeHours} jam</div>
-                  )}
-                </Td>
-                <Td align="right" className="text-red-600">
-                  {e.halfDayDeduction > 0 ? `-${fmtRp(e.halfDayDeduction)}` : '-'}
-                </Td>
-                <Td align="right" className="text-red-600">
-                  {e.sickLeaveDeduction > 0 ? `-${fmtRp(e.sickLeaveDeduction)}` : '-'}
-                </Td>
-                <Td align="right" className="text-red-600">
-                  {e.unpaidLeaveDeduction > 0 ? `-${fmtRp(e.unpaidLeaveDeduction)}` : '-'}
-                </Td>
-                <Td>
-                  {e.isProrated ? (
-                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-800">
-                      {e.prorateReason} ({e.activeDays}/{e.workingDays} hr)
-                    </span>
-                  ) : (
-                    <span className="text-xs text-gray-400">Penuh (100%)</span>
-                  )}
+            {paginatedEmployees.length === 0 ? (
+              <Tr>
+                <Td colSpan={11} className="py-8 text-center text-gray-400">
+                  {searchQuery ? `Tidak ada data karyawan yang cocok dengan pencarian "${searchQuery}".` : 'Belum ada data karyawan.'}
                 </Td>
               </Tr>
-            ))}
+            ) : (
+              paginatedEmployees.map((e, idx) => {
+                const rowNo = (rekapPage - 1) * rekapPageSize + idx + 1
+                return (
+                  <Tr key={e.empId || idx} className={e.name === 'Rama' ? 'bg-amber-50/50' : ''}>
+                    <Td className="text-gray-400 font-mono text-xs">{rowNo}</Td>
+                    <Td>
+                      <div className="font-bold text-gray-900 flex items-center gap-1.5">
+                        {e.name}
+                        {e.name === 'Rama' && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-200 text-amber-900">
+                            Sampel Excel
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-gray-500 font-mono">{e.nik || `ID: ${e.empId}`} · {e.position}</div>
+                    </Td>
+                    <Td align="right" className="font-semibold text-gray-900">{fmtRp(e.grossSalary)}</Td>
+                    <Td align="right" className="text-gray-600">{fmtRp(e.basicSalary)}</Td>
+                    <Td align="right" className="text-gray-600">{fmtRp(e.transportAllowance)}</Td>
+                    <Td align="right" className="text-gray-600">{fmtRp(e.nonPermanentAllowance ?? e.kpiAllowance)}</Td>
+                    <Td align="right" className="font-semibold text-emerald-600">
+                      {e.totalOvertimeFee > 0 ? `+${fmtRp(e.totalOvertimeFee)}` : '-'}
+                      {e.totalOvertimeHours > 0 && (
+                        <div className="text-[10px] text-gray-400">{e.totalOvertimeHours} jam</div>
+                      )}
+                    </Td>
+                    <Td align="right" className="text-red-600">
+                      {e.halfDayDeduction > 0 ? `-${fmtRp(e.halfDayDeduction)}` : '-'}
+                    </Td>
+                    <Td align="right" className="text-red-600">
+                      {e.sickLeaveDeduction > 0 ? `-${fmtRp(e.sickLeaveDeduction)}` : '-'}
+                    </Td>
+                    <Td align="right" className="text-red-600">
+                      {e.unpaidLeaveDeduction > 0 ? `-${fmtRp(e.unpaidLeaveDeduction)}` : '-'}
+                    </Td>
+                    <Td>
+                      {e.isProrated ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-800">
+                          {e.prorateReason} ({e.activeDays}/{e.workingDays} hr)
+                        </span>
+                      ) : (
+                        <span className="text-xs text-gray-400">Penuh (100%)</span>
+                      )}
+                    </Td>
+                  </Tr>
+                )
+              })
+            )}
           </DataTable>
+
+          {/* Pagination Controls Rekapitulasi */}
+          {filteredEmployees.length > 0 && (
+            <div className="flex items-center justify-between gap-4 pt-4 mt-3 border-t border-gray-100 flex-wrap">
+              <div className="flex items-center gap-2 text-xs text-gray-500">
+                <span>Baris per halaman:</span>
+                <select
+                  value={rekapPageSize}
+                  onChange={(e) => {
+                    setRekapPageSize(Number(e.target.value))
+                    setRekapPage(1)
+                  }}
+                  className="px-2 py-1 border border-gray-200 rounded-md text-xs outline-none focus:border-red-400 bg-white"
+                >
+                  {[10, 15, 25, 50, 100].map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+                <span className="ml-2">
+                  Menampilkan <strong>{(rekapPage - 1) * rekapPageSize + 1}</strong> –{' '}
+                  <strong>{Math.min(rekapPage * rekapPageSize, filteredEmployees.length)}</strong> dari{' '}
+                  <strong>{filteredEmployees.length}</strong> karyawan
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={rekapPage <= 1}
+                  onClick={() => setRekapPage((p) => p - 1)}
+                  className="px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:pointer-events-none transition cursor-pointer"
+                >
+                  ← Sebelumnya
+                </button>
+                <span className="px-2 font-semibold text-gray-700 text-xs">
+                  Halaman {rekapPage} dari {totalRekapPages}
+                </span>
+                <button
+                  type="button"
+                  disabled={rekapPage >= totalRekapPages}
+                  onClick={() => setRekapPage((p) => p + 1)}
+                  className="px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:pointer-events-none transition cursor-pointer"
+                >
+                  Berikutnya →
+                </button>
+              </div>
+            </div>
+          )}
         </SectionCard>
       )}
 
@@ -684,6 +782,7 @@ export default function HoPayrollCalculatorPage() {
               <table className="w-full text-sm text-left border-collapse">
                 <thead>
                   <tr className="bg-amber-100 text-amber-900 font-bold border-b border-amber-200">
+                    <th className="py-2.5 px-3 text-center w-12">NO</th>
                     <th className="py-2.5 px-3">KARYAWAN</th>
                     <th className="py-2.5 px-3">LOKASI</th>
                     <th className="py-2.5 px-3">DAY</th>
@@ -699,101 +798,153 @@ export default function HoPayrollCalculatorPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {(data.tables?.overtimes || [])
-                    .filter((ot) => otStatusFilter === 'all' || ot.status === otStatusFilter)
-                    .map((ot) => {
-                      const loc = (ot.employee?.workLocationCode || ot.employee?.location || '').toLowerCase()
-                      const isGudang = loc === 'gudang' || loc.includes('warehouse') || loc.includes('pack')
-                      const statusTone =
-                        ot.status === 'Approved' ? 'bg-emerald-100 text-emerald-800' : ot.status === 'Rejected' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'
-                      return (
-                        <tr key={ot.id} className="hover:bg-amber-50/40">
-                          <td className="py-2.5 px-3 font-semibold text-gray-800">
-                            {ot.employee?.name}
-                          </td>
-                          <td className="py-2.5 px-3">
-                            {isGudang ? (
-                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200">
-                                📦 Gudang
-                              </span>
-                            ) : (
-                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-800 border border-indigo-200">
-                                🏢 HO
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-2.5 px-3 text-gray-600 font-medium">{ot.dayName || '-'}</td>
-                          <td className="py-2.5 px-3 font-mono text-gray-700">{ot.date}</td>
-                          <td className="py-2.5 px-3 font-mono text-gray-600">{ot.startTime}</td>
-                          <td className="py-2.5 px-3 font-mono text-gray-600">{ot.endTime}</td>
-                          <td className="py-2.5 px-3 text-right font-bold text-gray-800">
-                            {ot.totalHours?.toFixed(2)}
-                          </td>
-                          <td className="py-2.5 px-3 text-right font-mono text-gray-700">
-                            {fmtRp(ot.hourlyRate)}
-                          </td>
-                          <td className="py-2.5 px-3 text-right font-bold text-emerald-700">
-                            {fmtRp(ot.totalFee)}
-                          </td>
-                          <td className="py-2.5 px-3 text-xs text-gray-500 max-w-xs truncate" title={ot.taskNote || ''}>
-                            {ot.taskNote || '-'}
-                          </td>
-                          <td className="py-2.5 px-3 text-center">
-                            <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${statusTone}`}>
-                              {ot.status || 'Pending'}
+                  {paginatedOvertimes.map((ot, idx) => {
+                    const rowNo = (otPage - 1) * otPageSize + idx + 1
+                    const loc = (ot.employee?.workLocationCode || ot.employee?.location || '').toLowerCase()
+                    const isGudang = loc === 'gudang' || loc.includes('warehouse') || loc.includes('pack')
+                    const statusTone =
+                      ot.status === 'Approved' ? 'bg-emerald-100 text-emerald-800' : ot.status === 'Rejected' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'
+                    return (
+                      <tr key={ot.id} className="hover:bg-amber-50/40">
+                        <td className="py-2.5 px-3 text-center text-gray-400 font-mono text-xs">
+                          {rowNo}
+                        </td>
+                        <td className="py-2.5 px-3 font-semibold text-gray-800">
+                          {ot.employee?.name}
+                        </td>
+                        <td className="py-2.5 px-3">
+                          {isGudang ? (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200">
+                              📦 Gudang
                             </span>
-                          </td>
-                          <td className="py-2.5 px-3 text-center">
-                            {ot.status === 'Pending' ? (
-                              <div className="flex items-center justify-center gap-1">
-                                <button
-                                  type="button"
-                                  onClick={() => handleQuickApproveOvertime(ot.id)}
-                                  className="text-white bg-emerald-600 hover:bg-emerald-700 text-[11px] font-bold px-2 py-1 rounded transition"
-                                  title="Setujui lembur"
-                                >
-                                  ✓ Setujui
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleQuickRejectOvertime(ot.id)}
-                                  className="text-amber-800 bg-amber-100 hover:bg-amber-200 text-[11px] font-semibold px-2 py-1 rounded border border-amber-300 transition"
-                                  title="Tolak lembur"
-                                >
-                                  ✗ Tolak
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteOvertime(ot.id)}
-                                  className="text-red-500 hover:text-red-700 text-[11px] font-semibold px-1 py-1 rounded hover:bg-red-50 transition"
-                                  title="Hapus entri"
-                                >
-                                  Hapus
-                                </button>
-                              </div>
-                            ) : (
+                          ) : (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-800 border border-indigo-200">
+                              🏢 HO
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3 text-gray-600 font-medium">{ot.dayName || '-'}</td>
+                        <td className="py-2.5 px-3 font-mono text-gray-700">{ot.date}</td>
+                        <td className="py-2.5 px-3 font-mono text-gray-600">{ot.startTime}</td>
+                        <td className="py-2.5 px-3 font-mono text-gray-600">{ot.endTime}</td>
+                        <td className="py-2.5 px-3 text-right font-bold text-gray-800">
+                          {ot.totalHours?.toFixed(2)}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono text-gray-700">
+                          {fmtRp(ot.hourlyRate)}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-bold text-emerald-700">
+                          {fmtRp(ot.totalFee)}
+                        </td>
+                        <td className="py-2.5 px-3 text-xs text-gray-500 max-w-xs truncate" title={ot.taskNote || ''}>
+                          {ot.taskNote || '-'}
+                        </td>
+                        <td className="py-2.5 px-3 text-center">
+                          <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${statusTone}`}>
+                            {ot.status || 'Pending'}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 text-center">
+                          {ot.status === 'Pending' ? (
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => handleQuickApproveOvertime(ot.id)}
+                                className="text-white bg-emerald-600 hover:bg-emerald-700 text-[11px] font-bold px-2 py-1 rounded transition"
+                                title="Setujui lembur"
+                              >
+                                ✓ Setujui
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleQuickRejectOvertime(ot.id)}
+                                className="text-amber-800 bg-amber-100 hover:bg-amber-200 text-[11px] font-semibold px-2 py-1 rounded border border-amber-300 transition"
+                                title="Tolak lembur"
+                              >
+                                ✗ Tolak
+                              </button>
                               <button
                                 type="button"
                                 onClick={() => handleDeleteOvertime(ot.id)}
-                                className="text-red-500 hover:text-red-700 text-xs font-semibold px-2 py-1 rounded hover:bg-red-50"
+                                className="text-red-500 hover:text-red-700 text-[11px] font-semibold px-1 py-1 rounded hover:bg-red-50 transition"
+                                title="Hapus entri"
                               >
                                 Hapus
                               </button>
-                            )}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  {(!data.tables?.overtimes || data.tables.overtimes.length === 0) && (
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteOvertime(ot.id)}
+                              className="text-red-500 hover:text-red-700 text-xs font-semibold px-2 py-1 rounded hover:bg-red-50"
+                            >
+                              Hapus
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                  {filteredOvertimes.length === 0 && (
                     <tr>
-                      <td colSpan={12} className="py-8 text-center text-gray-400">
-                        Belum ada entri lembur. Klik tombol <strong>+ Input Lembur (HO & Gudang)</strong> di atas untuk menambahkan data lembur karyawan.
+                      <td colSpan={13} className="py-8 text-center text-gray-400">
+                        Belum ada entri lembur{otStatusFilter !== 'all' ? ` dengan status "${otStatusFilter}"` : ''}. Klik tombol <strong>+ Input Lembur (HO & Gudang)</strong> di atas untuk menambahkan data lembur karyawan.
                       </td>
                     </tr>
                   )}
                 </tbody>
               </table>
             </div>
+
+            {/* Pagination Controls Lembur */}
+            {filteredOvertimes.length > 0 && (
+              <div className="flex items-center justify-between gap-4 pt-4 mt-3 border-t border-gray-100 flex-wrap">
+                <div className="flex items-center gap-2 text-xs text-gray-500">
+                  <span>Baris per halaman:</span>
+                  <select
+                    value={otPageSize}
+                    onChange={(e) => {
+                      setOtPageSize(Number(e.target.value))
+                      setOtPage(1)
+                    }}
+                    className="px-2 py-1 border border-gray-200 rounded-md text-xs outline-none focus:border-red-400 bg-white"
+                  >
+                    {[10, 15, 25, 50, 100].map((n) => (
+                      <option key={n} value={n}>
+                        {n}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="ml-2">
+                    Menampilkan <strong>{(otPage - 1) * otPageSize + 1}</strong> –{' '}
+                    <strong>{Math.min(otPage * otPageSize, filteredOvertimes.length)}</strong> dari{' '}
+                    <strong>{filteredOvertimes.length}</strong> entri lembur
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={otPage <= 1}
+                    onClick={() => setOtPage((p) => p - 1)}
+                    className="px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:pointer-events-none transition cursor-pointer"
+                  >
+                    ← Sebelumnya
+                  </button>
+                  <span className="px-2 font-semibold text-gray-700 text-xs">
+                    Halaman {otPage} dari {totalOtPages}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={otPage >= totalOtPages}
+                    onClick={() => setOtPage((p) => p + 1)}
+                    className="px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:pointer-events-none transition cursor-pointer"
+                  >
+                    Berikutnya →
+                  </button>
+                </div>
+              </div>
+            )}
           </SectionCard>
         </div>
       )}
