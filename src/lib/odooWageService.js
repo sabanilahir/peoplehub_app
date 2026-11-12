@@ -45,7 +45,7 @@ export const DEFAULT_SALARY_BREAKDOWN_CONFIG = {
   transportPercent: 15,
   nonPermanentPercent: 10,
   kpiPercent: 10,
-  roundingStep: 100, // Default: pembulatan ke ratusan terdekat (Rp 100)
+  roundingStep: 1, // Default: perhitungan riil eksak tanpa pembulatan kelipatan (Rp 1)
   locationRules: DEFAULT_LOCATION_RULES,
 }
 
@@ -93,7 +93,7 @@ export async function saveSalaryBreakdownConfig(config) {
   const basic = Number(config.basicPercent) || current.basicPercent || 75
   const transport = Number(config.transportPercent) || current.transportPercent || 15
   const nonPermanent = Number(config.nonPermanentPercent ?? config.kpiPercent) || current.nonPermanentPercent || current.kpiPercent || 10
-  const roundingStep = Number(config.roundingStep) || current.roundingStep || 100
+  const roundingStep = Number(config.roundingStep) || current.roundingStep || 1
   const locationRules = config.locationRules || current.locationRules || DEFAULT_LOCATION_RULES
 
   const total = Math.round((basic + transport + nonPermanent) * 100) / 100
@@ -177,9 +177,9 @@ export async function saveEmployeeAllowanceOverride(empId, { enableTransport, en
 }
 
 /**
- * Helper fungsi pembulatan ke kelipatan step (misal 100 = ratusan terdekat, 1000 = ribuan terdekat)
+ * Helper fungsi perhitungan nominal (default riil / eksak Rp 1)
  */
-export function roundToStep(val, step = 100) {
+export function roundToStep(val, step = 1) {
   if (!step || step <= 1) return Math.round(val)
   return Math.round(val / step) * step
 }

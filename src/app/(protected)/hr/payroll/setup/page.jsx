@@ -25,7 +25,7 @@ export default function PayrollSetupPage() {
     basicPercent: 75,
     transportPercent: 15,
     kpiPercent: 10,
-    roundingStep: 100,
+    roundingStep: 1,
     locationRules: {},
   })
   const [departments, setDepartments] = useState([])
@@ -55,7 +55,7 @@ export default function PayrollSetupPage() {
     basicPercent: 75,
     transportPercent: 15,
     kpiPercent: 10,
-    roundingStep: 100,
+    roundingStep: 1,
     locationRules: {},
   })
   const [savingConfig, setSavingConfig] = useState(false)
@@ -171,7 +171,7 @@ export default function PayrollSetupPage() {
     const b = Number(tempConfig.basicPercent) || 0
     const t = Number(tempConfig.transportPercent) || 0
     const k = Number(tempConfig.kpiPercent) || 0
-    const step = Number(tempConfig.roundingStep) || 100
+    const step = Number(tempConfig.roundingStep) || 1
     const sum = Math.round((b + t + k) * 100) / 100
 
     if (sum !== 100) {
@@ -289,7 +289,7 @@ export default function PayrollSetupPage() {
 
   // Live calculation helper for edit modal
   const liveBasicNum = Math.max(0, Number(inputWage.replace(/\D/g, '')) || 0)
-  const roundStep = (val, s = config.roundingStep || 100) => {
+  const roundStep = (val, s = config.roundingStep || 1) => {
     if (!s || s <= 1) return Math.round(val)
     return Math.round(val / s) * s
   }
@@ -330,10 +330,10 @@ export default function PayrollSetupPage() {
             <button
               onClick={handleOpenConfig}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 transition cursor-pointer"
-              title="Atur hak tunjangan per lokasi kerja, rasio persentase, dan aturan pembulatan"
+              title="Atur hak tunjangan per lokasi kerja dan rasio persentase komponen gaji"
             >
               <Icon e="⚙️" size={14} />
-              <span>Aturan Lokasi & Pembulatan</span>
+              <span>Aturan Lokasi & Rasio Gaji</span>
             </button>
 
             <button
@@ -836,7 +836,7 @@ export default function PayrollSetupPage() {
                     : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}
               >
-                <span>⚙️ Default Global & Pembulatan</span>
+                <span>⚙️ Default Global (Perhitungan Riil)</span>
               </button>
             </div>
 
@@ -1036,7 +1036,7 @@ export default function PayrollSetupPage() {
               ) : (
                 <div className="space-y-3.5">
                   <p className="text-xs text-gray-600 leading-relaxed">
-                    Tentukan rasio persentase standar dan kelipatan pembulatan nominal. Nilai dari tab Payroll di Odoo diperlakukan sebagai <strong>Basic Salary ({tempConfig.basicPercent}%)</strong>.
+                    Tentukan rasio persentase standar komponen gaji. Nilai dari tab Payroll di Odoo diperlakukan sebagai <strong>Basic Salary ({tempConfig.basicPercent}%)</strong>. Seluruh tunjangan dihitung secara riil (eksak) tanpa pembulatan ratusan/ribuan.
                   </p>
 
                   <div className="grid grid-cols-3 gap-3">
@@ -1092,21 +1092,17 @@ export default function PayrollSetupPage() {
                     </div>
                   </div>
 
-                  {/* Aturan Pembulatan */}
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">
-                      Aturan Pembulatan Nominal:
-                    </label>
-                    <select
-                      value={tempConfig.roundingStep || 100}
-                      onChange={(e) => setTempConfig({ ...tempConfig, roundingStep: Number(e.target.value) })}
-                      className="w-full text-xs border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-teal-600 bg-white"
-                    >
-                      <option value={100}>Dibulatkan ke Ratusan Terdekat (Rp 100) [Default - Presisi Excel]</option>
-                      <option value={500}>Dibulatkan ke Kelipatan Rp 500</option>
-                      <option value={1000}>Dibulatkan ke Ribuan Terdekat (Rp 1.000)</option>
-                      <option value={1}>Rupiah Utuh tanpa Desimal (Rp 1)</option>
-                    </select>
+                  {/* Metode Perhitungan Riil (Tanpa Pembulatan) */}
+                  <div className="p-3 bg-emerald-50/60 border border-emerald-200 rounded-xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-xs">
+                    <div>
+                      <span className="font-semibold text-emerald-950 block">Metode Perhitungan Nominal:</span>
+                      <span className="text-emerald-800 text-[11px]">
+                        Dihitung secara riil (eksak) per Rupiah tanpa pembulatan kelipatan ratusan/ribuan.
+                      </span>
+                    </div>
+                    <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 font-bold rounded-lg border border-emerald-300 text-[11px] shrink-0 self-start sm:self-auto">
+                      ✅ Perhitungan Riil (Aktif)
+                    </span>
                   </div>
 
                   {/* Total Verification */}

@@ -222,7 +222,7 @@ export async function POST(request) {
       })
     }
 
-    // Aksi 5: Simpan konfigurasi persentase global & aturan pembulatan
+    // Aksi 5: Simpan konfigurasi persentase global (perhitungan riil)
     if (action === 'update_config') {
       const { basicPercent, transportPercent, nonPermanentPercent, kpiPercent, roundingStep, locationRules } = body
       const newConfig = await saveSalaryBreakdownConfig({
@@ -230,12 +230,12 @@ export async function POST(request) {
         transportPercent,
         nonPermanentPercent: nonPermanentPercent ?? kpiPercent,
         kpiPercent: nonPermanentPercent ?? kpiPercent,
-        roundingStep,
+        roundingStep: roundingStep !== undefined ? Number(roundingStep) : 1,
         locationRules,
       })
       return NextResponse.json({
         success: true,
-        message: `Konfigurasi berhasil disimpan: Basic ${newConfig.basicPercent}%, Transport ${newConfig.transportPercent}%, Non Permanent Allowance ${newConfig.nonPermanentPercent}% (Pembulatan: Rp ${newConfig.roundingStep.toLocaleString('id-ID')})`,
+        message: `Konfigurasi berhasil disimpan: Basic ${newConfig.basicPercent}%, Transport ${newConfig.transportPercent}%, Non Permanent Allowance ${newConfig.nonPermanentPercent}% (Perhitungan Riil)`,
         config: newConfig,
       })
     }
