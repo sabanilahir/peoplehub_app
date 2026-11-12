@@ -253,6 +253,7 @@ export default function HoPayrollCalculatorPage() {
     const dur = parseOvertimeDuration(otForm.startTime, otForm.endTime)
     const loc = (emp.workLocationCode || emp.location || '').toLowerCase()
     const isGudang = loc === 'gudang' || loc.includes('warehouse') || loc.includes('pack')
+    const isSales = loc === 'sales' || loc.includes('sales') || loc.includes('other')
 
     if (isGudang) {
       const d = new Date(otForm.date + 'T00:00:00')
@@ -261,6 +262,7 @@ export default function HoPayrollCalculatorPage() {
       const fee = Math.round(hourlyRate * dur.hours)
       return {
         isGudang: true,
+        isSales: false,
         hours: dur.formattedHours,
         hourlyRate,
         fee,
@@ -276,13 +278,18 @@ export default function HoPayrollCalculatorPage() {
     const fee = calcHoOvertimeFee(basicSalary, days, dur.hours)
     return {
       isGudang: false,
+      isSales,
       hours: dur.formattedHours,
       hourlyRate: fee.hourlyRate,
       fee: fee.fee,
       empName: emp.name,
       basicSalary,
-      dayTypeLabel: `Head Office (Gaji Pokok / ${days} hr / 8 jam)`,
-      ruleDesc: 'Aturan HO: (Gaji Pokok / Hari Kerja / 8 Jam)',
+      dayTypeLabel: isSales
+        ? `Area Sales (Gaji Pokok / ${days} hr / 8 jam)`
+        : `Head Office (Gaji Pokok / ${days} hr / 8 jam)`,
+      ruleDesc: isSales
+        ? 'Aturan Area Sales: (Gaji Pokok / Hari Kerja / 8 Jam)'
+        : 'Aturan HO: (Gaji Pokok / Hari Kerja / 8 Jam)',
     }
   }, [otForm, data.employees, data.allEmployees, overrideWorkingDays, data.range])
 
@@ -365,8 +372,8 @@ export default function HoPayrollCalculatorPage() {
       {/* Page Header */}
       <PageHeader
         icon="🏢"
-        title="Kalkulator Payroll Head Office (HO)"
-        subtitle="Eksekusi penuh 6 aturan payroll HO: Lembur, Setengah Hari, Cuti Sakit Prorata Transport, Unpaid Leave, dan Prorata Masuk/Keluar secara mandiri di PeopleHub."
+        title="Kalkulator Payroll Head Office (HO) & Area Sales"
+        subtitle="Simulasi komprehensif gaji, lembur proporsional, dan potongan presensi untuk karyawan Head Office (HO) dan Area Sales."
       >
         <div className="flex flex-wrap items-center gap-2">
           <ActionButton
@@ -374,7 +381,7 @@ export default function HoPayrollCalculatorPage() {
             variant="primary"
             onClick={() => setOtModalOpen(true)}
           >
-            + Input Lembur (HO & Gudang)
+            + Input Lembur
           </ActionButton>
           <ActionButton
             icon="📥"
@@ -572,11 +579,11 @@ export default function HoPayrollCalculatorPage() {
         </button>
       </div>
 
-      {/* TAB 1: REKAPITULASI PAYROLL HO */}
+      {/* TAB 1: REKAPITULASI PAYROLL HO & AREA SALES */}
       {activeTab === 'rekap' && (
         <SectionCard
-          title="Tabel Rekapitulasi Payroll Head Office"
-          subtitle="Rincian komprehensif seluruh komponen gaji, lembur, dan potongan sesuai 6 aturan HO."
+          title="Tabel Rekapitulasi Payroll Head Office & Area Sales"
+          subtitle="Rincian komprehensif seluruh komponen gaji, lembur proporsional, dan potongan sesuai aturan HO & Area Sales."
         >
           <div className="mb-4 max-w-sm">
             <Input
@@ -614,11 +621,20 @@ export default function HoPayrollCalculatorPage() {
                   <Tr key={e.empId || idx} className={e.name === 'Rama' ? 'bg-amber-50/50' : ''}>
                     <Td className="text-gray-400 font-mono text-xs">{rowNo}</Td>
                     <Td>
-                      <div className="font-bold text-gray-900 flex items-center gap-1.5">
+                      <div className="font-bold text-gray-900 flex items-center gap-1.5 flex-wrap">
                         {e.name}
                         {e.name === 'Rama' && (
                           <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-200 text-amber-900">
                             Sampel Excel
+                          </span>
+                        )}
+                        {e.workLocationCode === 'sales' || (e.location && e.location.toLowerCase().includes('other')) ? (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-sky-100 text-sky-800 border border-sky-200">
+                            💼 Area Sales
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
+                            🏢 HO
                           </span>
                         )}
                       </div>
@@ -719,17 +735,17 @@ export default function HoPayrollCalculatorPage() {
       {activeTab === 'lembur' && (
         <div className="space-y-6">
           <SectionCard
-            title="PERHITUNGAN LEMBUR KARYAWAN (HO & GUDANG)"
-            subtitle="Mendukung aturan lembur Head Office (berbasis proporsional gaji pokok) dan aturan lembur Gudang (flat rate hari kerja Rp 15.000/jam & Minggu/Libur Rp 25.000/jam)."
+            title="PERHITUNGAN LEMBUR KARYAWAN (HO, AREA SALES & GUDANG)"
+            subtitle="Mendukung aturan lembur Head Office & Area Sales (berbasis proporsional gaji pokok) dan aturan lembur Gudang (flat rate hari kerja Rp 15.000/jam & Minggu/Libur Rp 25.000/jam)."
           >
             {/* Header Comparison Policy Banner */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
               <div className="p-4 bg-indigo-50/70 border border-indigo-200 rounded-xl text-xs space-y-1">
                 <div className="font-bold text-sm text-indigo-900 flex items-center gap-1.5">
-                  <span>🏢</span> Aturan Lembur Head Office (HO)
+                  <span>🏢</span> Aturan Lembur HO & <span>💼</span> Area Sales
                 </div>
                 <div className="text-gray-700">Formula: <strong className="font-mono text-indigo-800">(Gaji Pokok / Hari Kerja Cut-off) / 8 Jam</strong></div>
-                <div className="text-gray-600">Tarif per jam dihitung proporsional berbasis gaji pokok dan pembagi hari kerja cut-off.</div>
+                <div className="text-gray-600">Tarif per jam dihitung proporsional berbasis gaji pokok untuk staf Head Office dan Area Sales (Others).</div>
               </div>
 
               <div className="p-4 bg-amber-50/70 border border-amber-200 rounded-xl text-xs space-y-1">
@@ -840,6 +856,7 @@ export default function HoPayrollCalculatorPage() {
                     const rowNo = (otPage - 1) * otPageSize + idx + 1
                     const loc = (ot.employee?.workLocationCode || ot.employee?.location || '').toLowerCase()
                     const isGudang = loc === 'gudang' || loc.includes('warehouse') || loc.includes('pack')
+                    const isSales = loc === 'sales' || loc.includes('sales') || loc.includes('other')
                     const statusTone =
                       ot.status === 'Approved' ? 'bg-emerald-100 text-emerald-800' : ot.status === 'Rejected' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'
                     return (
@@ -854,6 +871,10 @@ export default function HoPayrollCalculatorPage() {
                           {isGudang ? (
                             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200">
                               📦 Gudang
+                            </span>
+                          ) : isSales ? (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-sky-100 text-sky-800 border border-sky-200">
+                              💼 Area Sales
                             </span>
                           ) : (
                             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-800 border border-indigo-200">
@@ -1216,13 +1237,13 @@ export default function HoPayrollCalculatorPage() {
         </SectionCard>
       )}
 
-      {/* MODAL INPUT LEMBUR HO & GUDANG */}
+      {/* MODAL INPUT LEMBUR HO, AREA SALES & GUDANG */}
       {otModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 space-y-4">
             <div className="flex items-center justify-between border-b pb-3">
               <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                <span>⏱️</span> Input Entri Lembur Karyawan (HO & Gudang)
+                <span>⏱️</span> Input Entri Lembur Karyawan (HO, Area Sales & Gudang)
               </h3>
               <button
                 onClick={() => setOtModalOpen(false)}
@@ -1243,9 +1264,11 @@ export default function HoPayrollCalculatorPage() {
                   {(data.allEmployees?.length ? data.allEmployees : data.employees).map((e) => {
                     const loc = (e.workLocationCode || e.location || '').toLowerCase()
                     const isGudang = loc === 'gudang' || loc.includes('warehouse') || loc.includes('pack')
+                    const isSales = loc === 'sales' || loc.includes('sales') || loc.includes('other')
+                    const locLabel = isGudang ? '📦 Gudang' : isSales ? '💼 Area Sales' : '🏢 HO'
                     return (
                       <option key={e.id || e.empId} value={e.id || e.empId}>
-                        {e.name} ({isGudang ? '📦 Gudang' : '🏢 HO'} · Gross: {fmtRp(e.salary || e.grossSalary)})
+                        {e.name} ({locLabel} · Gross: {fmtRp(e.salary || e.grossSalary)})
                       </option>
                     )
                   })}
@@ -1294,11 +1317,17 @@ export default function HoPayrollCalculatorPage() {
                 <div className={`p-4 rounded-xl space-y-1.5 text-xs border ${
                   liveOtCalc.isGudang
                     ? 'bg-amber-50 border-amber-200 text-amber-950'
+                    : liveOtCalc.isSales
+                    ? 'bg-sky-50 border-sky-200 text-sky-950'
                     : 'bg-indigo-50 border-indigo-200 text-indigo-950'
                 }`}>
                   <div className="font-bold mb-1 flex items-center justify-between">
                     <span className="flex items-center gap-1.5">
-                      {liveOtCalc.isGudang ? '📦 Kalkulasi Lembur Gudang:' : '🏢 Kalkulasi Lembur HO:'}
+                      {liveOtCalc.isGudang
+                        ? '📦 Kalkulasi Lembur Gudang (Flat):'
+                        : liveOtCalc.isSales
+                        ? '💼 Kalkulasi Lembur Area Sales (Proporsional):'
+                        : '🏢 Kalkulasi Lembur HO (Proporsional):'}
                     </span>
                     <span className="font-mono font-bold">{liveOtCalc.hours} Jam</span>
                   </div>
@@ -1317,7 +1346,7 @@ export default function HoPayrollCalculatorPage() {
                   ) : (
                     <>
                       <div className="flex justify-between">
-                        <span className="text-gray-600">Gaji Pokok:</span>
+                        <span className="text-gray-600">Gaji Pokok (75%):</span>
                         <strong>{fmtRp(liveOtCalc.basicSalary)}</strong>
                       </div>
                       <div className="flex justify-between">
@@ -1328,7 +1357,11 @@ export default function HoPayrollCalculatorPage() {
                   )}
 
                   <div className={`flex justify-between border-t pt-1 text-sm font-bold ${
-                    liveOtCalc.isGudang ? 'border-amber-200' : 'border-indigo-200'
+                    liveOtCalc.isGudang
+                      ? 'border-amber-200'
+                      : liveOtCalc.isSales
+                      ? 'border-sky-200'
+                      : 'border-indigo-200'
                   }`}>
                     <span>Total Uang Lembur:</span>
                     <span className="text-emerald-700">{fmtRp(liveOtCalc.fee)}</span>

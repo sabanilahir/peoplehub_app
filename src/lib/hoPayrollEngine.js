@@ -113,6 +113,7 @@ export function calcWarehouseOvertime({ date, hours = 0, isHoliday = false }) {
 export function resolveEmployeeOvertimeRate({ employee, date, workingDays = 22, isHoliday = false }) {
   const loc = (employee?.workLocationCode || employee?.location || 'ho').toLowerCase()
   const isGudang = loc === 'gudang' || loc.includes('warehouse') || loc.includes('pack')
+  const isSales = loc === 'sales' || loc.includes('sales') || loc.includes('other')
 
   if (isGudang) {
     const res = calcWarehouseOvertime({ date, hours: 1, isHoliday })
@@ -124,15 +125,17 @@ export function resolveEmployeeOvertimeRate({ employee, date, workingDays = 22, 
     }
   }
 
-  // Default HO: Basic / WorkingDays / 8
+  // Default HO & Area Sales (Others): Basic (75%) / WorkingDays / 8
   const basicSalary = Number(employee?.salary || 0) * 0.75
   const hoRate = calcHoOvertimeRate(basicSalary, workingDays)
   return {
-    locationType: 'ho',
+    locationType: isSales ? 'sales' : 'ho',
     hourlyRate: hoRate.hourlyRate,
     exactHourlyRate: hoRate.exactHourlyRate,
     dailyRate: hoRate.dailyRate,
-    label: `Lembur HO (Rp ${hoRate.hourlyRate.toLocaleString('id-ID')}/jam)`,
+    label: isSales
+      ? `Lembur Area Sales (Rp ${hoRate.hourlyRate.toLocaleString('id-ID')}/jam)`
+      : `Lembur HO (Rp ${hoRate.hourlyRate.toLocaleString('id-ID')}/jam)`,
     isSpecialRate: false,
   }
 }
