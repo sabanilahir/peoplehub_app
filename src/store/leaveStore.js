@@ -48,8 +48,6 @@ const SEED_LEAVES = [
     ]},
 ]
 
-let _id = 6
-
 // Derive overall status from steps
 function deriveStatus(steps) {
   if (steps.some(s => s.status === 'Rejected')) return 'Rejected'
@@ -61,20 +59,28 @@ export const useLeaveStore = create(persist((set, get) => ({
   leaves:     SEED_LEAVES.map(l => ({ ...l, steps: l.steps.map(s=>({...s})) })),
   leaveTypes: SEED_LEAVE_TYPES.map(t => ({ ...t })),
 
+  // Sinkronkan leaves langsung dari database PostgreSQL
+  setLeaves: (leaves) => set({ leaves }),
+
   // pageLevels: levels array from workflowStore.getLevelsForPage(pageName)
   // data.submittedBy / data.submittedByName: the actual user who pressed submit (may differ from userId when HR submits on behalf)
   submitLeave: (data, pageLevels = null) =>
-    set((s) => ({
-      leaves: [...s.leaves, {
-        id: _id++,
-        status: 'Pending',
-        submittedAt:     new Date().toISOString(),
-        submittedBy:     data.submittedBy     ?? data.userId,
-        submittedByName: data.submittedByName ?? data.name,
-        steps: pageLevels?.length ? generateSteps(pageLevels) : DEFAULT_STEPS(),
-        ...data,
-      }],
-    })),
+    set((s) => {
+      const existingIds = (s.leaves || []).map(l => Number(l.id)).filter(id => !isNaN(id))
+      const maxId = existingIds.length > 0 ? Math.max(...existingIds) : 0
+      const newId = data.id || (maxId + 1)
+      return {
+        leaves: [...s.leaves, {
+          status: 'Pending',
+          submittedAt:     new Date().toISOString(),
+          submittedBy:     data.submittedBy     ?? data.userId,
+          submittedByName: data.submittedByName ?? data.name,
+          steps: pageLevels?.length ? generateSteps(pageLevels) : DEFAULT_STEPS(),
+          ...data,
+          id: newId,
+        }],
+      }
+    }),
 
   updateStatus: (id, status) =>
     set((s) => ({

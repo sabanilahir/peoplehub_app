@@ -192,6 +192,7 @@ export default function ApplyLeavePage() {
         // Sinkronkan juga ke local leaveStore untuk backward compatibility
         submitLeave(
           {
+            id: json.data?.id,
             userId: currentUser.id,
             name: currentUser.name,
             workflowName: 'Apply Leave',

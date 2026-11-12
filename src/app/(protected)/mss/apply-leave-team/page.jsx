@@ -132,6 +132,7 @@ export default function ApplyLeaveTeamPage() {
         // 2. Perbarui state client-side
         submitLeave(
           {
+            id: resJson.data?.id,
             userId: +form.empId,
             name: selectedEmp?.name ?? '',
             workflowName: 'Apply Leave (My Team)',

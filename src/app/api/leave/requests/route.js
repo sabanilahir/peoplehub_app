@@ -18,6 +18,7 @@ export async function GET(req) {
     const userId = searchParams.get('userId')
     const status = searchParams.get('status')
     const supervisorId = searchParams.get('supervisorId')
+    const participantId = searchParams.get('participantId')
 
     const where = {}
     if (userId) where.userId = Number(userId)
@@ -41,6 +42,36 @@ export async function GET(req) {
       },
       orderBy: { id: 'desc' },
     })
+
+    // Filter jika mencari seluruh permohonan terkait user (sebagai pengaju atau approver/bawahan)
+    if (participantId) {
+      const pId = Number(participantId)
+      const subordinates = await prisma.employee.findMany({
+        where: {
+          OR: [
+            { managerId: pId },
+            { approver1Id: pId },
+            { approver2Id: pId },
+          ],
+        },
+        select: { id: true },
+      })
+      const subIds = new Set(subordinates.map((e) => e.id))
+
+      leaves = leaves.filter((l) => {
+        // 1. Permintaan cuti milik sendiri
+        if (l.userId === pId) return true
+        // 2. Permintaan cuti dari bawahan di hierarki/matriks
+        if (subIds.has(l.userId)) return true
+        // 3. Permintaan dimana approverId step cocok
+        const steps = Array.isArray(l.steps) ? l.steps : []
+        if (steps.some((s) => s.approverId === pId)) return true
+        // 4. Permintaan dimana flowableMatrix melibatkan user ini
+        const matrix = l.customData?.flowableMatrix || []
+        if (matrix.some((m) => m.employeeId === pId)) return true
+        return false
+      })
+    }
 
     // Filter jika mencari pengajuan bawahan untuk supervisor tertentu (Approval 1 / Approval 2)
     if (supervisorId) {

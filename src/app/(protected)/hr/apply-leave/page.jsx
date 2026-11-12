@@ -109,6 +109,7 @@ export default function ApplyLeaveHRPage() {
         // 2. Perbarui state client-side
         submitLeave(
           {
+            id: resJson.data?.id,
             userId: +form.empId,
             name: selectedEmp?.name ?? '',
             submittedBy: currentUser.id,

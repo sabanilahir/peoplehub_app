@@ -1,6 +1,6 @@
 'use client'
 import Icon from '@/components/ui/Icon'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useAuthStore }       from '@/store/authStore'
 import { useEmployeeStore }   from '@/store/employeeStore'
 import { useLeaveStore }      from '@/store/leaveStore'
@@ -84,35 +84,48 @@ function canActLeave(pendingStep, leave, currentUser, employees) {
   // 1. Cocokkan langsung jika step memiliki approverId eksplisit
   if (pendingStep.approverId && pendingStep.approverId === uid) return true
 
+  // 1b. Superadmin memiliki kewenangan menyetujui seluruh tingkatan
+  if (role === 'superadmin') return true
+
   const emp = employees.find(e => e.id === rid)
 
   // 2. Tingkat 1 (Approval 1 / Coordinator / SPV)
   if (pendingStep.tier === 'approval_1' || pendingStep.type === 'coordinator') {
-    return emp?.approver1Id === uid || (!emp?.approver1Id && emp?.managerId === uid) || role === 'superadmin'
+    return emp?.approver1Id === uid || (!emp?.approver1Id && emp?.managerId === uid)
   }
 
   // 3. Tingkat 2 (Approval 2 / Head / HR)
   if (pendingStep.tier === 'approval_2' || pendingStep.type === 'manager') {
     const isTargetApp2 = emp?.approver2Id === uid
-    const isHrBackup = ['hr', 'hr_manager', 'superadmin'].includes(role) && (!emp?.approver2Id || emp?.approver2Id === 3)
-    return isTargetApp2 || isHrBackup || role === 'superadmin'
+    const isHrBackup = ['hr', 'hr_manager'].includes(role) && (!emp?.approver2Id || emp?.approver2Id === 3)
+    return isTargetApp2 || isHrBackup
   }
 
-  // 4. Legacy fallback
+  // 4. Tingkat 3+ (Approval 3, Approval 4, dsb)
+  if (pendingStep.tier === 'approval_3' || pendingStep.tier === 'approval_4') {
+    return pendingStep.approverId === uid
+  }
+
+  // 5. Persetujuan Akhir HR
+  if (pendingStep.tier === 'hr_approval' || pendingStep.type === 'hr') {
+    return ['hr', 'hr_manager'].includes(role)
+  }
+
+  // 6. Legacy fallback
   switch (pendingStep.type) {
     case 'supervisor':
-      return emp?.approver1Id === uid || getDirectManagerId(rid, employees) === uid || role === 'superadmin'
+      return emp?.approver1Id === uid || getDirectManagerId(rid, employees) === uid
     case 'indirect_sup':
-      return emp?.approver2Id === uid || getIndirectManagerId(rid, employees) === uid || role === 'superadmin'
+      return emp?.approver2Id === uid || getIndirectManagerId(rid, employees) === uid
     case 'supervisor_pc53':
     case 'indirect_sup_pc53':
-      return emp?.approver1Id === uid || role === 'superadmin'
+      return emp?.approver1Id === uid
     case 'role':
     case 'userlist':
     case 'employee':
-      return role === 'hr' || role === 'hr_manager' || role === 'superadmin'
+      return role === 'hr' || role === 'hr_manager'
     default:
-      return role === 'superadmin'
+      return false
   }
 }
 
@@ -136,11 +149,12 @@ function canActOnboarding(pendingStep, ob, currentUser, employees) {
 
 // ── Detail popup ──────────────────────────────────────────────────────────────
 function DetailPopup({ notif, currentUser, employees, leaves, onboardings,
-                       leaveApprove, leaveReject, obApprove, obReject, onClose }) {
+                       leaveApprove, leaveReject, obApprove, obReject, onLeaveUpdated, onClose }) {
   const t = useT()
-  const [note,      setNote     ] = useState('')
-  const [rejecting, setRejecting] = useState(false)
-  const [done,      setDone     ] = useState(false)
+  const [note,       setNote      ] = useState('')
+  const [rejecting,  setRejecting ] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [done,       setDone      ] = useState(false)
 
   const leave   = notif.type === 'leave'      ? leaves.find(l => l.id === notif.recordId)      : null
   const ob      = notif.type === 'onboarding' ? onboardings.find(o => o.id === notif.recordId) : null
@@ -157,16 +171,65 @@ function DetailPopup({ notif, currentUser, employees, leaves, onboardings,
       ? canActOnboarding(pendingStep, ob, currentUser, employees)
       : false
 
-  const handleApprove = () => {
-    if (leave)  leaveApprove(leave.id,  pendingStep.level, currentUser.id, currentUser.name, note)
-    if (ob)     obApprove(ob.id,        pendingStep.level, currentUser.id, currentUser.name, note)
-    setDone(true)
+  const handleApprove = async () => {
+    setSubmitting(true)
+    try {
+      if (leave) {
+        try {
+          await fetch(`/api/leave/requests/${leave.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'approve',
+              approverId: currentUser.id,
+              approverName: currentUser.name,
+              note: note || '',
+            }),
+          })
+        } catch (apiErr) {
+          console.warn('[DetailPopup] PUT /api/leave/requests error:', apiErr)
+        }
+        leaveApprove(leave.id, pendingStep?.level, currentUser.id, currentUser.name, note)
+        onLeaveUpdated?.()
+      }
+      if (ob) {
+        obApprove(ob.id, pendingStep?.level, currentUser.id, currentUser.name, note)
+      }
+      setDone(true)
+    } finally {
+      setSubmitting(false)
+    }
   }
-  const handleReject = () => {
+
+  const handleReject = async () => {
     if (!note.trim()) return
-    if (leave)  leaveReject(leave.id,   pendingStep.level, currentUser.id, currentUser.name, note)
-    if (ob)     obReject(ob.id,         pendingStep.level, currentUser.id, currentUser.name, note)
-    setDone(true)
+    setSubmitting(true)
+    try {
+      if (leave) {
+        try {
+          await fetch(`/api/leave/requests/${leave.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'reject',
+              approverId: currentUser.id,
+              approverName: currentUser.name,
+              note,
+            }),
+          })
+        } catch (apiErr) {
+          console.warn('[DetailPopup] PUT /api/leave/requests error:', apiErr)
+        }
+        leaveReject(leave.id, pendingStep?.level, currentUser.id, currentUser.name, note)
+        onLeaveUpdated?.()
+      }
+      if (ob) {
+        obReject(ob.id, pendingStep?.level, currentUser.id, currentUser.name, note)
+      }
+      setDone(true)
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   const leaveFields = leave ? [
@@ -305,11 +368,13 @@ function DetailPopup({ notif, currentUser, employees, leaves, onboardings,
                     placeholder={t('Tambahkan catatan…', 'Add a note…')}
                     className='w-full px-3 py-2 text-xs border border-gray-200 rounded-lg outline-none focus:border-teal-400' />
                   <div className='flex gap-2 mt-1'>
-                    <button onClick={handleApprove}
-                      className='flex-1 py-2 text-sm font-bold text-white rounded-xl bg-green-500 hover:bg-green-600 transition'><Icon e='✓' size={14} className='inline align-[-2px]' /> Approve
+                    <button onClick={handleApprove} disabled={submitting}
+                      className='flex-1 py-2 text-sm font-bold text-white rounded-xl bg-green-500 hover:bg-green-600 disabled:opacity-50 transition'>
+                      <Icon e='✓' size={14} className='inline align-[-2px]' /> {submitting ? '...' : 'Approve'}
                     </button>
-                    <button onClick={() => setRejecting(true)}
-                      className='flex-1 py-2 text-sm font-bold text-white rounded-xl bg-red-500 hover:bg-red-600 transition'><Icon e='✗' size={14} className='inline align-[-2px]' /> Reject
+                    <button onClick={() => setRejecting(true)} disabled={submitting}
+                      className='flex-1 py-2 text-sm font-bold text-white rounded-xl bg-red-500 hover:bg-red-600 disabled:opacity-50 transition'>
+                      <Icon e='✗' size={14} className='inline align-[-2px]' /> Reject
                     </button>
                   </div>
                 </>
@@ -320,11 +385,11 @@ function DetailPopup({ notif, currentUser, employees, leaves, onboardings,
                     autoFocus placeholder={t('Tuliskan alasan penolakan…', 'Enter rejection reason…')}
                     className='w-full px-3 py-2 text-xs border border-red-300 rounded-lg outline-none focus:border-red-500' />
                   <div className='flex gap-2 mt-1'>
-                    <button onClick={handleReject} disabled={!note.trim()}
+                    <button onClick={handleReject} disabled={!note.trim() || submitting}
                       className='flex-1 py-2 text-sm font-bold text-white rounded-xl bg-red-500 hover:bg-red-600 disabled:opacity-40 transition'>
-                      <Icon e='✗' size={14} className='inline align-[-2px]' /> {t('Konfirmasi Tolak', 'Confirm Reject')}
+                      <Icon e='✗' size={14} className='inline align-[-2px]' /> {submitting ? '...' : t('Konfirmasi Tolak', 'Confirm Reject')}
                     </button>
-                    <button onClick={() => { setRejecting(false); setNote('') }}
+                    <button onClick={() => { setRejecting(false); setNote('') }} disabled={submitting}
                       className='px-4 py-2 text-sm font-semibold bg-gray-100 text-gray-600 rounded-xl hover:bg-gray-200 transition'>
                       {t('Batal', 'Cancel')}
                     </button>
@@ -346,7 +411,7 @@ export default function NotificationBell() {
 
   const { currentUser }                                        = useAuthStore()
   const { employees }                                          = useEmployeeStore()
-  const { leaves,     approveStep: leaveApprove, rejectStep: leaveReject } = useLeaveStore()
+  const { leaves: storeLeaves, approveStep: leaveApprove, rejectStep: leaveReject } = useLeaveStore()
   const { onboardings, approveStep: obApprove,   rejectStep: obReject    } = useOnboardingStore()
   const { sessions: haySessions }  = useHayStore()
   const { sessions: vipSessions }  = useVipStore()
@@ -356,10 +421,57 @@ export default function NotificationBell() {
   const { sends: offNotifySends }  = useOffboardingNotifyStore()
   const { alerts: sosAlerts }      = useEmergencySosStore()
 
+  const [dbLeaves,   setDbLeaves  ] = useState([])
   const [open,       setOpen      ] = useState(false)
   const [readIds,    setReadIds   ] = useState([])
   const [activeItem, setActiveItem] = useState(null)
   const ref = useRef(null)
+
+  const refreshDbLeaves = async () => {
+    if (!currentUser) return
+    try {
+      const isHrOrAdmin = ['superadmin', 'admin', 'hr', 'hr_manager', 'director'].includes(currentUser.role)
+      const url = isHrOrAdmin
+        ? '/api/leave/requests'
+        : `/api/leave/requests?participantId=${currentUser.id}`
+      const res = await fetch(url)
+      const json = await res.json()
+      if (json.success && Array.isArray(json.data)) {
+        const mapped = json.data.map((l) => ({
+          id: l.id,
+          userId: l.userId,
+          name: l.user?.name || `Karyawan #${l.userId}`,
+          type: l.typeName || l.leaveType?.name || 'Cuti',
+          start: l.startDate,
+          end: l.endDate,
+          note: l.note || '',
+          status: l.status,
+          steps: Array.isArray(l.steps) ? l.steps : [],
+          customData: l.customData || {},
+          attachment: l.attachment || null,
+          submittedAt: l.createdAt || l.startDate,
+        }))
+        setDbLeaves(mapped)
+      }
+    } catch (err) {
+      console.warn('[NotificationBell] Failed to fetch leave requests:', err)
+    }
+  }
+
+  useEffect(() => {
+    refreshDbLeaves()
+    const timer = setInterval(refreshDbLeaves, 30000)
+    return () => clearInterval(timer)
+  }, [currentUser?.id, currentUser?.role])
+
+  const leaves = useMemo(() => {
+    if (dbLeaves.length > 0) {
+      const dbIds = new Set(dbLeaves.map((l) => l.id))
+      const storeOnly = (storeLeaves || []).filter((l) => !dbIds.has(l.id))
+      return [...dbLeaves, ...storeOnly]
+    }
+    return storeLeaves || []
+  }, [dbLeaves, storeLeaves])
 
   useEffect(() => {
     const handler = (e) => {
@@ -783,6 +895,7 @@ export default function NotificationBell() {
           leaveReject={leaveReject}
           obApprove={obApprove}
           obReject={obReject}
+          onLeaveUpdated={refreshDbLeaves}
           onClose={() => setActiveItem(null)}
         />
       )}
