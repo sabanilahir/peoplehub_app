@@ -77,6 +77,21 @@ export default function OdooPayrollSyncPage() {
   const [syncResult, setSyncResult] = useState(null)
   const [actionMsg, setActionMsg] = useState(null)
   const [selectedDetail, setSelectedDetail] = useState(null)
+  const [pendingOtCount, setPendingOtCount] = useState(0)
+
+  // Cek pengajuan lembur yang masih Pending dalam periode ini
+  useEffect(() => {
+    if (range.dateFrom && range.dateTo) {
+      fetch(`/api/overtime?startDate=${range.dateFrom}&endDate=${range.dateTo}&status=Pending`)
+        .then((r) => r.json())
+        .then((res) => {
+          if (res.success && Array.isArray(res.data)) {
+            setPendingOtCount(res.data.length)
+          }
+        })
+        .catch(() => {})
+    }
+  }, [range.dateFrom, range.dateTo])
 
   // Fetch Cut-off Preview
   const fetchPreview = async (dateFrom, dateTo) => {
@@ -424,6 +439,31 @@ export default function OdooPayrollSyncPage() {
           </button>
         </div>
       </div>
+
+      {/* Warning Banner: Pending Overtime Pre-check */}
+      {pendingOtCount > 0 && (
+        <div className="p-4 bg-amber-50 border border-amber-300 rounded-2xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs text-amber-900 shadow-xs mb-6">
+          <div className="flex items-start sm:items-center gap-3">
+            <div className="w-8 h-8 rounded-xl bg-amber-200 text-amber-800 flex items-center justify-center flex-shrink-0 font-bold text-sm">
+              ⚠️
+            </div>
+            <div>
+              <p className="font-bold text-sm text-amber-900">
+                Peringatan: Terdapat {pendingOtCount} Pengajuan Lembur Berstatus Pending
+              </p>
+              <p className="text-amber-700 mt-0.5">
+                Hanya lembur yang sudah <strong>Approved</strong> yang akan disinkronkan ke Odoo. Pastikan atasan atau HR telah menyetujui pengajuan lembur tim sebelum melakukan sinkronisasi payroll.
+              </p>
+            </div>
+          </div>
+          <Link
+            href="/hr/payroll/ho-calculator"
+            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl transition flex-shrink-0 text-center shadow-xs"
+          >
+            Review di HO Calculator →
+          </Link>
+        </div>
+      )}
 
       {/* Stat Cards - Ringkasan Operasional Sinkronisasi Odoo */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">

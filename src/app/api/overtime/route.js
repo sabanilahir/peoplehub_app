@@ -20,12 +20,30 @@ export async function GET(req) {
   try {
     const { searchParams } = new URL(req.url)
     const empId = searchParams.get('empId')
+    const approverId = searchParams.get('approverId')
     const startDate = searchParams.get('startDate')
     const endDate = searchParams.get('endDate')
     const status = searchParams.get('status')
 
     const where = {}
-    if (empId) where.empId = Number(empId)
+    if (empId) {
+      where.empId = Number(empId)
+    } else if (approverId) {
+      // Ambil seluruh bawahan yang disupervisi oleh approver ini
+      const subordinates = await prisma.employee.findMany({
+        where: {
+          OR: [
+            { approver1Id: Number(approverId) },
+            { approver2Id: Number(approverId) },
+            { managerId: Number(approverId) },
+          ],
+        },
+        select: { id: true },
+      })
+      const subIds = subordinates.map((s) => s.id)
+      where.empId = { in: subIds }
+    }
+
     if (status && status !== 'all') where.status = status
 
     if (startDate && endDate) {
@@ -45,13 +63,16 @@ export async function GET(req) {
             nik: true,
             name: true,
             dept: true,
+            jobTitle: true,
             location: true,
             workLocationCode: true,
             salary: true,
+            approver1Id: true,
+            approver2Id: true,
           },
         },
       },
-      orderBy: [{ date: 'asc' }, { startTime: 'asc' }],
+      orderBy: [{ date: 'desc' }, { startTime: 'desc' }],
     })
 
     return Response.json({ success: true, data: records })
@@ -75,7 +96,7 @@ export async function POST(req) {
       endTime,
       taskNote = '',
       workingDays = 22,
-      status = 'Approved',
+      status = 'Pending',
       approvedById = null,
     } = body
 
@@ -193,7 +214,7 @@ export async function POST(req) {
 export async function PUT(req) {
   try {
     const body = await req.json()
-    const { id, status, taskNote, startTime, endTime, workingDays } = body
+    const { id, status, taskNote, startTime, endTime, workingDays, approvedById, rejectReason } = body
 
     if (!id) {
       return Response.json({ success: false, error: 'ID lembur wajib diisi.' }, { status: 400 })
@@ -204,6 +225,8 @@ export async function PUT(req) {
       include: {
         employee: {
           select: {
+            id: true,
+            name: true,
             salary: true,
             location: true,
             workLocationCode: true,
@@ -218,7 +241,14 @@ export async function PUT(req) {
 
     const updateData = {}
     if (status) updateData.status = status
-    if (taskNote !== undefined) updateData.taskNote = taskNote
+    if (approvedById !== undefined) updateData.approvedById = approvedById ? Number(approvedById) : null
+    if (rejectReason) {
+      updateData.taskNote = existing.taskNote
+        ? `${existing.taskNote} [Alasan Penolakan: ${rejectReason}]`
+        : `[Alasan Penolakan: ${rejectReason}]`
+    } else if (taskNote !== undefined) {
+      updateData.taskNote = taskNote
+    }
 
     if (startTime || endTime) {
       const s = startTime || existing.startTime

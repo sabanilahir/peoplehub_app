@@ -139,9 +139,9 @@ export default function ProtectedLayout({ children }) {
           (Array.isArray(e.approvalMatrix) && e.approvalMatrix.some((m) => m.employeeId === activeUser.id))
       )
 
-      if (pathname.startsWith('/mss/approve-leave')) {
-        const canApproveLeave = isMssRole || hasPermission(role, 'mss_leave') || isApproverInStore
-        if (!canApproveLeave) {
+      if (pathname.startsWith('/mss/approve-leave') || pathname.startsWith('/mss/approve-overtime')) {
+        const canApprove = isMssRole || hasPermission(role, 'mss_leave') || hasPermission(role, 'mss_attendance') || isApproverInStore
+        if (!canApprove) {
           router.replace('/dashboard')
           return
         }

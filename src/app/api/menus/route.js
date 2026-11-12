@@ -179,6 +179,79 @@ export async function GET() {
       })
     }
 
+    // Auto-seed / Auto-heal jika menu Overtime ESS & MSS belum ada di tabel MenuItem
+    const hasEssOvertime = menus.some((m) => m.key === 'ess-overtime')
+    const hasMssOvertime = menus.some((m) => m.key === 'mss-approve-overtime')
+
+    if ((!hasEssOvertime || !hasMssOvertime) && menus.length > 0) {
+      const essParent = menus.find((m) => m.key === 'ess')
+      const mssParent = menus.find((m) => m.key === 'mss')
+
+      if (!hasEssOvertime && essParent) {
+        try {
+          await prisma.menuItem.upsert({
+            where: { key: 'ess-overtime' },
+            create: {
+              id: 109,
+              key: 'ess-overtime',
+              label: 'Pengajuan Lembur',
+              icon: 'clock',
+              href: '/ess/overtime',
+              parentId: essParent.id,
+              roles: JSON.stringify(['*']),
+              departments: JSON.stringify(['*']),
+              order: 10,
+              active: true,
+            },
+            update: {
+              label: 'Pengajuan Lembur',
+              icon: 'clock',
+              href: '/ess/overtime',
+              parentId: essParent.id,
+              roles: JSON.stringify(['*']),
+              departments: JSON.stringify(['*']),
+              order: 10,
+              active: true,
+            },
+          })
+        } catch {}
+      }
+
+      if (!hasMssOvertime && mssParent) {
+        try {
+          await prisma.menuItem.upsert({
+            where: { key: 'mss-approve-overtime' },
+            create: {
+              id: 405,
+              key: 'mss-approve-overtime',
+              label: 'Approve Overtime',
+              icon: 'check-circle',
+              href: '/mss/approve-overtime',
+              parentId: mssParent.id,
+              roles: JSON.stringify(['*']),
+              departments: JSON.stringify(['*']),
+              order: 5,
+              active: true,
+            },
+            update: {
+              label: 'Approve Overtime',
+              icon: 'check-circle',
+              href: '/mss/approve-overtime',
+              parentId: mssParent.id,
+              roles: JSON.stringify(['*']),
+              departments: JSON.stringify(['*']),
+              order: 5,
+              active: true,
+            },
+          })
+        } catch {}
+      }
+
+      menus = await prisma.menuItem.findMany({
+        orderBy: { order: 'asc' },
+      })
+    }
+
     return Response.json(menus)
   } catch {
     return dbDown()

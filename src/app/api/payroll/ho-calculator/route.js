@@ -60,17 +60,19 @@ export async function GET(req) {
 
     const workingDays = overrideWorkingDays ? Number(overrideWorkingDays) : (workDayInfo.workingDays || 22)
 
-    // 3. Ambil data lembur periode ini (hanya yang Approved)
-    const overtimeRecords = await prisma.overtimeRecord.findMany({
+    // 3. Ambil seluruh data lembur periode ini (untuk monitoring & review di Tab Lembur)
+    const allOvertimeRecords = await prisma.overtimeRecord.findMany({
       where: {
         date: { gte: dateFrom, lte: dateTo },
-        status: 'Approved',
       },
       include: {
         employee: { select: { id: true, name: true, nik: true, salary: true, location: true, workLocationCode: true } },
       },
       orderBy: [{ date: 'asc' }, { startTime: 'asc' }],
     })
+
+    // Filter HANYA lembur yang sudah Approved untuk dihitung ke rekap payroll resmi
+    const overtimeRecords = allOvertimeRecords.filter((ot) => ot.status === 'Approved')
 
     // Kelompokkan lembur per karyawan
     const otByEmp = new Map()
@@ -330,6 +332,8 @@ export async function GET(req) {
       workingDays,
       totalGrossSum: calculatedRows.reduce((s, r) => s + r.grossSalary, 0),
       totalOvertimeSum: calculatedRows.reduce((s, r) => s + r.totalOvertimeFee, 0),
+      approvedOvertimeCount: overtimeRecords.length,
+      pendingOvertimeCount: allOvertimeRecords.filter((o) => o.status === 'Pending').length,
       totalHalfDayDeductionSum: calculatedRows.reduce((s, r) => s + r.halfDayDeduction, 0),
       totalSickDeductionSum: calculatedRows.reduce((s, r) => s + r.sickLeaveDeduction, 0),
       totalUnpaidDeductionSum: calculatedRows.reduce((s, r) => s + r.unpaidLeaveDeduction, 0),
@@ -352,7 +356,7 @@ export async function GET(req) {
       allEmployees,
       tables: {
         rekapPayroll: calculatedRows,
-        overtimes: overtimeRecords,
+        overtimes: allOvertimeRecords,
         halfDays: allHalfDayEntries,
         sickLeaves: allSickEntries,
         unpaidLeaves: allUnpaidEntries,

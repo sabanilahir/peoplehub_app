@@ -428,6 +428,7 @@ export default function NotificationBell() {
   const { alerts: sosAlerts }      = useEmergencySosStore()
 
   const [dbLeaves,   setDbLeaves  ] = useState([])
+  const [dbOvertimes, setDbOvertimes] = useState([])
   const [open,       setOpen      ] = useState(false)
   const [readIds,    setReadIds   ] = useState([])
   const [activeItem, setActiveItem] = useState(null)
@@ -509,6 +510,51 @@ export default function NotificationBell() {
     }
   }, [currentUser?.id, currentUser?.role])
 
+  const refreshDbOvertimes = async () => {
+    if (!currentUser) return
+    try {
+      const isHrOrAdmin = ['superadmin', 'admin', 'hr', 'hr_manager', 'director'].includes(currentUser.role)
+      const empId = currentUser.employeeId || currentUser.id
+      const url = isHrOrAdmin
+        ? '/api/overtime'
+        : `/api/overtime?empId=${empId}`
+      const res = await fetch(url)
+      const json = await res.json()
+      let list = json.success && Array.isArray(json.data) ? json.data : []
+
+      if (!isHrOrAdmin) {
+        const resSub = await fetch(`/api/overtime?approverId=${empId}&status=Pending`)
+        const jsonSub = await resSub.json()
+        if (jsonSub.success && Array.isArray(jsonSub.data)) {
+          const existingIds = new Set(list.map((o) => o.id))
+          jsonSub.data.forEach((sub) => {
+            if (!existingIds.has(sub.id)) list.push(sub)
+          })
+        }
+      }
+      setDbOvertimes(list)
+    } catch (err) {
+      console.warn('[NotificationBell] Failed to fetch overtimes:', err)
+    }
+  }
+
+  useEffect(() => {
+    refreshDbOvertimes()
+    const otTimer = setInterval(refreshDbOvertimes, 30000)
+    const onOtUpdated = () => {
+      refreshDbOvertimes()
+    }
+    if (typeof window !== 'undefined') {
+      window.addEventListener('overtime-status-updated', onOtUpdated)
+    }
+    return () => {
+      clearInterval(otTimer)
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('overtime-status-updated', onOtUpdated)
+      }
+    }
+  }, [currentUser?.id, currentUser?.employeeId, currentUser?.role])
+
   // ── Database leaves adalah sumber kebenaran (ground truth). Hindari mencampur mock leaves usang ──
   const leaves = useMemo(() => {
     if (dbLeaves.length > 0) {
@@ -562,6 +608,44 @@ export default function NotificationBell() {
           at: l.submittedAt, type: 'leave', recordId: l.id,
         })
       })
+
+    // ── Lembur (Overtime) Notifications ──────────────────────────────────────
+    if (dbOvertimes.length > 0) {
+      const myEmpId = currentUser.employeeId || currentUser.id
+
+      // 1. Notifikasi untuk pemohon lembur jika sudah disetujui / ditolak
+      dbOvertimes
+        .filter((ot) => ot.empId === myEmpId && (ot.status === 'Approved' || ot.status === 'Rejected'))
+        .forEach((ot) => {
+          const dur = ot.totalHours ? `${ot.totalHours} jam` : ''
+          notifications.push({
+            id: `ot-${ot.status.toLowerCase()}-${ot.id}`,
+            icon: ot.status === 'Approved' ? '✅' : '❌',
+            text: ot.status === 'Approved'
+              ? t(`Pengajuan lembur Anda (${ot.date}, ${dur}) telah disetujui.`, `Your overtime request (${ot.date}, ${dur}) has been approved.`)
+              : t(`Pengajuan lembur Anda (${ot.date}, ${dur}) telah ditolak.`, `Your overtime request (${ot.date}, ${dur}) has been rejected.`),
+            at: ot.updatedAt || ot.createdAt,
+            type: 'overtime',
+            recordId: ot.id,
+          })
+        })
+
+      // 2. Notifikasi untuk atasan / approver jika ada lembur bawahan yang Pending
+      dbOvertimes
+        .filter((ot) => ot.status === 'Pending' && ot.empId !== myEmpId)
+        .forEach((ot) => {
+          const dur = ot.totalHours ? `${ot.totalHours} jam` : ''
+          const empName = ot.employee?.name || `Karyawan #${ot.empId}`
+          notifications.push({
+            id: `ot-pending-${ot.id}`,
+            icon: '⏳',
+            text: t(`Pengajuan lembur dari ${empName} (${ot.date}, ${dur}) menunggu persetujuan Anda.`, `Overtime request from ${empName} (${ot.date}, ${dur}) is awaiting your approval.`),
+            at: ot.createdAt,
+            type: 'overtime',
+            recordId: ot.id,
+          })
+        })
+    }
 
     onboardings
       .filter(o => o.employeeId === uid && o.workflowStatus === 'Approved')

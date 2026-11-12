@@ -45,6 +45,7 @@ export default function HoPayrollCalculatorPage() {
   const [dateTo, setDateTo] = useState('')
   const [overrideWorkingDays, setOverrideWorkingDays] = useState('')
   const [activeTab, setActiveTab] = useState('rekap') // 'rekap' | 'lembur' | 'setengah' | 'sakit' | 'unpaid' | 'prorata'
+  const [otStatusFilter, setOtStatusFilter] = useState('all') // 'all' | 'Approved' | 'Pending' | 'Rejected'
   const [searchQuery, setSearchQuery] = useState('')
   const [actionMsg, setActionMsg] = useState(null)
 
@@ -156,6 +157,48 @@ export default function HoPayrollCalculatorPage() {
       }
     } catch (err) {
       flash('Gagal menghapus entri lembur.', 'error')
+    }
+  }
+
+  // Handle Quick Approve Overtime (HR Direct Action)
+  const handleQuickApproveOvertime = async (id) => {
+    try {
+      const res = await fetch('/api/overtime', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, status: 'Approved' }),
+      })
+      const json = await res.json()
+      if (json.success) {
+        flash('Entri lembur berhasil disetujui dan otomatis masuk perhitungan payroll!')
+        await fetchData(dateFrom, dateTo, overrideWorkingDays)
+      } else {
+        flash(json.error || 'Gagal menyetujui lembur.', 'error')
+      }
+    } catch (err) {
+      flash('Gagal menyetujui lembur.', 'error')
+    }
+  }
+
+  // Handle Quick Reject Overtime
+  const handleQuickRejectOvertime = async (id) => {
+    const reason = prompt('Masukkan alasan penolakan lembur:')
+    if (reason === null) return
+    try {
+      const res = await fetch('/api/overtime', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, status: 'Rejected', rejectReason: reason }),
+      })
+      const json = await res.json()
+      if (json.success) {
+        flash('Entri lembur telah ditolak.')
+        await fetchData(dateFrom, dateTo, overrideWorkingDays)
+      } else {
+        flash(json.error || 'Gagal menolak lembur.', 'error')
+      }
+    } catch (err) {
+      flash('Gagal menolak lembur.', 'error')
     }
   }
 
@@ -567,6 +610,76 @@ export default function HoPayrollCalculatorPage() {
               </div>
             </div>
 
+            {/* Pending Alert Banner */}
+            {data.stats?.pendingOvertimeCount > 0 && (
+              <div className="p-4 bg-amber-50 border border-amber-300 rounded-xl text-xs flex items-center justify-between text-amber-900 mb-5">
+                <div className="flex items-center gap-2">
+                  <span className="text-base">⚠️</span>
+                  <span>
+                    Terdapat <strong>{data.stats.pendingOvertimeCount} pengajuan lembur</strong> yang masih berstatus <strong>Pending</strong>.
+                    Hanya lembur yang berstatus <strong>Approved</strong> yang otomatis dihitung ke Take Home Pay (THP) dan siap dikirim ke Odoo.
+                  </span>
+                </div>
+                <button
+                  onClick={() => setOtStatusFilter('Pending')}
+                  className="px-3 py-1 bg-amber-600 text-white rounded-lg font-bold hover:bg-amber-700 transition"
+                >
+                  Tinjau Pending ({data.stats.pendingOvertimeCount})
+                </button>
+              </div>
+            )}
+
+            {/* Filter Tabs */}
+            <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-xl text-xs font-semibold mb-4 w-fit">
+              <button
+                type="button"
+                onClick={() => setOtStatusFilter('all')}
+                className={`px-3 py-1.5 rounded-lg transition ${
+                  otStatusFilter === 'all'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-800'
+                }`}
+              >
+                Semua ({data.tables?.overtimes?.length || 0})
+              </button>
+              <button
+                type="button"
+                onClick={() => setOtStatusFilter('Approved')}
+                className={`px-3 py-1.5 rounded-lg transition ${
+                  otStatusFilter === 'Approved'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-800'
+                }`}
+              >
+                Disetujui ({data.stats?.approvedOvertimeCount || 0})
+              </button>
+              <button
+                type="button"
+                onClick={() => setOtStatusFilter('Pending')}
+                className={`px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 ${
+                  otStatusFilter === 'Pending'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-800'
+                }`}
+              >
+                <span>Menunggu ({data.stats?.pendingOvertimeCount || 0})</span>
+                {data.stats?.pendingOvertimeCount > 0 && (
+                  <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => setOtStatusFilter('Rejected')}
+                className={`px-3 py-1.5 rounded-lg transition ${
+                  otStatusFilter === 'Rejected'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-800'
+                }`}
+              >
+                Ditolak
+              </button>
+            </div>
+
             <div className="overflow-x-auto">
               <table className="w-full text-sm text-left border-collapse">
                 <thead>
@@ -581,59 +694,99 @@ export default function HoPayrollCalculatorPage() {
                     <th className="py-2.5 px-3 text-right">FEE PER HOUR</th>
                     <th className="py-2.5 px-3 text-right">TOTAL FEE</th>
                     <th className="py-2.5 px-3">TUGAS / CATATAN</th>
+                    <th className="py-2.5 px-3 text-center">STATUS</th>
                     <th className="py-2.5 px-3 text-center">AKSI</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {(data.tables?.overtimes || []).map((ot) => {
-                    const loc = (ot.employee?.workLocationCode || ot.employee?.location || '').toLowerCase()
-                    const isGudang = loc === 'gudang' || loc.includes('warehouse') || loc.includes('pack')
-                    return (
-                      <tr key={ot.id} className="hover:bg-amber-50/40">
-                        <td className="py-2.5 px-3 font-semibold text-gray-800">
-                          {ot.employee?.name}
-                        </td>
-                        <td className="py-2.5 px-3">
-                          {isGudang ? (
-                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200">
-                              📦 Gudang
+                  {(data.tables?.overtimes || [])
+                    .filter((ot) => otStatusFilter === 'all' || ot.status === otStatusFilter)
+                    .map((ot) => {
+                      const loc = (ot.employee?.workLocationCode || ot.employee?.location || '').toLowerCase()
+                      const isGudang = loc === 'gudang' || loc.includes('warehouse') || loc.includes('pack')
+                      const statusTone =
+                        ot.status === 'Approved' ? 'bg-emerald-100 text-emerald-800' : ot.status === 'Rejected' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'
+                      return (
+                        <tr key={ot.id} className="hover:bg-amber-50/40">
+                          <td className="py-2.5 px-3 font-semibold text-gray-800">
+                            {ot.employee?.name}
+                          </td>
+                          <td className="py-2.5 px-3">
+                            {isGudang ? (
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200">
+                                📦 Gudang
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-800 border border-indigo-200">
+                                🏢 HO
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-3 text-gray-600 font-medium">{ot.dayName || '-'}</td>
+                          <td className="py-2.5 px-3 font-mono text-gray-700">{ot.date}</td>
+                          <td className="py-2.5 px-3 font-mono text-gray-600">{ot.startTime}</td>
+                          <td className="py-2.5 px-3 font-mono text-gray-600">{ot.endTime}</td>
+                          <td className="py-2.5 px-3 text-right font-bold text-gray-800">
+                            {ot.totalHours?.toFixed(2)}
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-mono text-gray-700">
+                            {fmtRp(ot.hourlyRate)}
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-bold text-emerald-700">
+                            {fmtRp(ot.totalFee)}
+                          </td>
+                          <td className="py-2.5 px-3 text-xs text-gray-500 max-w-xs truncate" title={ot.taskNote || ''}>
+                            {ot.taskNote || '-'}
+                          </td>
+                          <td className="py-2.5 px-3 text-center">
+                            <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${statusTone}`}>
+                              {ot.status || 'Pending'}
                             </span>
-                          ) : (
-                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-800 border border-indigo-200">
-                              🏢 HO
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-2.5 px-3 text-gray-600 font-medium">{ot.dayName || '-'}</td>
-                        <td className="py-2.5 px-3 font-mono text-gray-700">{ot.date}</td>
-                        <td className="py-2.5 px-3 font-mono text-gray-600">{ot.startTime}</td>
-                        <td className="py-2.5 px-3 font-mono text-gray-600">{ot.endTime}</td>
-                        <td className="py-2.5 px-3 text-right font-bold text-gray-800">
-                          {ot.totalHours?.toFixed(2)}
-                        </td>
-                        <td className="py-2.5 px-3 text-right font-mono text-gray-700">
-                          {fmtRp(ot.hourlyRate)}
-                        </td>
-                        <td className="py-2.5 px-3 text-right font-bold text-emerald-700">
-                          {fmtRp(ot.totalFee)}
-                        </td>
-                        <td className="py-2.5 px-3 text-xs text-gray-500 max-w-xs truncate">
-                          {ot.taskNote || '-'}
-                        </td>
-                        <td className="py-2.5 px-3 text-center">
-                          <button
-                            onClick={() => handleDeleteOvertime(ot.id)}
-                            className="text-red-500 hover:text-red-700 text-xs font-semibold px-2 py-1 rounded hover:bg-red-50"
-                          >
-                            Hapus
-                          </button>
-                        </td>
-                      </tr>
-                    )
-                  })}
+                          </td>
+                          <td className="py-2.5 px-3 text-center">
+                            {ot.status === 'Pending' ? (
+                              <div className="flex items-center justify-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleQuickApproveOvertime(ot.id)}
+                                  className="text-white bg-emerald-600 hover:bg-emerald-700 text-[11px] font-bold px-2 py-1 rounded transition"
+                                  title="Setujui lembur"
+                                >
+                                  ✓ Setujui
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleQuickRejectOvertime(ot.id)}
+                                  className="text-amber-800 bg-amber-100 hover:bg-amber-200 text-[11px] font-semibold px-2 py-1 rounded border border-amber-300 transition"
+                                  title="Tolak lembur"
+                                >
+                                  ✗ Tolak
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteOvertime(ot.id)}
+                                  className="text-red-500 hover:text-red-700 text-[11px] font-semibold px-1 py-1 rounded hover:bg-red-50 transition"
+                                  title="Hapus entri"
+                                >
+                                  Hapus
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteOvertime(ot.id)}
+                                className="text-red-500 hover:text-red-700 text-xs font-semibold px-2 py-1 rounded hover:bg-red-50"
+                              >
+                                Hapus
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
                   {(!data.tables?.overtimes || data.tables.overtimes.length === 0) && (
                     <tr>
-                      <td colSpan={11} className="py-8 text-center text-gray-400">
+                      <td colSpan={12} className="py-8 text-center text-gray-400">
                         Belum ada entri lembur. Klik tombol <strong>+ Input Lembur (HO & Gudang)</strong> di atas untuk menambahkan data lembur karyawan.
                       </td>
                     </tr>
