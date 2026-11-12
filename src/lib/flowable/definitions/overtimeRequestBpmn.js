@@ -152,3 +152,46 @@ export const OVERTIME_REQUEST_BPMN_XML = `<?xml version="1.0" encoding="UTF-8"?>
   </bpmndi:BPMNDiagram>
 </bpmn:definitions>
 `
+
+export const OVERTIME_REQUEST_BPMN = OVERTIME_REQUEST_BPMN_XML
+
+export const DEFAULT_OVERTIME_FORMS = {
+  StartEvent_Overtime: {
+    elementId: 'StartEvent_Overtime',
+    elementName: 'Pengajuan Lembur (ESS)',
+    elementType: 'bpmn:StartEvent',
+    title: 'Formulir Pengajuan Lembur Karyawan',
+    description: 'Diisi oleh karyawan pemohon lembur melalui modul ESS Overtime',
+    decisionType: 'none',
+    fields: [
+      { id: 'f_overtime_date', label: 'Tanggal Lembur', type: 'date', required: true },
+      { id: 'f_start_time', label: 'Jam Mulai', type: 'text', required: true, placeholder: 'HH:mm (contoh: 17:00)' },
+      { id: 'f_end_time', label: 'Jam Selesai', type: 'text', required: true, placeholder: 'HH:mm (contoh: 21:00)' },
+      { id: 'f_notes', label: 'Uraian Pekerjaan / Alasan Lembur', type: 'textarea', required: true, placeholder: 'Jelaskan tugas operasional yang dikerjakan saat lembur...' },
+    ],
+  },
+  Task_Approver: {
+    elementId: 'Task_Approver',
+    elementName: 'Persetujuan Atasan Langsung (MSS)',
+    elementType: 'bpmn:UserTask',
+    title: 'Review Lembur oleh Atasan Langsung (MSS)',
+    description: 'Verifikasi kesesuaian output pekerjaan dan jam lembur aktual anggota tim',
+    decisionType: 'approval',
+    fields: [
+      { id: 'f_approver_note', label: 'Catatan Persetujuan Atasan', type: 'textarea', required: false, placeholder: 'Catatan atau arahan atasan...' },
+      { id: 'f_hours_verified', label: 'Jam Kerja Lembur Sesuai dengan Target/Output Pekerjaan', type: 'checkbox', required: true },
+    ],
+  },
+  Task_HRVerification: {
+    elementId: 'Task_HRVerification',
+    elementName: 'Verifikasi & Payroll Sync HR',
+    elementType: 'bpmn:UserTask',
+    title: 'Verifikasi & Rekonsiliasi Payroll HR',
+    description: 'Validasi perhitungan HO Calculator (PP 35/2021) dan sinkronisasi ke Odoo Payroll',
+    decisionType: 'approval',
+    fields: [
+      { id: 'f_hr_note', label: 'Catatan Verifikasi HR', type: 'textarea', required: false, placeholder: 'Catatan verifikasi tim HR...' },
+      { id: 'f_rate_verified', label: 'Formula Pengali Lembur Sesuai Ketentuan PP 35/2021', type: 'checkbox', required: true },
+    ],
+  },
+}

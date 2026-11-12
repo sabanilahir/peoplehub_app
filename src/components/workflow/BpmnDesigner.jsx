@@ -337,6 +337,8 @@ export const DEFAULT_REIMBURSEMENT_FORMS = {
   },
 }
 
+export { OVERTIME_REQUEST_BPMN, DEFAULT_OVERTIME_FORMS } from '@/lib/flowable/definitions/overtimeRequestBpmn'
+
 const BpmnDesigner = forwardRef(function BpmnDesigner(
   {
     initialXml = DEFAULT_BPMN,

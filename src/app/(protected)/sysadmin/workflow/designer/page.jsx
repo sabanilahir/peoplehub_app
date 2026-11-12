@@ -7,8 +7,10 @@ import { useSearchParams } from 'next/navigation'
 import {
   DEFAULT_BPMN,
   LEAVE_REQUEST_BPMN,
+  OVERTIME_REQUEST_BPMN,
   REIMBURSEMENT_BPMN,
   DEFAULT_LEAVE_FORMS,
+  DEFAULT_OVERTIME_FORMS,
   DEFAULT_REIMBURSEMENT_FORMS,
 } from '@/components/workflow/BpmnDesigner'
 
@@ -51,6 +53,8 @@ function WorkflowDesignerContent() {
           setKey(def.key)
           if (def.key === 'leave-request-process' || def.key === 'LeaveRequest') {
             setSelectedTemplate('leave')
+          } else if (def.key === 'overtime-request-process') {
+            setSelectedTemplate('overtime')
           } else if (def.key === 'expense-reimbursement') {
             setSelectedTemplate('reimbursement')
           } else {
@@ -81,6 +85,11 @@ function WorkflowDesignerContent() {
       setKey('leave-request-process')
       setFormsCount(Object.keys(DEFAULT_LEAVE_FORMS).length)
       designerRef.current?.loadXml(LEAVE_REQUEST_BPMN, DEFAULT_LEAVE_FORMS)
+    } else if (tmpl === 'overtime') {
+      setName('Persetujuan Lembur Karyawan')
+      setKey('overtime-request-process')
+      setFormsCount(Object.keys(DEFAULT_OVERTIME_FORMS).length)
+      designerRef.current?.loadXml(OVERTIME_REQUEST_BPMN, DEFAULT_OVERTIME_FORMS)
     } else if (tmpl === 'reimbursement') {
       setName('Klaim Reimbursement')
       setKey('expense-reimbursement')
@@ -276,6 +285,7 @@ function WorkflowDesignerContent() {
             className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
           >
             <option value="leave">📑 Pengajuan Cuti Karyawan</option>
+            <option value="overtime">⏱️ Persetujuan Lembur Karyawan</option>
             <option value="reimbursement">💳 Klaim Reimbursement Biaya</option>
             <option value="blank">⚪ Blank Process (Mulai dari Nol)</option>
             {selectedTemplate === 'custom' && <option value="custom">⚙️ Kustom (Dari Database)</option>}
