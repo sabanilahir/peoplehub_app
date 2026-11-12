@@ -30,6 +30,7 @@ export async function GET(req) {
     const startDate = searchParams.get('startDate')
     const endDate = searchParams.get('endDate')
     const status = searchParams.get('status')
+    const dept = searchParams.get('dept')
 
     const where = {}
     if (empId) {
@@ -48,6 +49,10 @@ export async function GET(req) {
       })
       const subIds = subordinates.map((s) => s.id)
       where.empId = { in: subIds }
+    }
+
+    if (dept && dept !== 'all') {
+      where.employee = { dept }
     }
 
     if (status && status !== 'all') where.status = status
@@ -81,7 +86,30 @@ export async function GET(req) {
       orderBy: [{ date: 'desc' }, { startTime: 'desc' }],
     })
 
-    return Response.json({ success: true, data: records })
+    let totalHours = 0
+    let totalFee = 0
+    let approvedCount = 0
+    let pendingCount = 0
+    let rejectedCount = 0
+
+    records.forEach((r) => {
+      totalHours += Number(r.totalHours) || 0
+      totalFee += Number(r.totalFee) || 0
+      if (r.status === 'Approved') approvedCount++
+      else if (r.status === 'Pending') pendingCount++
+      else if (r.status === 'Rejected') rejectedCount++
+    })
+
+    const summary = {
+      totalCount: records.length,
+      approvedCount,
+      pendingCount,
+      rejectedCount,
+      totalHours: Math.round(totalHours * 100) / 100,
+      totalFee,
+    }
+
+    return Response.json({ success: true, data: records, summary })
   } catch (error) {
     console.error('[API /api/overtime GET] Error:', error)
     return Response.json({ success: false, error: error.message }, { status: 500 })

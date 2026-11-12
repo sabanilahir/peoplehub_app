@@ -179,6 +179,44 @@ export async function GET() {
       })
     }
 
+    // Auto-seed / Auto-heal jika menu Overtime Management HR belum ada di tabel MenuItem
+    const hasHrOvertime = menus.some((m) => m.key === 'hr-overtime')
+    if (!hasHrOvertime && menus.length > 0) {
+      const parentHR = menus.find((m) => m.key === 'hr')
+      const parentId = parentHR?.id ?? 30
+      try {
+        await prisma.menuItem.upsert({
+          where: { key: 'hr-overtime' },
+          create: {
+            id: 314,
+            key: 'hr-overtime',
+            label: 'Overtime Management',
+            icon: 'clock',
+            href: '/hr/overtime',
+            parentId: parentId,
+            roles: JSON.stringify(['superadmin', 'admin', 'hr', 'hr_manager', 'hr_officer']),
+            departments: JSON.stringify(['*']),
+            order: 5,
+            active: true,
+          },
+          update: {
+            label: 'Overtime Management',
+            icon: 'clock',
+            href: '/hr/overtime',
+            parentId: parentId,
+            roles: JSON.stringify(['superadmin', 'admin', 'hr', 'hr_manager', 'hr_officer']),
+            departments: JSON.stringify(['*']),
+            order: 5,
+            active: true,
+          },
+        })
+      } catch {}
+
+      menus = await prisma.menuItem.findMany({
+        orderBy: { order: 'asc' },
+      })
+    }
+
     // Auto-seed / Auto-heal jika menu Overtime ESS & MSS belum ada di tabel MenuItem
     const hasEssOvertime = menus.some((m) => m.key === 'ess-overtime')
     const hasMssOvertime = menus.some((m) => m.key === 'mss-approve-overtime')
