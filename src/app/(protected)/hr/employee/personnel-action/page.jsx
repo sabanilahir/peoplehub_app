@@ -77,7 +77,7 @@ export default function PersonnelActionIndex() {
 
       {/* Offboarding quick shortcuts */}
       <div className='px-8 grid grid-cols-1 md:grid-cols-2 gap-4'>
-        <Link href='/hr/employee/personnel-action/offboarding-monitor'
+        <Link href='/hr/employee/personnel-action/offboarding-overview?tab=monitor'
           className='flex items-center gap-4 bg-white rounded-2xl border-2 border-red-200 hover:border-red-400 shadow-sm hover:shadow-md transition-all p-5 group'>
           <span className='p-3 bg-red-50 text-red-600 rounded-xl group-hover:scale-105 transition-transform flex items-center justify-center'>
             <Icon e='userMinus' size={24} />

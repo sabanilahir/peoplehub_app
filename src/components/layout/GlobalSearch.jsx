@@ -48,8 +48,7 @@ const PAGES = [
   { label: 'Rehire',                    href: '/hr/employee/personnel-action/rehire',           icon: '🔄', section: 'HR · Personnel Action' },
   { label: 'Change Employment Type',    href: '/hr/employee/personnel-action/change-employment-type', icon: '📋', section: 'HR · Personnel Action' },
   { label: 'Extend Contract',           href: '/hr/employee/personnel-action/extend-contract',  icon: '📅', section: 'HR · Personnel Action' },
-  { label: 'Offboarding Monitor (Exit Clearance)', href: '/hr/employee/personnel-action/offboarding-monitor', icon: '🚪', section: 'HR · Personnel Action' },
-  { label: 'Offboarding Overview',      href: '/hr/employee/personnel-action/offboarding-overview', icon: '📊', section: 'HR · Personnel Action' },
+  { label: 'Offboarding (Persetujuan & Monitor)', href: '/hr/employee/personnel-action/offboarding-overview', icon: '🚪', section: 'HR · Offboarding' },
   { label: 'Master Offboarding Checklist', href: '/hr/employee/personnel-action/offboarding-checklist', icon: '📋', section: 'HR · Personnel Action' },
   // HR - Structure
   { label: 'Enterprise',                href: '/hr/structure/enterprise',                      icon: '🌐', section: 'HR · Structure' },

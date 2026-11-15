@@ -1,3 +1,6 @@
 'use client'
-import OffboardingMonitor from '@/components/offboarding/OffboardingMonitor'
-export default function HROffboardingMonitor() { return <OffboardingMonitor /> }
+import OffboardingOverview from '@/components/offboarding/OffboardingOverview'
+
+export default function HROffboardingMonitor() {
+  return <OffboardingOverview initialTab='monitor' />
+}

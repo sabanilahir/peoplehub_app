@@ -397,11 +397,26 @@ export async function GET() {
     // Auto-seed menu Aset Perusahaan (HR & ESS), Offboarding, dan Personnel Action jika belum ada
     const hasHrAsset = menus.some((m) => m.key === 'hr-asset')
     const hasEssAsset = menus.some((m) => m.key === 'ess-my-assets')
-    const hasHrOffboarding = menus.some((m) => m.key === 'hr-offboarding-monitor')
     const hasHrPA = menus.some((m) => m.key === 'hr-personnel-action')
-    const hasHrApproval = menus.some((m) => m.key === 'hr-offboarding-approval')
+    const hasHrOffboarding = menus.some((m) => m.key === 'hr-offboarding')
 
-    if ((!hasHrAsset || !hasEssAsset || !hasHrOffboarding || !hasHrPA || !hasHrApproval) && menus.length > 0) {
+    // Clean up duplicate legacy hr-offboarding-monitor if found
+    if (menus.some((m) => m.key === 'hr-offboarding-monitor' || m.id === 318)) {
+      try {
+        await prisma.menuItem.deleteMany({
+          where: {
+            OR: [
+              { key: 'hr-offboarding-monitor' },
+              { id: 318 },
+            ]
+          }
+        })
+      } catch (e) {
+        // Ignore cleanup error
+      }
+    }
+
+    if ((!hasHrAsset || !hasEssAsset || !hasHrPA || !hasHrOffboarding) && menus.length > 0) {
       const hrParent = menus.find((m) => m.key === 'hr')
       const essParent = menus.find((m) => m.key === 'ess')
 
@@ -418,7 +433,7 @@ export async function GET() {
               parentId: hrParent.id,
               roles: JSON.stringify(['superadmin', 'admin', 'hr', 'hr_manager', 'hr_officer']),
               departments: JSON.stringify(['*']),
-              order: 18,
+              order: 17,
               active: true,
             },
             update: {
@@ -428,7 +443,7 @@ export async function GET() {
               parentId: hrParent.id,
               roles: JSON.stringify(['superadmin', 'admin', 'hr', 'hr_manager', 'hr_officer']),
               departments: JSON.stringify(['*']),
-              order: 18,
+              order: 17,
               active: true,
             },
           })
@@ -437,67 +452,35 @@ export async function GET() {
         }
       }
 
-      if (!hasHrApproval && hrParent) {
-        try {
-          await prisma.menuItem.upsert({
-            where: { key: 'hr-offboarding-approval' },
-            create: {
-              id: 320,
-              key: 'hr-offboarding-approval',
-              label: 'Persetujuan Offboarding',
-              icon: 'checkCircle',
-              href: '/hr/employee/personnel-action/offboarding-overview',
-              parentId: hrParent.id,
-              roles: JSON.stringify(['superadmin', 'admin', 'hr', 'hr_manager', 'hr_officer']),
-              departments: JSON.stringify(['*']),
-              order: 19,
-              active: true,
-            },
-            update: {
-              label: 'Persetujuan Offboarding',
-              icon: 'checkCircle',
-              href: '/hr/employee/personnel-action/offboarding-overview',
-              parentId: hrParent.id,
-              roles: JSON.stringify(['superadmin', 'admin', 'hr', 'hr_manager', 'hr_officer']),
-              departments: JSON.stringify(['*']),
-              order: 19,
-              active: true,
-            },
-          })
-        } catch (e) {
-          console.error('[Menu Auto-seed hr-offboarding-approval Error]:', e)
-        }
-      }
-
       if (!hasHrOffboarding && hrParent) {
         try {
           await prisma.menuItem.upsert({
-            where: { key: 'hr-offboarding-monitor' },
+            where: { key: 'hr-offboarding' },
             create: {
-              id: 318,
-              key: 'hr-offboarding-monitor',
-              label: 'Offboarding Monitor',
+              id: 320,
+              key: 'hr-offboarding',
+              label: 'Offboarding',
               icon: 'userMinus',
-              href: '/hr/employee/personnel-action/offboarding-monitor',
+              href: '/hr/employee/personnel-action/offboarding-overview',
               parentId: hrParent.id,
               roles: JSON.stringify(['superadmin', 'admin', 'hr', 'hr_manager', 'hr_officer']),
               departments: JSON.stringify(['*']),
-              order: 17,
+              order: 18,
               active: true,
             },
             update: {
-              label: 'Offboarding Monitor',
+              label: 'Offboarding',
               icon: 'userMinus',
-              href: '/hr/employee/personnel-action/offboarding-monitor',
+              href: '/hr/employee/personnel-action/offboarding-overview',
               parentId: hrParent.id,
               roles: JSON.stringify(['superadmin', 'admin', 'hr', 'hr_manager', 'hr_officer']),
               departments: JSON.stringify(['*']),
-              order: 17,
+              order: 18,
               active: true,
             },
           })
         } catch (e) {
-          console.error('[Menu Auto-seed hr-offboarding-monitor Error]:', e)
+          console.error('[Menu Auto-seed hr-offboarding Error]:', e)
         }
       }
 
