@@ -36,7 +36,7 @@ export default function OffboardingApproval() {
   const { currentUser } = useAuthStore()
   const { employees = [], updateEmployee, addHistory } = useEmployeeStore()
   const { departments = [], positions = [] } = useStructureStore()
-  const { pas = [], updatePA } = usePersonnelActionStore()
+  const { pas = [], updatePA, deletePA } = usePersonnelActionStore()
   const { items = [] } = useOffboardingChecklistStore()
 
   const isHR = HR_ROLES.includes(currentUser?.role)
@@ -57,9 +57,15 @@ export default function OffboardingApproval() {
       .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')),
     [pas])
 
+  const drafts   = termPAs.filter(p => p.status === 'Draft')
   const pending  = termPAs.filter(p => p.status === 'Submitted')
   const approved = termPAs.filter(p => p.status === 'Approved')
   const done     = termPAs.filter(p => ['Applied', 'Rejected'].includes(p.status))
+
+  const submitDraft = (pa) => {
+    updatePA(pa.id, { status: 'Submitted' })
+    flash(t(`Draft ${pa.paNumber} berhasil diajukan (menunggu persetujuan).`, `Draft ${pa.paNumber} submitted (pending approval).`))
+  }
 
   const approve = (pa) => {
     updatePA(pa.id, { status: 'Approved', approvedByName: currentUser?.name || 'HR', approvedAt: todayStr() })
@@ -128,11 +134,55 @@ export default function OffboardingApproval() {
         </div>
 
         {/* Stat row */}
-        <div className='mt-6 grid grid-cols-1 sm:grid-cols-3 gap-4'>
+        <div className='mt-6 grid grid-cols-2 sm:grid-cols-4 gap-4'>
+          <StatCard label={t('Draft Pengajuan', 'Drafts')} value={drafts.length} icon={<IcFile />} tint='gray' />
           <StatCard label={t('Menunggu Persetujuan', 'Pending Approval')} value={pending.length} icon={<IcClock />} tint='amber' />
           <StatCard label={t('Sedang Berjalan', 'In Progress')} value={approved.length} icon={<IcCheck />} tint='red' />
-          <StatCard label={t('Selesai / Ditolak', 'Done / Rejected')} value={done.length} icon={<IcFile />} tint='gray' />
+          <StatCard label={t('Selesai / Ditolak', 'Done / Rejected')} value={done.length} icon={<IcPower />} tint='blue' />
         </div>
+
+        {/* Draft Section */}
+        {drafts.length > 0 && (
+          <Section title={t('Draft Pengajuan Resign', 'Resignation Drafts')} count={drafts.length} icon={<IcFile />}>
+            <div className='divide-y divide-gray-50'>
+              {drafts.map(pa => {
+                const e = empById(pa.employeeId)
+                const lwd = lwdOf(pa)
+                return (
+                  <div key={pa.id} className='px-5 py-4 flex flex-wrap items-center gap-4 bg-gray-50/50'>
+                    <Avatar name={e?.name} />
+                    <div className='min-w-0'>
+                      <div className='flex items-center gap-2'>
+                        <p className='font-semibold text-gray-800'>{e?.name || '—'}</p>
+                        <span className='font-mono text-[11px] text-gray-600 bg-gray-200/70 px-1.5 py-0.5 rounded'>{pa.paNumber}</span>
+                        <span className='text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-200 text-gray-700'>Draft</span>
+                        {pa.submissionChannel && (
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            pa.submissionChannel === 'physical' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'
+                          }`}>
+                            {pa.submissionChannel === 'physical' ? '📄 Surat Fisik' : '✉️ Email'}
+                          </span>
+                        )}
+                      </div>
+                      <p className='text-xs text-gray-500 mt-0.5'>{posName(e?.positionId) || e?.position || '—'} · {dpName(e?.departmentId) || e?.department || '—'} · LWD {fmtDate(lwd)}</p>
+                    </div>
+                    <div className='ml-auto flex items-center gap-2'>
+                      <button onClick={() => { setSelected(pa); setRejectNote('') }} className='px-3 py-2 text-sm font-semibold text-gray-600 bg-white border border-gray-200 rounded-xl hover:bg-gray-50'>
+                        {t('Detail', 'Details')}
+                      </button>
+                      <button onClick={() => submitDraft(pa)} className='px-3 py-2 text-sm font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl hover:bg-amber-100'>
+                        {t('Ajukan (Submit)', 'Submit')}
+                      </button>
+                      <button onClick={() => approve(pa)} className='flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-white bg-green-600 rounded-xl hover:bg-green-700 shadow'>
+                        <IcCheck /> {t('Setujui', 'Approve')}
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </Section>
+        )}
 
         {/* Pending approval */}
         <Section title={t('Menunggu Persetujuan', 'Pending Approval')} count={pending.length} icon={<IcClock />}>
@@ -292,6 +342,19 @@ export default function OffboardingApproval() {
 
               <div className='flex items-center justify-end gap-2 px-6 py-4 border-t bg-gray-50'>
                 <button onClick={() => setSelected(null)} className='px-4 py-2 text-sm text-gray-600 rounded-xl hover:bg-gray-100'>{t('Tutup', 'Close')}</button>
+                {selected.status === 'Draft' && (
+                  <>
+                    <button onClick={() => { deletePA(selected.id); setSelected(null); flash(t('Draft berhasil dihapus.', 'Draft deleted.')) }} className='px-4 py-2 text-sm font-semibold text-red-600 bg-red-50 border border-red-200 rounded-xl hover:bg-red-100'>
+                      {t('Hapus Draft', 'Delete Draft')}
+                    </button>
+                    <button onClick={() => { submitDraft(selected); setSelected(null) }} className='px-4 py-2 text-sm font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl hover:bg-amber-100'>
+                      {t('Ajukan (Submit)', 'Submit')}
+                    </button>
+                    <button onClick={() => approve(selected)} className='flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-white bg-green-600 rounded-xl hover:bg-green-700 shadow'>
+                      <IcCheck /> {t('Setujui Langsung', 'Direct Approve')}
+                    </button>
+                  </>
+                )}
                 {selected.status === 'Submitted' && (
                   <>
                     <button onClick={() => reject(selected)} className='flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-red-600 bg-red-50 border border-red-200 rounded-xl hover:bg-red-100'><IcX /> {t('Tolak', 'Reject')}</button>
@@ -348,7 +411,7 @@ export default function OffboardingApproval() {
 }
 
 function StatCard({ label, value, icon, tint }) {
-  const C = { amber: 'bg-amber-50 text-amber-600', red: 'bg-red-50 text-red-600', gray: 'bg-gray-100 text-gray-500' }
+  const C = { amber: 'bg-amber-50 text-amber-600', red: 'bg-red-50 text-red-600', gray: 'bg-gray-100 text-gray-500', blue: 'bg-blue-50 text-blue-600' }
   return (
     <div className='bg-white rounded-2xl shadow-sm border border-gray-100 px-6 py-5 flex items-center justify-between'>
       <div><p className='text-sm text-gray-500'>{label}</p><p className='text-3xl font-bold text-gray-900 mt-1'>{value}</p></div>
