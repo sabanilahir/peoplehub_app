@@ -16,6 +16,7 @@ const PAGES = [
   { label: 'Attendance',                 href: '/ess/attendance',                               icon: '🕐', section: 'Employee Self-Service' },
   { label: 'Payslip',                    href: '/ess/payslip',                                  icon: '💰', section: 'Employee Self-Service' },
   { label: 'My Onboarding',              href: '/ess/onboarding',                               icon: '🎯', section: 'Employee Self-Service' },
+  { label: 'Aset Saya (My Assets)',      href: '/ess/my-assets',                                icon: '📦', section: 'Employee Self-Service' },
   // MSS
   { label: 'Apply Leave (My Team)',      href: '/mss/apply-leave-team',                         icon: '📝', section: 'Manager Self-Service' },
   { label: 'Approve Leave',             href: '/mss/approve-leave',                            icon: '✅', section: 'Manager Self-Service' },
@@ -24,6 +25,7 @@ const PAGES = [
   // HR - Employee
   { label: 'Emergency SOS Log',         href: '/hr/emergency-sos',                             icon: '🆘', section: 'HR Administration' },
   { label: 'Employee Data',             href: '/hr/employee',                                  icon: '📋', section: 'HR Administration' },
+  { label: 'Manajemen Aset (Company Assets)', href: '/hr/asset',                               icon: '📦', section: 'HR Administration' },
   { label: 'Apply Leave (HR)',          href: '/hr/apply-leave',                               icon: '📝', section: 'HR Administration' },
   { label: 'Org Chart',                 href: '/hr/org-chart',                                 icon: '🌳', section: 'HR Administration' },
   // HR - Recruitment
