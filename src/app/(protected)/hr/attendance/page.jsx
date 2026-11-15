@@ -110,6 +110,93 @@ function EmployeeAvatar({ name, photo, size = 'w-8 h-8' }) {
   )
 }
 
+function PaginationFooter({
+  page,
+  pageSize,
+  totalItems,
+  totalPages,
+  onPageChange,
+  onPageSizeChange,
+  pageSizeOptions = [15, 25, 50, 100],
+  itemLabel = 'data',
+}) {
+  if (totalItems === 0) return null
+  const startItem = (page - 1) * pageSize + 1
+  const endItem = Math.min(page * pageSize, totalItems)
+
+  return (
+    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 py-3.5 bg-gray-50/80 border-t border-gray-200 rounded-b-2xl text-xs text-gray-500 flex-wrap">
+      {/* Kiri: Selector Baris per halaman & Ringkasan Entri */}
+      <div className="flex items-center gap-2.5 flex-wrap">
+        <span className="text-gray-600 font-medium">Baris per halaman:</span>
+        <select
+          value={pageSize}
+          onChange={(e) => {
+            onPageSizeChange(Number(e.target.value))
+            onPageChange(1)
+          }}
+          className="px-2.5 py-1 border border-gray-200 rounded-lg text-xs font-semibold text-gray-700 bg-white hover:border-teal-400 outline-none focus:ring-1 focus:ring-teal-500 cursor-pointer transition shadow-2xs"
+        >
+          {pageSizeOptions.map((opt) => (
+            <option key={opt} value={opt}>
+              {opt}
+            </option>
+          ))}
+        </select>
+        <span className="text-gray-300">|</span>
+        <span className="text-gray-600">
+          Menampilkan <strong className="text-gray-900 font-bold">{startItem}</strong>–<strong className="text-gray-900 font-bold">{endItem}</strong> dari{' '}
+          <strong className="text-gray-900 font-bold">{totalItems.toLocaleString('id-ID')}</strong> {itemLabel}
+        </span>
+      </div>
+
+      {/* Kanan: Navigasi Tombol Halaman */}
+      <div className="flex items-center gap-1 self-end sm:self-auto">
+        <button
+          type="button"
+          onClick={() => onPageChange(1)}
+          disabled={page <= 1}
+          title="Halaman Pertama"
+          className="px-2.5 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 disabled:opacity-40 disabled:hover:bg-white font-bold transition shadow-2xs cursor-pointer"
+        >
+          «
+        </button>
+        <button
+          type="button"
+          onClick={() => onPageChange(Math.max(1, page - 1))}
+          disabled={page <= 1}
+          className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 disabled:opacity-40 disabled:hover:bg-white font-medium transition shadow-2xs cursor-pointer flex items-center gap-1"
+        >
+          <span>‹</span>
+          <span>Sebelumnya</span>
+        </button>
+        <div className="px-3 py-1.5 text-xs text-gray-600 font-medium">
+          Halaman <strong className="text-gray-900 font-bold">{page}</strong> dari{' '}
+          <strong className="text-gray-900 font-bold">{totalPages}</strong>
+        </div>
+        <button
+          type="button"
+          onClick={() => onPageChange(Math.min(totalPages, page + 1))}
+          disabled={page >= totalPages}
+          className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 disabled:opacity-40 disabled:hover:bg-white font-medium transition shadow-2xs cursor-pointer flex items-center gap-1"
+        >
+          <span>Berikutnya</span>
+          <span>›</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => onPageChange(totalPages)}
+          disabled={page >= totalPages}
+          title="Halaman Terakhir"
+          className="px-2.5 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 disabled:opacity-40 disabled:hover:bg-white font-bold transition shadow-2xs cursor-pointer"
+        >
+          »
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function HRAttendancePage() {
   const t = useT()
   const { records, updateRecord, addRecord } = useAttendanceStore()
@@ -130,6 +217,27 @@ export default function HRAttendancePage() {
   const [selectedDept, setSelectedDept] = useState('all')
   const [selectedStatus, setSelectedStatus] = useState('all')
   const [search, setSearch] = useState('')
+
+  // ── Pagination States ──────────────────────────────────────────────────
+  const [summaryPage, setSummaryPage] = useState(1)
+  const [summaryPageSize, setSummaryPageSize] = useState(25)
+
+  const [dailyPage, setDailyPage] = useState(1)
+  const [dailyPageSize, setDailyPageSize] = useState(25)
+
+  const [modalPage, setModalPage] = useState(1)
+  const modalPageSize = 15
+
+  // Reset pagination saat filter berubah
+  useEffect(() => {
+    setSummaryPage(1)
+    setDailyPage(1)
+  }, [search, selectedLocation, selectedDept, selectedStatus, dateFrom, dateTo, isFilterApplied])
+
+  // Reset modal page saat karyawan detail dibuka
+  useEffect(() => {
+    setModalPage(1)
+  }, [selectedEmpDetail])
 
   // Drill-down Modal State
   const [selectedEmpDetail, setSelectedEmpDetail] = useState(null)
@@ -678,6 +786,38 @@ export default function HRAttendancePage() {
       eligibleRewardCount,
     }
   }, [filteredRecords, employeeSummaries, isFilterApplied])
+
+  // ── Pagination Computations ───────────────────────────────────────────
+  // Tab 1: Ringkasan Per Karyawan
+  const summaryTotalPages = useMemo(() => {
+    return Math.ceil(employeeSummaries.length / summaryPageSize) || 1
+  }, [employeeSummaries.length, summaryPageSize])
+
+  const pagedSummaries = useMemo(() => {
+    const start = (summaryPage - 1) * summaryPageSize
+    return employeeSummaries.slice(start, start + summaryPageSize)
+  }, [employeeSummaries, summaryPage, summaryPageSize])
+
+  // Tab 2: Log Presensi Harian
+  const dailyTotalPages = useMemo(() => {
+    return Math.ceil(filteredRecords.length / dailyPageSize) || 1
+  }, [filteredRecords.length, dailyPageSize])
+
+  const pagedDailyRecords = useMemo(() => {
+    const start = (dailyPage - 1) * dailyPageSize
+    return filteredRecords.slice(start, start + dailyPageSize)
+  }, [filteredRecords, dailyPage, dailyPageSize])
+
+  // Modal Drill-down Karyawan
+  const modalRecords = selectedEmpDetail?.records || []
+  const modalTotalPages = useMemo(() => {
+    return Math.ceil(modalRecords.length / modalPageSize) || 1
+  }, [modalRecords.length, modalPageSize])
+
+  const pagedModalRecords = useMemo(() => {
+    const start = (modalPage - 1) * modalPageSize
+    return modalRecords.slice(start, start + modalPageSize)
+  }, [modalRecords, modalPage, modalPageSize])
 
   // Export CSV
   const handleExportCsv = () => {
@@ -1361,7 +1501,7 @@ export default function HRAttendancePage() {
                   'Aksi',
                 ]}
               >
-                {employeeSummaries.map((s, idx) => {
+                {pagedSummaries.map((s, idx) => {
                   const badgeStyle = LOCATION_BADGE_STYLE[s.locationCode] || 'bg-gray-100 text-gray-600'
 
                   return (
@@ -1466,6 +1606,15 @@ export default function HRAttendancePage() {
                   )
                 })}
               </DataTable>
+              <PaginationFooter
+                page={summaryPage}
+                pageSize={summaryPageSize}
+                totalItems={employeeSummaries.length}
+                totalPages={summaryTotalPages}
+                onPageChange={setSummaryPage}
+                onPageSizeChange={setSummaryPageSize}
+                itemLabel="karyawan"
+              />
             </div>
           )
         ) : (
@@ -1490,7 +1639,7 @@ export default function HRAttendancePage() {
                   'Aksi',
                 ]}
               >
-                {filteredRecords.map((r, idx) => {
+                {pagedDailyRecords.map((r, idx) => {
                   const badgeStyle = LOCATION_BADGE_STYLE[r.locationCode] || 'bg-gray-100 text-gray-600'
                   const isLate = r.status === 'Late'
                   const hasDenda = Number(r.penaltyAmount) > 0
@@ -1629,6 +1778,15 @@ export default function HRAttendancePage() {
                   )
                 })}
               </DataTable>
+              <PaginationFooter
+                page={dailyPage}
+                pageSize={dailyPageSize}
+                totalItems={filteredRecords.length}
+                totalPages={dailyTotalPages}
+                onPageChange={setDailyPage}
+                onPageSizeChange={setDailyPageSize}
+                itemLabel="entri log presensi"
+              />
             </div>
           )
         )}
@@ -1741,7 +1899,7 @@ export default function HRAttendancePage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
-                        {selectedEmpDetail.records.map((r, idx) => {
+                        {pagedModalRecords.map((r, idx) => {
                           const isLate = r.status === 'Late'
                           const d = r.date ? new Date(r.date) : null
                           const dayNames = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab']
@@ -1835,6 +1993,34 @@ export default function HRAttendancePage() {
                         })}
                       </tbody>
                     </table>
+                    {modalRecords.length > modalPageSize && (
+                      <div className="flex items-center justify-between p-3 bg-gray-50 border-t border-gray-200 text-xs text-gray-500">
+                        <span>
+                          Menampilkan <strong className="text-gray-800">{(modalPage - 1) * modalPageSize + 1}</strong>–<strong className="text-gray-800">{Math.min(modalPage * modalPageSize, modalRecords.length)}</strong> dari <strong className="text-gray-800">{modalRecords.length}</strong> hari
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setModalPage((p) => Math.max(1, p - 1))}
+                            disabled={modalPage <= 1}
+                            className="px-2.5 py-1 rounded-lg border border-gray-200 bg-white hover:bg-gray-100 disabled:opacity-40 font-semibold transition cursor-pointer"
+                          >
+                            ‹ Prev
+                          </button>
+                          <span className="px-2 font-bold text-gray-700">
+                            {modalPage} / {modalTotalPages}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setModalPage((p) => Math.min(modalTotalPages, p + 1))}
+                            disabled={modalPage >= modalTotalPages}
+                            className="px-2.5 py-1 rounded-lg border border-gray-200 bg-white hover:bg-gray-100 disabled:opacity-40 font-semibold transition cursor-pointer"
+                          >
+                            Next ›
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
