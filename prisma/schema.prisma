@@ -651,4 +651,24 @@ model WorkLocationTarget {
   @@index([active])
 }
 
+// --- FINGERSPOT BIOMETRIC INTEGRATION (GUDANG) ---
+model FingerspotSettings {
+  id               String    @id @default(cuid())
+  apiUrl           String    @default("https://developer.fingerspot.io/api")
+  apiToken         String    @default("")
+  cloudId          String    @default("")
+  deviceSn         String    @default("FSPOT-GUDANG-01")
+  deviceName       String    @default("Mesin Fingerspot Gudang")
+  syncEnabled      Boolean   @default(true)
+  autoSyncInterval Int       @default(30) // Interval penarikan dalam menit
+  cronSecret       String    @default("san_fingerspot_cron_key_2026")
+  lastSyncAt       DateTime?
+  lastSyncStatus   String?   // "SUCCESS" | "ERROR" | "NO_DATA"
+  lastSyncMessage  String?
+  lastSyncCount    Int       @default(0)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}
+
+
 

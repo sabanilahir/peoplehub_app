@@ -37,15 +37,22 @@ import {
   Download,
   FileSpreadsheet,
   AlertCircle,
+  Fingerprint,
+  Copy,
+  Eye,
+  EyeOff,
+  RefreshCw,
 } from 'lucide-react'
 
 function WorkLocationSettingsContent() {
   const searchParams = useSearchParams()
   const tabParam = searchParams.get('tab')
-  const [activeTab, setActiveTab] = useState(tabParam === 'geofencing' ? 'geofencing' : 'rules') // 'rules' | 'geofencing'
+  const [activeTab, setActiveTab] = useState(
+    tabParam === 'geofencing' ? 'geofencing' : tabParam === 'fingerspot' ? 'fingerspot' : 'rules'
+  ) // 'rules' | 'geofencing' | 'fingerspot'
 
   useEffect(() => {
-    if (tabParam === 'geofencing' || tabParam === 'rules') {
+    if (tabParam === 'geofencing' || tabParam === 'rules' || tabParam === 'fingerspot') {
       setActiveTab(tabParam)
     }
   }, [tabParam])
@@ -53,6 +60,29 @@ function WorkLocationSettingsContent() {
   const [configs, setConfigs] = useState([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+
+  // Fingerspot API Integration State
+  const [fingerspotSettings, setFingerspotSettings] = useState({
+    apiUrl: 'https://developer.fingerspot.io/api',
+    apiToken: '',
+    cloudId: '',
+    deviceSn: 'FSPOT-GUDANG-01',
+    deviceName: 'Mesin Fingerspot Gudang',
+    syncEnabled: true,
+    autoSyncInterval: 30,
+    cronSecret: 'san_fingerspot_cron_key_2026',
+    lastSyncAt: null,
+    lastSyncStatus: 'NO_DATA',
+    lastSyncMessage: 'Belum pernah disinkronkan',
+    lastSyncCount: 0,
+  })
+  const [loadingFingerspot, setLoadingFingerspot] = useState(false)
+  const [savingFingerspot, setSavingFingerspot] = useState(false)
+  const [syncingFingerspot, setSyncingFingerspot] = useState(false)
+  const [testingConnection, setTestingConnection] = useState(false)
+  const [testResult, setTestResult] = useState(null)
+  const [showToken, setShowToken] = useState(false)
+  const [copiedCron, setCopiedCron] = useState(false)
 
   // Geofencing Target Locations State
   const storeEmployees = useEmployeeStore((s) => s.employees)
@@ -184,6 +214,98 @@ function WorkLocationSettingsContent() {
     fetchTargets()
     fetchEmployees()
   }, [])
+
+  // Fingerspot API Handlers
+  const fetchFingerspotSettings = async () => {
+    try {
+      setLoadingFingerspot(true)
+      const res = await fetch('/api/attendance/fingerspot/settings')
+      const data = await res.json()
+      if (data.success && data.data) {
+        setFingerspotSettings(data.data)
+      }
+    } catch (err) {
+      console.error('Error fetching fingerspot settings:', err)
+    } finally {
+      setLoadingFingerspot(false)
+    }
+  }
+
+  const handleSaveFingerspotSettings = async (e) => {
+    if (e) e.preventDefault()
+    try {
+      setSavingFingerspot(true)
+      const res = await fetch('/api/attendance/fingerspot/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'save', ...fingerspotSettings }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        showToast('✅ Pengaturan Fingerspot berhasil disimpan!')
+        setFingerspotSettings(data.data)
+      } else {
+        alert(data.error || 'Gagal menyimpan pengaturan Fingerspot')
+      }
+    } catch (err) {
+      console.error(err)
+      alert('Terjadi kesalahan jaringan saat menyimpan pengaturan')
+    } finally {
+      setSavingFingerspot(false)
+    }
+  }
+
+  const handleTestFingerspotConnection = async () => {
+    try {
+      setTestingConnection(true)
+      setTestResult(null)
+      const res = await fetch('/api/attendance/fingerspot/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'test_connection', ...fingerspotSettings }),
+      })
+      const data = await res.json()
+      setTestResult(data)
+    } catch (err) {
+      setTestResult({ success: false, error: `Kesalahan jaringan: ${err.message}` })
+    } finally {
+      setTestingConnection(false)
+    }
+  }
+
+  const handleSyncFingerspotNow = async () => {
+    try {
+      setSyncingFingerspot(true)
+      const today = new Date().toISOString().split('T')[0]
+      const res = await fetch('/api/attendance/fingerspot/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          startDate: today,
+          endDate: today,
+          forceMock: !fingerspotSettings.apiToken,
+        }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        showToast(`✅ ${data.message}`)
+        await fetchFingerspotSettings()
+      } else {
+        alert(data.error || 'Gagal sinkronisasi data Fingerspot')
+      }
+    } catch (err) {
+      console.error(err)
+      alert('Terjadi kesalahan jaringan saat sinkronisasi')
+    } finally {
+      setSyncingFingerspot(false)
+    }
+  }
+
+  useEffect(() => {
+    if (activeTab === 'fingerspot') {
+      fetchFingerspotSettings()
+    }
+  }, [activeTab])
 
   // Geocoding handler
   const handleGeocode = async (addressQuery) => {
@@ -838,28 +960,38 @@ function WorkLocationSettingsContent() {
           activeTab === 'rules' ? (
             <button
               onClick={handleOpenCreate}
-              className='inline-flex items-center gap-2 rounded-xl bg-teal-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-teal-700 transition'
+              className='inline-flex items-center gap-2 rounded-xl bg-teal-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-teal-700 transition cursor-pointer'
             >
               <Plus className='w-4 h-4' />
               Tambah Aturan Lokasi
             </button>
-          ) : (
+          ) : activeTab === 'geofencing' ? (
             <button
               onClick={() => handleOpenTargetCreate('sales_distributor')}
-              className='inline-flex items-center gap-2 rounded-xl bg-teal-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-teal-700 transition'
+              className='inline-flex items-center gap-2 rounded-xl bg-teal-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-teal-700 transition cursor-pointer'
             >
               <Plus className='w-4 h-4' />
               Tambah Titik Distributor
+            </button>
+          ) : (
+            <button
+              type='button'
+              onClick={handleSyncFingerspotNow}
+              disabled={syncingFingerspot}
+              className='inline-flex items-center gap-2 rounded-xl bg-teal-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-teal-700 transition disabled:opacity-50 cursor-pointer'
+            >
+              <RefreshCw className={`w-4 h-4 ${syncingFingerspot ? 'animate-spin' : ''}`} />
+              {syncingFingerspot ? 'Sinkronisasi...' : 'Sync API Sekarang'}
             </button>
           )
         }
       />
 
       {/* Tab Navigation */}
-      <div className='flex items-center gap-3 border-b border-gray-200 pb-3'>
+      <div className='flex items-center flex-wrap gap-3 border-b border-gray-200 pb-3'>
         <button
           onClick={() => setActiveTab('rules')}
-          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-bold rounded-xl transition ${
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-bold rounded-xl transition cursor-pointer ${
             activeTab === 'rules'
               ? 'bg-teal-600 text-white shadow-xs'
               : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 bg-white border border-gray-200'
@@ -870,7 +1002,7 @@ function WorkLocationSettingsContent() {
         </button>
         <button
           onClick={() => setActiveTab('geofencing')}
-          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-bold rounded-xl transition ${
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-bold rounded-xl transition cursor-pointer ${
             activeTab === 'geofencing'
               ? 'bg-teal-600 text-white shadow-xs'
               : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 bg-white border border-gray-200'
@@ -884,6 +1016,26 @@ function WorkLocationSettingsContent() {
             }`}
           >
             {targets.length || 23}
+          </span>
+        </button>
+        <button
+          onClick={() => setActiveTab('fingerspot')}
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-bold rounded-xl transition cursor-pointer ${
+            activeTab === 'fingerspot'
+              ? 'bg-teal-600 text-white shadow-xs'
+              : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 bg-white border border-gray-200'
+          }`}
+        >
+          <Fingerprint className='w-4 h-4' />
+          Mesin Fingerspot (Gudang)
+          <span
+            className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
+              fingerspotSettings.syncEnabled
+                ? 'bg-emerald-100 text-emerald-800'
+                : 'bg-gray-100 text-gray-500'
+            }`}
+          >
+            {fingerspotSettings.syncEnabled ? 'Aktif' : 'Nonaktif'}
           </span>
         </button>
       </div>
@@ -1412,6 +1564,334 @@ function WorkLocationSettingsContent() {
                   })()}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── TAB 3: MESIN FINGERSPOT (GUDANG) ── */}
+      {activeTab === 'fingerspot' && (
+        <div className='space-y-6'>
+          {/* Top Fingerspot StatCards */}
+          <div className='grid grid-cols-1 gap-4 sm:grid-cols-4'>
+            <StatCard
+              icon='⚡'
+              label='Status Integrasi API'
+              value={fingerspotSettings.syncEnabled ? 'Aktif Terhubung' : 'Nonaktif'}
+              hint='Fingerspot.iO Cloud Sync'
+              tone={fingerspotSettings.syncEnabled ? 'green' : 'amber'}
+            />
+            <StatCard
+              icon='🏢'
+              label='Mesin Absensi Gudang'
+              value={fingerspotSettings.deviceSn || 'FSPOT-GUDANG-01'}
+              hint={fingerspotSettings.deviceName || 'Lokasi Gudang'}
+              tone='brand'
+            />
+            <StatCard
+              icon='🔄'
+              label='Waktu Sync Terakhir'
+              value={
+                fingerspotSettings.lastSyncAt
+                  ? new Date(fingerspotSettings.lastSyncAt).toLocaleTimeString('id-ID', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      day: '2-digit',
+                      month: 'short',
+                    })
+                  : 'Belum Ada'
+              }
+              hint={
+                fingerspotSettings.lastSyncStatus === 'SUCCESS'
+                  ? 'Sinkronisasi Berhasil'
+                  : fingerspotSettings.lastSyncStatus === 'NO_DATA'
+                  ? 'Tidak Ada Log Baru'
+                  : fingerspotSettings.lastSyncStatus || 'Siap Sync'
+              }
+              tone={
+                fingerspotSettings.lastSyncStatus === 'SUCCESS'
+                  ? 'green'
+                  : fingerspotSettings.lastSyncStatus === 'ERROR'
+                  ? 'red'
+                  : 'info'
+              }
+            />
+            <StatCard
+              icon='👥'
+              label='Presensi Terproses'
+              value={`${fingerspotSettings.lastSyncCount || 0} Data`}
+              hint='Karyawan Gudang / Shift'
+              tone='brand'
+            />
+          </div>
+
+          {/* Configuration Form Card */}
+          <div className='rounded-2xl border border-gray-200 bg-white p-6 shadow-xs'>
+            <div className='flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-gray-100 gap-3'>
+              <div>
+                <h3 className='font-bold text-gray-900 flex items-center gap-2'>
+                  <Fingerprint className='w-5 h-5 text-teal-600' />
+                  Konfigurasi API Fingerspot.iO (Lokasi Gudang)
+                </h3>
+                <p className='text-xs text-gray-500 mt-1'>
+                  Pengaturan koneksi API untuk penarikan log absensi biometrik secara otomatis dan terjadwal ke PeopleHub.
+                </p>
+              </div>
+
+              <div className='flex items-center gap-2'>
+                <button
+                  type='button'
+                  onClick={handleTestFingerspotConnection}
+                  disabled={testingConnection}
+                  className='inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-gray-300 bg-white text-xs font-semibold text-gray-700 hover:bg-gray-50 transition shadow-2xs cursor-pointer disabled:opacity-50'
+                >
+                  {testingConnection ? (
+                    <>
+                      <Loader2 className='w-3.5 h-3.5 animate-spin' />
+                      Menguji...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className='w-3.5 h-3.5 text-teal-600' />
+                      Uji Koneksi API
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type='button'
+                  onClick={handleSyncFingerspotNow}
+                  disabled={syncingFingerspot}
+                  className='inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-teal-600 text-white text-xs font-semibold hover:bg-teal-700 transition shadow-2xs cursor-pointer disabled:opacity-50'
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${syncingFingerspot ? 'animate-spin' : ''}`} />
+                  {syncingFingerspot ? 'Menarik Data...' : 'Sync Hari Ini Sekarang'}
+                </button>
+              </div>
+            </div>
+
+            {/* Test Connection Banner */}
+            {testResult && (
+              <div
+                className={`mt-4 p-3.5 rounded-xl border text-xs flex items-center justify-between ${
+                  testResult.success
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                    : 'bg-rose-50 border-rose-200 text-rose-800'
+                }`}
+              >
+                <div className='flex items-center gap-2'>
+                  {testResult.success ? (
+                    <CheckCircle2 className='w-4 h-4 text-emerald-600 flex-shrink-0' />
+                  ) : (
+                    <AlertTriangle className='w-4 h-4 text-rose-600 flex-shrink-0' />
+                  )}
+                  <span>{testResult.message || testResult.error}</span>
+                </div>
+                <button
+                  type='button'
+                  onClick={() => setTestResult(null)}
+                  className='text-xs underline font-bold ml-3 cursor-pointer'
+                >
+                  Tutup
+                </button>
+              </div>
+            )}
+
+            {/* Form */}
+            <form onSubmit={handleSaveFingerspotSettings} className='mt-6 space-y-5 text-xs'>
+              {/* Toggle Sync Enabled */}
+              <div className='flex items-center justify-between p-3.5 bg-gray-50 rounded-xl border border-gray-200'>
+                <div>
+                  <div className='font-bold text-gray-800 text-sm'>
+                    Aktifkan Penarikan Data Otomatis (Sync API)
+                  </div>
+                  <div className='text-gray-500 text-[11px] mt-0.5'>
+                    Bila aktif, sistem mengizinkan sinkronisasi data presensi mesin Fingerspot ke PeopleHub.
+                  </div>
+                </div>
+                <label className='relative inline-flex items-center cursor-pointer'>
+                  <input
+                    type='checkbox'
+                    checked={fingerspotSettings.syncEnabled}
+                    onChange={(e) =>
+                      setFingerspotSettings({ ...fingerspotSettings, syncEnabled: e.target.checked })
+                    }
+                    className='sr-only peer'
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-teal-600"></div>
+                </label>
+              </div>
+
+              <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
+                <div>
+                  <label className='font-bold text-gray-700 block mb-1'>Nama Mesin / Label Lokasi:</label>
+                  <input
+                    type='text'
+                    value={fingerspotSettings.deviceName}
+                    onChange={(e) =>
+                      setFingerspotSettings({ ...fingerspotSettings, deviceName: e.target.value })
+                    }
+                    placeholder='Contoh: Mesin Fingerspot Gudang Cakung'
+                    className='w-full rounded-xl border border-gray-300 p-2.5 text-xs bg-white'
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className='font-bold text-gray-700 block mb-1'>Serial Number (SN) Mesin Gudang:</label>
+                  <input
+                    type='text'
+                    value={fingerspotSettings.deviceSn}
+                    onChange={(e) =>
+                      setFingerspotSettings({ ...fingerspotSettings, deviceSn: e.target.value })
+                    }
+                    placeholder='Contoh: FSPOT-GUDANG-01'
+                    className='w-full rounded-xl border border-gray-300 p-2.5 text-xs font-mono bg-white'
+                    required
+                  />
+                  <p className='text-[10px] text-gray-400 mt-1'>
+                    Dapat dilihat pada label stiker belakang mesin Fingerspot.
+                  </p>
+                </div>
+              </div>
+
+              <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
+                <div>
+                  <label className='font-bold text-gray-700 block mb-1'>Cloud ID (Fingerspot.iO):</label>
+                  <input
+                    type='text'
+                    value={fingerspotSettings.cloudId}
+                    onChange={(e) =>
+                      setFingerspotSettings({ ...fingerspotSettings, cloudId: e.target.value })
+                    }
+                    placeholder='Contoh: C268494883'
+                    className='w-full rounded-xl border border-gray-300 p-2.5 text-xs font-mono bg-white'
+                  />
+                  <p className='text-[10px] text-gray-400 mt-1'>
+                    Diperoleh dari dashboard Fingerspot.iO akun perusahaan.
+                  </p>
+                </div>
+
+                <div>
+                  <label className='font-bold text-gray-700 block mb-1'>API Token / Bearer Key:</label>
+                  <div className='relative'>
+                    <input
+                      type={showToken ? 'text' : 'password'}
+                      value={fingerspotSettings.apiToken}
+                      onChange={(e) =>
+                        setFingerspotSettings({ ...fingerspotSettings, apiToken: e.target.value })
+                      }
+                      placeholder='Masukkan API Token dari Fingerspot.iO'
+                      className='w-full rounded-xl border border-gray-300 p-2.5 pr-10 text-xs font-mono bg-white'
+                    />
+                    <button
+                      type='button'
+                      onClick={() => setShowToken(!showToken)}
+                      className='absolute right-3 top-2.5 text-gray-400 hover:text-gray-600 cursor-pointer'
+                    >
+                      {showToken ? <EyeOff className='w-4 h-4' /> : <Eye className='w-4 h-4' />}
+                    </button>
+                  </div>
+                  <p className='text-[10px] text-gray-400 mt-1'>
+                    Kunci otentikasi API yang digenerate dari menu API Fingerspot.
+                  </p>
+                </div>
+              </div>
+
+              <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
+                <div>
+                  <label className='font-bold text-gray-700 block mb-1'>Base API URL:</label>
+                  <input
+                    type='text'
+                    value={fingerspotSettings.apiUrl}
+                    onChange={(e) =>
+                      setFingerspotSettings({ ...fingerspotSettings, apiUrl: e.target.value })
+                    }
+                    placeholder='https://developer.fingerspot.io/api'
+                    className='w-full rounded-xl border border-gray-300 p-2.5 text-xs font-mono bg-white'
+                  />
+                </div>
+
+                <div>
+                  <label className='font-bold text-gray-700 block mb-1'>Cron Secret Key (Otentikasi Scheduler):</label>
+                  <input
+                    type='text'
+                    value={fingerspotSettings.cronSecret}
+                    onChange={(e) =>
+                      setFingerspotSettings({ ...fingerspotSettings, cronSecret: e.target.value })
+                    }
+                    placeholder='san_fingerspot_cron_key_2026'
+                    className='w-full rounded-xl border border-gray-300 p-2.5 text-xs font-mono bg-white'
+                  />
+                  <p className='text-[10px] text-gray-400 mt-1'>
+                    Kunci rahasia untuk otorisasi eksekusi crontab pada VPS.
+                  </p>
+                </div>
+              </div>
+
+              {/* Submit Buttons */}
+              <div className='flex items-center justify-end gap-3 pt-3 border-t border-gray-100'>
+                <button
+                  type='submit'
+                  disabled={savingFingerspot}
+                  className='inline-flex items-center gap-2 px-5 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold transition shadow-2xs disabled:opacity-50 cursor-pointer'
+                >
+                  {savingFingerspot ? (
+                    <>
+                      <Loader2 className='w-4 h-4 animate-spin' />
+                      Menyimpan...
+                    </>
+                  ) : (
+                    <>
+                      <Check className='w-4 h-4' />
+                      Simpan Pengaturan Fingerspot
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* Card Panduan Penjadwalan VPS Rocky Linux */}
+          <div className='rounded-2xl border border-blue-200 bg-blue-50/40 p-6 space-y-4'>
+            <div className='flex items-start gap-3'>
+              <div className='p-2 bg-blue-100 text-blue-700 rounded-xl mt-0.5 flex-shrink-0'>
+                <Clock className='w-5 h-5' />
+              </div>
+              <div className='flex-1'>
+                <h4 className='font-bold text-blue-950 text-sm'>
+                  Panduan Pemasangan Penarikan Terjadwal Otomatis (Crontab VPS)
+                </h4>
+                <p className='text-xs text-blue-800 mt-1 leading-relaxed'>
+                  Agar PeopleHub secara otomatis menarik presensi karyawan gudang setiap 30 menit (tanpa harus klik tombol manual), pasang baris crontab berikut pada server Rocky Linux 9 Anda:
+                </p>
+
+                <div className='mt-3 bg-gray-900 text-gray-100 p-3.5 rounded-xl font-mono text-[11px] flex items-center justify-between border border-gray-800 shadow-inner overflow-x-auto'>
+                  <code className='text-emerald-300'>
+                    */30 * * * * curl -s -X POST https://san-peoplehub.my.id/api/cron/fingerspot -H &quot;Authorization: Bearer {fingerspotSettings.cronSecret || 'san_fingerspot_cron_key_2026'}&quot; &gt; /dev/null 2&gt;&amp;1
+                  </code>
+                  <button
+                    type='button'
+                    onClick={() => {
+                      const cmd = `*/30 * * * * curl -s -X POST https://san-peoplehub.my.id/api/cron/fingerspot -H "Authorization: Bearer ${fingerspotSettings.cronSecret || 'san_fingerspot_cron_key_2026'}" > /dev/null 2>&1`
+                      navigator.clipboard.writeText(cmd)
+                      setCopiedCron(true)
+                      setTimeout(() => setCopiedCron(false), 3000)
+                    }}
+                    className='ml-3 px-3 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg text-[10px] font-sans font-bold flex items-center gap-1 flex-shrink-0 transition cursor-pointer'
+                  >
+                    {copiedCron ? <Check className='w-3 h-3 text-emerald-400' /> : <Copy className='w-3 h-3' />}
+                    {copiedCron ? 'Tersalin!' : 'Salin Sintaks'}
+                  </button>
+                </div>
+
+                <div className='mt-2.5 text-[11px] text-blue-700 flex items-center gap-1.5'>
+                  <CheckCircle2 className='w-3.5 h-3.5 text-blue-600 flex-shrink-0' />
+                  <span>
+                    Buka terminal SSH VPS Anda, ketik <code>crontab -e</code>, tempel baris di atas pada baris paling bawah, lalu simpan.
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
         </div>

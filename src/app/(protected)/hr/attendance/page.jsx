@@ -162,6 +162,66 @@ export default function HRAttendancePage() {
     note: '',
   })
 
+  // Fingerspot Sync Modal State
+  const [syncModalOpen, setSyncModalOpen] = useState(false)
+  const [syncDateMode, setSyncDateMode] = useState('today') // 'today' | 'yesterday' | '7days' | 'custom'
+  const [syncStartDate, setSyncStartDate] = useState(todayStr())
+  const [syncEndDate, setSyncEndDate] = useState(todayStr())
+  const [isSyncingFingerspot, setIsSyncingFingerspot] = useState(false)
+  const [syncResultMsg, setSyncResultMsg] = useState(null)
+
+  const handleExecuteFingerspotSync = async () => {
+    try {
+      setIsSyncingFingerspot(true)
+      setSyncResultMsg(null)
+
+      let start = syncStartDate
+      let end = syncEndDate
+
+      if (syncDateMode === 'today') {
+        start = todayStr()
+        end = todayStr()
+      } else if (syncDateMode === 'yesterday') {
+        const d = new Date()
+        d.setDate(d.getDate() - 1)
+        start = d.toISOString().split('T')[0]
+        end = start
+      } else if (syncDateMode === '7days') {
+        const d = new Date()
+        d.setDate(d.getDate() - 6)
+        start = d.toISOString().split('T')[0]
+        end = todayStr()
+      }
+
+      const res = await fetch('/api/attendance/fingerspot/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ startDate: start, endDate: end }),
+      })
+
+      const data = await res.json()
+      if (data.success) {
+        setSyncResultMsg({
+          type: 'success',
+          text: `✅ ${data.message}`,
+        })
+        fetchFilteredRecords(start, end)
+      } else {
+        setSyncResultMsg({
+          type: 'error',
+          text: `❌ ${data.error || 'Gagal sinkronisasi data Fingerspot'}`,
+        })
+      }
+    } catch (err) {
+      setSyncResultMsg({
+        type: 'error',
+        text: `❌ Terjadi kesalahan jaringan saat sync: ${err.message}`,
+      })
+    } finally {
+      setIsSyncingFingerspot(false)
+    }
+  }
+
   const [actionMsg, setActionMsg] = useState(null)
 
   // Fungsi Kalkulasi Otomatis Presensi Real-Time saat HR Edit Jam Masuk
@@ -950,6 +1010,18 @@ export default function HRAttendancePage() {
             >
               <Icon e="📥" size={14} />
               <span>Export CSV</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setSyncModalOpen(true)
+                setSyncResultMsg(null)
+              }}
+              className="flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg bg-teal-600 hover:bg-teal-700 text-white transition shadow-sm cursor-pointer"
+              title="Tarik data presensi mesin Fingerspot Gudang via API Cloud"
+            >
+              <Icon e="⚡" size={14} />
+              <span>Sync Fingerspot (Gudang)</span>
             </button>
             <button
               onClick={() => setAddModalOpen(true)}
@@ -2151,19 +2223,204 @@ export default function HRAttendancePage() {
                 <button
                   type="button"
                   onClick={() => setAddModalOpen(false)}
-                  className="px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-100 rounded-lg transition"
+                  className="px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-100 rounded-lg transition cursor-pointer"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 text-xs font-semibold text-white rounded-lg shadow-sm"
+                  className="px-4 py-1.5 text-xs font-semibold text-white rounded-lg shadow-sm cursor-pointer"
                   style={{ background: 'linear-gradient(135deg, #052B52, #039299)' }}
                 >
                   Simpan Presensi
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal Dialog: Sync API Fingerspot Gudang ── */}
+      {syncModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4 bg-gray-50/50">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-teal-100 text-teal-700 rounded-xl">
+                  <Icon e="⚡" size={20} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-gray-900 text-sm">
+                    Tarik Data Presensi Mesin Fingerspot (Gudang)
+                  </h3>
+                  <p className="text-xs text-gray-500">
+                    Sinkronisasi scan log biometrik karyawan gudang dari API Fingerspot.iO
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSyncModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 space-y-4 text-xs">
+              {/* Result Notification */}
+              {syncResultMsg && (
+                <div
+                  className={`p-3.5 rounded-xl border flex items-start justify-between ${
+                    syncResultMsg.type === 'success'
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                      : 'bg-rose-50 border-rose-200 text-rose-800'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium leading-relaxed">{syncResultMsg.text}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSyncResultMsg(null)}
+                    className="text-xs font-bold opacity-60 hover:opacity-100 ml-2"
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
+
+              {/* Target Location Banner */}
+              <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-xl text-amber-900 flex items-start gap-2.5">
+                <span className="text-base">🏢</span>
+                <div>
+                  <div className="font-bold">Target Lokasi: Gudang (Fullfilment & Supplychain)</div>
+                  <div className="text-[11px] text-amber-700 mt-0.5 leading-relaxed">
+                    Data scan akan otomatis dikelompokkan menjadi jam masuk dan jam pulang, dicocokkan dengan PIN/NIK karyawan gudang, serta dihitung denda keterlambatannya secara otomatis.
+                  </div>
+                </div>
+              </div>
+
+              {/* Preset Tanggal */}
+              <div>
+                <label className="block font-bold text-gray-700 mb-2">Pilih Periode Penarikan Data:</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSyncDateMode('today')}
+                    className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
+                      syncDateMode === 'today'
+                        ? 'border-teal-600 bg-teal-50/60 text-teal-900 font-bold ring-1 ring-teal-500'
+                        : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    <div className="text-xs">Hari Ini</div>
+                    <div className="text-[10px] text-gray-500 font-normal">{todayStr()}</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSyncDateMode('yesterday')}
+                    className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
+                      syncDateMode === 'yesterday'
+                        ? 'border-teal-600 bg-teal-50/60 text-teal-900 font-bold ring-1 ring-teal-500'
+                        : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    <div className="text-xs">Kemarin</div>
+                    <div className="text-[10px] text-gray-500 font-normal">
+                      {(() => {
+                        const d = new Date()
+                        d.setDate(d.getDate() - 1)
+                        return d.toISOString().split('T')[0]
+                      })()}
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSyncDateMode('7days')}
+                    className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
+                      syncDateMode === '7days'
+                        ? 'border-teal-600 bg-teal-50/60 text-teal-900 font-bold ring-1 ring-teal-500'
+                        : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    <div className="text-xs">7 Hari Terakhir</div>
+                    <div className="text-[10px] text-gray-500 font-normal">Minggu ini</div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSyncDateMode('custom')}
+                    className={`p-2.5 rounded-xl border text-left transition cursor-pointer ${
+                      syncDateMode === 'custom'
+                        ? 'border-teal-600 bg-teal-50/60 text-teal-900 font-bold ring-1 ring-teal-500'
+                        : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    <div className="text-xs">Rentang Kustom</div>
+                    <div className="text-[10px] text-gray-500 font-normal">Pilih tanggal bebas</div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Custom Date Inputs */}
+              {syncDateMode === 'custom' && (
+                <div className="grid grid-cols-2 gap-3 p-3 bg-gray-50 rounded-xl border border-gray-200">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-600 mb-1">Dari Tanggal:</label>
+                    <input
+                      type="date"
+                      value={syncStartDate}
+                      onChange={(e) => setSyncStartDate(e.target.value)}
+                      className="w-full border border-gray-300 rounded-lg p-2 text-xs bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-600 mb-1">Sampai Tanggal:</label>
+                    <input
+                      type="date"
+                      value={syncEndDate}
+                      onChange={(e) => setSyncEndDate(e.target.value)}
+                      className="w-full border border-gray-300 rounded-lg p-2 text-xs bg-white"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="border-t border-gray-100 px-6 py-3.5 bg-gray-50/50 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => setSyncModalOpen(false)}
+                className="px-4 py-2 border border-gray-300 rounded-xl text-xs font-semibold text-gray-700 hover:bg-gray-100 transition cursor-pointer"
+              >
+                Tutup
+              </button>
+
+              <button
+                type="button"
+                disabled={isSyncingFingerspot}
+                onClick={handleExecuteFingerspotSync}
+                className="inline-flex items-center gap-2 px-5 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold transition shadow-sm disabled:opacity-50 cursor-pointer"
+              >
+                {isSyncingFingerspot ? (
+                  <>
+                    <span className="animate-spin inline-block">⏳</span>
+                    Menghubungi API Fingerspot...
+                  </>
+                ) : (
+                  <>
+                    <span>⚡</span>
+                    Mulai Tarik Data Presensi
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
