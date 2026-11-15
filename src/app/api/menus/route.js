@@ -394,14 +394,80 @@ export async function GET() {
       })
     }
 
-    // Auto-seed menu Aset Perusahaan (HR & ESS) dan Offboarding Monitor jika belum ada
+    // Auto-seed menu Aset Perusahaan (HR & ESS), Offboarding, dan Personnel Action jika belum ada
     const hasHrAsset = menus.some((m) => m.key === 'hr-asset')
     const hasEssAsset = menus.some((m) => m.key === 'ess-my-assets')
     const hasHrOffboarding = menus.some((m) => m.key === 'hr-offboarding-monitor')
+    const hasHrPA = menus.some((m) => m.key === 'hr-personnel-action')
+    const hasHrApproval = menus.some((m) => m.key === 'hr-offboarding-approval')
 
-    if ((!hasHrAsset || !hasEssAsset || !hasHrOffboarding) && menus.length > 0) {
+    if ((!hasHrAsset || !hasEssAsset || !hasHrOffboarding || !hasHrPA || !hasHrApproval) && menus.length > 0) {
       const hrParent = menus.find((m) => m.key === 'hr')
       const essParent = menus.find((m) => m.key === 'ess')
+
+      if (!hasHrPA && hrParent) {
+        try {
+          await prisma.menuItem.upsert({
+            where: { key: 'hr-personnel-action' },
+            create: {
+              id: 319,
+              key: 'hr-personnel-action',
+              label: 'Personnel Action',
+              icon: 'clipboard',
+              href: '/hr/employee/personnel-action',
+              parentId: hrParent.id,
+              roles: JSON.stringify(['superadmin', 'admin', 'hr', 'hr_manager', 'hr_officer']),
+              departments: JSON.stringify(['*']),
+              order: 18,
+              active: true,
+            },
+            update: {
+              label: 'Personnel Action',
+              icon: 'clipboard',
+              href: '/hr/employee/personnel-action',
+              parentId: hrParent.id,
+              roles: JSON.stringify(['superadmin', 'admin', 'hr', 'hr_manager', 'hr_officer']),
+              departments: JSON.stringify(['*']),
+              order: 18,
+              active: true,
+            },
+          })
+        } catch (e) {
+          console.error('[Menu Auto-seed hr-personnel-action Error]:', e)
+        }
+      }
+
+      if (!hasHrApproval && hrParent) {
+        try {
+          await prisma.menuItem.upsert({
+            where: { key: 'hr-offboarding-approval' },
+            create: {
+              id: 320,
+              key: 'hr-offboarding-approval',
+              label: 'Persetujuan Offboarding',
+              icon: 'checkCircle',
+              href: '/hr/employee/personnel-action/offboarding-overview',
+              parentId: hrParent.id,
+              roles: JSON.stringify(['superadmin', 'admin', 'hr', 'hr_manager', 'hr_officer']),
+              departments: JSON.stringify(['*']),
+              order: 19,
+              active: true,
+            },
+            update: {
+              label: 'Persetujuan Offboarding',
+              icon: 'checkCircle',
+              href: '/hr/employee/personnel-action/offboarding-overview',
+              parentId: hrParent.id,
+              roles: JSON.stringify(['superadmin', 'admin', 'hr', 'hr_manager', 'hr_officer']),
+              departments: JSON.stringify(['*']),
+              order: 19,
+              active: true,
+            },
+          })
+        } catch (e) {
+          console.error('[Menu Auto-seed hr-offboarding-approval Error]:', e)
+        }
+      }
 
       if (!hasHrOffboarding && hrParent) {
         try {

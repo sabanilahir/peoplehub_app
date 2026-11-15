@@ -59,6 +59,8 @@ export const DEFAULT_PERMISSIONS = [
   { id: 315, key: 'hr_holiday_calendar', label: 'Kalender Hari Libur', group: 'hr' },
   { id: 317, key: 'hr_asset', label: 'Manajemen Aset Perusahaan', group: 'hr' },
   { id: 318, key: 'hr_offboarding_monitor', label: 'Offboarding Monitor', group: 'hr' },
+  { id: 319, key: 'hr_personnel_action', label: 'Personnel Action', group: 'hr' },
+  { id: 320, key: 'hr_offboarding_approval', label: 'Persetujuan Offboarding', group: 'hr' },
 
   // ==================== 4. MSS ====================
   { id: 401, key: 'mss_attendance', label: 'Team Attendance', group: 'mss' },
@@ -186,6 +188,8 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     'hr_holiday_calendar',
     'hr_asset',
     'hr_offboarding_monitor',
+    'hr_personnel_action',
+    'hr_offboarding_approval',
     'system_work_location',
     ...WORKFLOW_KEYS,
     'workflow_engine_userlists',
@@ -207,6 +211,8 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     'hr_holiday_calendar',
     'hr_asset',
     'hr_offboarding_monitor',
+    'hr_personnel_action',
+    'hr_offboarding_approval',
     'workflow_tasks',
     'workflow_my_requests',
     'workflow_engine_userlists',
