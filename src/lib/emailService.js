@@ -12,9 +12,9 @@ export async function getSmtpConfig() {
     const record = await prisma.appState.findUnique({
       where: { key: 'hcm-notification-settings-v1' },
     })
-    if (record?.data) {
-      const parsed = typeof record.data === 'string' ? JSON.parse(record.data) : record.data
-      if (parsed?.state?.smtp?.host) {
+    if (record?.value) {
+      const parsed = typeof record.value === 'string' ? JSON.parse(record.value) : record.value
+      if (parsed?.state?.smtp) {
         dbSmtp = parsed.state.smtp
       }
     }
@@ -22,14 +22,18 @@ export async function getSmtpConfig() {
     // Abaikan jika DB belum siap, gunakan fallback .env
   }
 
-  const host = dbSmtp?.host || process.env.SMTP_HOST || ''
+  const host = dbSmtp?.host || (process.env.SMTP_HOST && !process.env.SMTP_HOST.includes('example.com') ? process.env.SMTP_HOST : '')
   const port = Number(dbSmtp?.port || process.env.SMTP_PORT || 465)
-  const user = dbSmtp?.user || process.env.SMTP_USER || ''
-  const pass = dbSmtp?.pass || process.env.SMTP_PASS || ''
+  const user = dbSmtp?.user || (process.env.SMTP_USER && !process.env.SMTP_USER.includes('example.com') ? process.env.SMTP_USER : '')
+  const pass = dbSmtp?.pass || (process.env.SMTP_PASS && !process.env.SMTP_PASS.includes('xxxxx') ? process.env.SMTP_PASS : '')
   const fromName = dbSmtp?.fromName || 'PeopleHub HRMS'
-  const fromEmail = dbSmtp?.fromEmail || process.env.SMTP_FROM || user || 'no-reply@peoplehub.local'
+  const fromEmail = dbSmtp?.fromEmail || (process.env.SMTP_FROM && !process.env.SMTP_FROM.includes('example.com') ? process.env.SMTP_FROM : user)
   const replyTo = dbSmtp?.replyTo || ''
-  const active = dbSmtp?.active !== undefined ? dbSmtp.active : true
+  
+  // Pengiriman hanya dianggap siap jika host, user, dan pass terisi bukan dummy
+  const isReady = Boolean(host && user && pass && !host.includes('example.com'))
+  // Default NONAKTIF jika tidak disetujui / diaktifkan eksplisit oleh admin
+  const active = Boolean(dbSmtp?.active === true && isReady)
 
   return {
     host,
@@ -39,9 +43,10 @@ export async function getSmtpConfig() {
     pass,
     fromName,
     fromEmail,
-    from: `"${fromName}" <${fromEmail}>`,
+    from: fromEmail ? `"${fromName}" <${fromEmail}>` : `"${fromName}" <no-reply@peoplehub.local>`,
     replyTo: replyTo || fromEmail,
     active,
+    isReady,
   }
 }
 
@@ -230,8 +235,8 @@ async function appendEmailLog(logEntry) {
     })
 
     let data = { state: { logs: [] } }
-    if (record?.data) {
-      data = typeof record.data === 'string' ? JSON.parse(record.data) : record.data
+    if (record?.value) {
+      data = typeof record.value === 'string' ? JSON.parse(record.value) : record.value
     }
 
     if (!data.state) data.state = {}
@@ -250,10 +255,10 @@ async function appendEmailLog(logEntry) {
       where: { key: 'hcm-notification-settings-v1' },
       create: {
         key: 'hcm-notification-settings-v1',
-        data: JSON.stringify(data),
+        value: JSON.stringify(data),
       },
       update: {
-        data: JSON.stringify(data),
+        value: JSON.stringify(data),
       },
     })
   } catch (e) {
@@ -320,15 +325,15 @@ export async function sendNotificationEmail({
   const config = await getSmtpConfig()
 
   if (!config.active) {
-    console.log(`[EmailService] Pengiriman email dinonaktifkan di pengaturan sistem. Event: ${eventKey}`)
+    console.log(`[EmailService] Pengiriman email sedang NONAKTIF (Mode Siaga - email pengirim belum diset/diaktifkan). Event: ${eventKey}`)
     await appendEmailLog({
       to,
       subject,
       eventKey,
       status: 'skipped',
-      error: 'Pengiriman email dinonaktifkan di pengaturan sistem.',
+      error: 'Pengiriman email dinonaktifkan (Mode Siaga - email pengirim belum diset/diaktifkan).',
     })
-    return { success: true, skipped: true, message: 'Email delivery is paused in settings.' }
+    return { success: true, skipped: true, message: 'Pengiriman email dinonaktifkan (Mode Siaga - email pengirim belum aktif).' }
   }
 
   const resolvedSubject = resolveTemplate(subject, variables)

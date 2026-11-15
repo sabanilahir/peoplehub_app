@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { sendNotificationEmail } from '@/lib/emailService'
+import { sendNotificationEmail, getSmtpConfig } from '@/lib/emailService'
 import { DEFAULT_TEMPLATES } from '@/store/notificationSettingsStore'
 
 export const dynamic = 'force-dynamic'
@@ -54,8 +54,8 @@ async function handleContractExpiryScan(req) {
       const record = await prisma.appState.findUnique({
         where: { key: 'hcm-notification-settings-v1' },
       })
-      if (record?.data) {
-        const parsed = typeof record.data === 'string' ? JSON.parse(record.data) : record.data
+      if (record?.value) {
+        const parsed = typeof record.value === 'string' ? JSON.parse(record.value) : record.value
         if (parsed?.state?.contractSettings) {
           contractSettings = { ...contractSettings, ...parsed.state.contractSettings }
         }
@@ -69,6 +69,8 @@ async function handleContractExpiryScan(req) {
 
     const { alertIntervals, hrEmails, notifyManager, notifyEmployee } = contractSettings
     const todayStr = getTodayDateString()
+    const smtpConfig = await getSmtpConfig()
+    const isEmailDeliveryActive = Boolean(smtpConfig?.active)
 
     // 2. Ambil seluruh data karyawan aktif yang memiliki tanggal akhir kontrak (endDate)
     const employees = await prisma.employee.findMany({
@@ -130,60 +132,64 @@ async function handleContractExpiryScan(req) {
 
       // Jika hari ini tepat tanggal peringatan (misal H-60, H-30, H-14, H-7, H-1)
       if (isAlertDay) {
-        const variables = {
-          employee_name: emp.name,
-          employee_id: `EMP-${emp.id}`,
-          department: emp.dept || '—',
-          position: emp.position || '—',
-          contract_end_date: emp.endDate,
-          days_remaining: String(daysRemaining),
-          manager_name: managerName,
-          company_name: 'PeopleHub HRMS',
-        }
-
-        // A. Kirim ke HR & Manager
-        const hrTemplate = templates.contract_expiring_hr || DEFAULT_TEMPLATES.contract_expiring_hr
-        if (hrTemplate.active) {
-          const recipients = [hrEmails]
-          if (notifyManager && managerEmail && managerEmail.includes('@')) {
-            recipients.push(managerEmail)
+        if (!isEmailDeliveryActive) {
+          empDetail.deliveryStatus = 'Dilewati (Mode Siaga - Email pengirim belum diaktifkan)'
+        } else {
+          const variables = {
+            employee_name: emp.name,
+            employee_id: `EMP-${emp.id}`,
+            department: emp.dept || '—',
+            position: emp.position || '—',
+            contract_end_date: emp.endDate,
+            days_remaining: String(daysRemaining),
+            manager_name: managerName,
+            company_name: 'PeopleHub HRMS',
           }
 
-          const targetTo = recipients.filter(Boolean).join(', ')
-          if (targetTo) {
-            await sendNotificationEmail({
-              to: targetTo,
-              subject: hrTemplate.subject,
-              body: hrTemplate.body,
-              ctaText: hrTemplate.ctaText,
-              ctaUrl: hrTemplate.ctaUrl,
-              accentColor: hrTemplate.accentColor,
-              eventKey: 'contract_expiring_hr',
-              variables,
-              recipientName: 'Tim HR & Manager',
-            })
-            empDetail.hrNotified = true
-            totalNotified++
-          }
-        }
+          // A. Kirim ke HR & Manager
+          const hrTemplate = templates.contract_expiring_hr || DEFAULT_TEMPLATES.contract_expiring_hr
+          if (hrTemplate.active) {
+            const recipients = [hrEmails]
+            if (notifyManager && managerEmail && managerEmail.includes('@')) {
+              recipients.push(managerEmail)
+            }
 
-        // B. Kirim ke Karyawan (jika diaktifkan dan sisa hari <= 14)
-        if (notifyEmployee && daysRemaining <= 14 && emp.email && emp.email.includes('@')) {
-          const empTemplate = templates.contract_expiring_employee || DEFAULT_TEMPLATES.contract_expiring_employee
-          if (empTemplate.active) {
-            await sendNotificationEmail({
-              to: emp.email,
-              subject: empTemplate.subject,
-              body: empTemplate.body,
-              ctaText: empTemplate.ctaText,
-              ctaUrl: empTemplate.ctaUrl,
-              accentColor: empTemplate.accentColor,
-              eventKey: 'contract_expiring_employee',
-              variables,
-              recipientName: emp.name,
-            })
-            empDetail.employeeNotified = true
-            totalNotified++
+            const targetTo = recipients.filter(Boolean).join(', ')
+            if (targetTo) {
+              await sendNotificationEmail({
+                to: targetTo,
+                subject: hrTemplate.subject,
+                body: hrTemplate.body,
+                ctaText: hrTemplate.ctaText,
+                ctaUrl: hrTemplate.ctaUrl,
+                accentColor: hrTemplate.accentColor,
+                eventKey: 'contract_expiring_hr',
+                variables,
+                recipientName: 'Tim HR & Manager',
+              })
+              empDetail.hrNotified = true
+              totalNotified++
+            }
+          }
+
+          // B. Kirim ke Karyawan (jika diaktifkan dan sisa hari <= 14)
+          if (notifyEmployee && daysRemaining <= 14 && emp.email && emp.email.includes('@')) {
+            const empTemplate = templates.contract_expiring_employee || DEFAULT_TEMPLATES.contract_expiring_employee
+            if (empTemplate.active) {
+              await sendNotificationEmail({
+                to: emp.email,
+                subject: empTemplate.subject,
+                body: empTemplate.body,
+                ctaText: empTemplate.ctaText,
+                ctaUrl: empTemplate.ctaUrl,
+                accentColor: empTemplate.accentColor,
+                eventKey: 'contract_expiring_employee',
+                variables,
+                recipientName: emp.name,
+              })
+              empDetail.employeeNotified = true
+              totalNotified++
+            }
           }
         }
       }
@@ -197,11 +203,14 @@ async function handleContractExpiryScan(req) {
     return NextResponse.json({
       success: true,
       scanDate: todayStr,
+      isEmailDeliveryActive,
       scannedEmployeesCount: employees.length,
       expiringWithinScopeCount: results.length,
       notificationsSentToday: totalNotified,
       employees: results,
-      message: `Pengecekan selesai. ${results.length} karyawan kontrak dipantau, ${totalNotified} notifikasi dikirimkan hari ini (${todayStr}).`,
+      message: isEmailDeliveryActive
+        ? `Pengecekan selesai. ${results.length} karyawan kontrak dipantau, ${totalNotified} notifikasi dikirimkan hari ini (${todayStr}).`
+        : `Pengecekan selesai. ${results.length} karyawan kontrak dipantau. Pengiriman email dilewati (Mode Siaga - Email pengirim belum diaktifkan).`,
     })
   } catch (error) {
     console.error('[API /api/cron/contract-expiry Error]:', error)

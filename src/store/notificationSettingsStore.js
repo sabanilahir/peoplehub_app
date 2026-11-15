@@ -301,15 +301,15 @@ export function resolveTemplate(text, values) {
 }
 
 const DEFAULT_SMTP = {
-  host: 'mail.example.com',
+  host: '',
   port: 465,
   secure: true,
-  user: 'notification@example.com',
+  user: '',
   pass: '',
   fromName: 'PeopleHub HRMS',
-  fromEmail: 'notification@example.com',
-  replyTo: 'hr@example.com',
-  active: true,
+  fromEmail: '',
+  replyTo: '',
+  active: false, // Default NONAKTIF (Mode Siaga - email pengirim belum diset)
 }
 
 const DEFAULT_CONTRACT_SETTINGS = {

@@ -47,8 +47,8 @@ export async function POST(req) {
       const record = await prisma.appState.findUnique({
         where: { key: 'hcm-notification-settings-v1' },
       })
-      if (record?.data) {
-        const parsed = typeof record.data === 'string' ? JSON.parse(record.data) : record.data
+      if (record?.value) {
+        const parsed = typeof record.value === 'string' ? JSON.parse(record.value) : record.value
         if (parsed?.state?.templates?.[eventKey]) {
           template = parsed.state.templates[eventKey]
         }

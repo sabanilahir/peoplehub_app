@@ -186,11 +186,11 @@ export default function NotificationSetupPage() {
       {/* Stat Bar Ringkasan */}
       <div className='mb-6 grid grid-cols-1 gap-4 sm:grid-cols-4'>
         <StatCard
-          tone='brand'
+          tone={smtp.active ? 'green' : 'neutral'}
           icon='⚙️'
           label={t('Server SMTP', 'SMTP Server')}
-          value={smtp.active ? t('Aktif', 'Active') : t('Nonaktif', 'Inactive')}
-          hint={`${smtp.host || 'Belum diset'}:${smtp.port}`}
+          value={smtp.active ? t('Aktif (Live)', 'Active (Live)') : t('Nonaktif (Mode Siaga)', 'Inactive (Standby)')}
+          hint={smtp.active ? `${smtp.host || 'Ready'}:${smtp.port}` : t('Pengiriman email keluar dimatikan', 'Outbound email paused')}
         />
         <StatCard
           tone='blue'
@@ -243,6 +243,35 @@ export default function NotificationSetupPage() {
       ───────────────────────────────────────────────────────────────────────── */}
       {activeTab === 'smtp' && (
         <div className='grid grid-cols-1 gap-6 lg:grid-cols-3'>
+          {/* Banner Peringatan Keamanan Mode Siaga jika Nonaktif */}
+          {!smtp.active && (
+            <div className='lg:col-span-3 rounded-2xl border border-amber-300 bg-amber-50/90 p-4 text-xs text-amber-950 flex items-start gap-3.5 shadow-xs'>
+              <span className='text-3xl leading-none'>🛡️</span>
+              <div className='flex-1 leading-relaxed'>
+                <div className='flex items-center gap-2'>
+                  <p className='font-bold text-sm text-amber-950'>
+                    {t('Mode Siaga Aktif — Pengiriman Email Otomatis Sedang NONAKTIF', 'Standby Mode Active — Automated Email Delivery is PAUSED')}
+                  </p>
+                  <span className='text-[10px] font-bold uppercase tracking-wider bg-amber-200/80 text-amber-900 px-2 py-0.5 rounded-full'>
+                    Aman (Safe)
+                  </span>
+                </div>
+                <p className='text-amber-800 mt-1'>
+                  {t(
+                    'Akun email pengirim resmi belum tersedia. Seluruh notifikasi sistem (approval cuti, lembur, permohonan resign, dan scan kontrak) saat ini TIDAK AKAN dikirimkan ke email penerima dan otomatis dilewati (skipped) tanpa mengganggu operasional HR.',
+                    'Official sender email is not yet configured. All system notifications (leave/overtime approvals, resignations, contract alerts) will NOT be dispatched to recipients and will be safely skipped without disrupting HR operations.'
+                  )}
+                </p>
+                <p className='text-amber-700 mt-1 text-[11px] font-medium'>
+                  {t(
+                    'Anda dapat mengisi kredensial server SMTP di bawah ini dan mencentang tombol switch "Aktifkan Pengiriman Email" kapan saja setelah akun email pengirim siap.',
+                    'You can configure the SMTP credentials below and enable "Live Email Delivery" whenever your official sender email is ready.'
+                  )}
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Form Konfigurasi SMTP (2 Kolom) */}
           <div className='lg:col-span-2 space-y-6'>
             <SectionCard
@@ -253,7 +282,11 @@ export default function NotificationSetupPage() {
                 'SMTP server credentials used to dispatch all notifications, approvals, and contract alerts.'
               )}
               actions={
-                <label className='flex cursor-pointer items-center gap-2 text-xs font-semibold text-gray-700 bg-gray-50 border border-gray-200 px-3 py-1.5 rounded-lg'>
+                <label className={`flex cursor-pointer items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-xl border transition ${
+                  smtp.active
+                    ? 'bg-green-50 border-green-300 text-green-900'
+                    : 'bg-gray-100 border-gray-300 text-gray-700'
+                }`}>
                   <input
                     type='checkbox'
                     checked={smtp.active}
@@ -261,9 +294,13 @@ export default function NotificationSetupPage() {
                       setSmtp({ active: e.target.checked })
                       flashSaved()
                     }}
-                    className='h-4 w-4 accent-blue-600 rounded'
+                    className='h-4 w-4 accent-green-600 rounded'
                   />
-                  <span>{t('Aktifkan Pengiriman Email', 'Enable Live Email Delivery')}</span>
+                  <span>
+                    {smtp.active
+                      ? t('Status: Aktif (Live Delivery)', 'Status: Active (Live Delivery)')
+                      : t('Status: Nonaktif (Aman / Siaga)', 'Status: Inactive (Safe / Standby)')}
+                  </span>
                 </label>
               }
             >
@@ -814,7 +851,9 @@ export default function NotificationSetupPage() {
             icon='👥'
             subtitle={
               contractScanData
-                ? `Hasil pemindaian terakhir (${contractScanData.scanDate}): ${contractScanData.expiringWithinScopeCount} karyawan dipantau.`
+                ? `Hasil pemindaian (${contractScanData.scanDate}): ${contractScanData.expiringWithinScopeCount} karyawan dipantau. ${
+                    !smtp.active ? '🛡️ Pengiriman email otomatis dilewati (Mode Siaga - Email pengirim belum aktif).' : ''
+                  }`
                 : 'Memuat data pemindaian...'
             }
             bodyClass='p-0'
@@ -868,10 +907,17 @@ export default function NotificationSetupPage() {
                       </Td>
                       <Td>
                         {emp.isAlertDay ? (
-                          <span className='inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200'>
-                            <span>🔔</span>
-                            <span>Hari Peringatan (H-{days})</span>
-                          </span>
+                          !smtp.active ? (
+                            <span className='inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-300'>
+                              <span>🛡️</span>
+                              <span>Terdeteksi H-{days} (Dilewati - Siaga)</span>
+                            </span>
+                          ) : (
+                            <span className='inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200'>
+                              <span>🔔</span>
+                              <span>Hari Peringatan (H-{days})</span>
+                            </span>
+                          )
                         ) : (
                           <span className='text-[11px] text-gray-400'>Dalam Pemantauan</span>
                         )}
