@@ -93,19 +93,39 @@ export default function ClockInOutPage() {
 
   // Ambil target lokasi yang relevan untuk user aktif (HO vs Distributor Sales)
   useEffect(() => {
-    if (!uid) return
+    const empOrUserId = currentUser?.employeeId || uid
+    if (!empOrUserId) return
     let isMounted = true
     setLoadingTargets(true)
 
-    fetch(`/api/work-locations/targets?employeeId=${uid}`)
+    const fallbackHo = [
+      {
+        id: 1,
+        code: 'HO-MAIN',
+        name: 'Head Office (HO)',
+        type: 'head_office',
+        distributorName: 'Head Office (HO)',
+        address: 'Jl. Terusan Bandengan Ruko Harmoni Mas Blok E No. 26, Pejagalan, Penjaringan, Jakarta Utara',
+        latitude: -6.1373,
+        longitude: 106.784,
+        radiusMeters: 300,
+      },
+    ]
+
+    fetch(`/api/work-locations/targets?employeeId=${empOrUserId}`)
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (!isMounted) return
-        if (data?.success && Array.isArray(data.targets)) {
+        if (data?.success && Array.isArray(data.targets) && data.targets.length > 0) {
           setUserTargets(data.targets)
+        } else {
+          setUserTargets(fallbackHo)
         }
       })
-      .catch((err) => console.warn('Gagal memuat target lokasi:', err))
+      .catch((err) => {
+        console.warn('Gagal memuat target lokasi:', err)
+        if (isMounted) setUserTargets(fallbackHo)
+      })
       .finally(() => {
         if (isMounted) setLoadingTargets(false)
       })
@@ -113,13 +133,13 @@ export default function ClockInOutPage() {
     return () => {
       isMounted = false
     }
-  }, [uid])
+  }, [currentUser, uid])
 
-  // Deteksi Geolocation Browser & Anti-Fake GPS
+  // Deteksi Geolocation Browser & Anti-Fake GPS (Dengan Fallback otomatis untuk PC/Laptop)
   const detectLocation = () => {
     if (typeof window === 'undefined' || !navigator.geolocation) {
       setGpsStatus('unavailable')
-      setGpsError('Browser Anda tidak mendukung akses lokasi GPS.')
+      setGpsError('Browser Anda tidak mendukung akses lokasi GPS. Silakan gunakan tombol Clock In/Out (Mode B).')
       return
     }
 
@@ -142,35 +162,62 @@ export default function ClockInOutPage() {
       setMockGpsReason(`Perangkat emulator terdeteksi (${emu.renderer})`)
     }
 
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const { latitude, longitude, accuracy } = pos.coords
+    const onSuccess = (pos) => {
+      const { latitude, longitude, accuracy } = pos.coords
 
-        // 3. Validasi telemetri GPS
-        const tel = validateGpsTelemetry(pos.coords)
-        if (tel.isMock) {
-          setIsMockGps(true)
-          setMockGpsReason('Akurasi 0m (Mock location)')
-        }
+      // 3. Validasi telemetri GPS
+      const tel = validateGpsTelemetry(pos.coords)
+      if (tel.isMock) {
+        setIsMockGps(true)
+        setMockGpsReason('Akurasi 0m (Mock location)')
+      }
 
-        setGpsCoords({
-          lat: latitude,
-          lng: longitude,
-          accuracy: Math.round(accuracy),
-        })
-        setGpsStatus('ready')
-      },
-      (err) => {
-        setGpsStatus(err.code === 1 ? 'denied' : 'unavailable')
+      setGpsCoords({
+        lat: latitude,
+        lng: longitude,
+        accuracy: Math.round(accuracy || 0),
+      })
+      setGpsStatus('ready')
+    }
+
+    const onFinalError = (err) => {
+      const isInsecureHttp =
+        typeof window !== 'undefined' &&
+        window.isSecureContext === false &&
+        window.location.hostname !== 'localhost' &&
+        window.location.hostname !== '127.0.0.1'
+
+      setGpsStatus(err.code === 1 ? 'denied' : 'unavailable')
+
+      if (isInsecureHttp) {
         setGpsError(
-          err.code === 1
-            ? 'Izin akses lokasi GPS ditolak oleh browser. Mohon izinkan lokasi untuk presensi geofencing.'
-            : 'Gagal mendeteksi lokasi GPS perangkat. Pastikan GPS HP/Laptop dalam keadaan aktif.'
+          'Sensor GPS dinonaktifkan oleh browser karena koneksi belum HTTPS (bukan localhost). Anda tetap dapat melakukan Clock In/Out menggunakan Mode B di bawah.'
         )
+      } else if (err.code === 1) {
+        setGpsError(
+          'Izin lokasi ditolak oleh Browser atau fitur "Location Services" di Windows Settings komputer Anda sedang Off. Anda tetap dapat Clock In/Out menggunakan Mode B.'
+        )
+      } else {
+        setGpsError(
+          'Komputer/perangkat tidak memiliki sensor GPS aktif. Anda tetap dapat Clock In/Out menggunakan Mode B di bawah.'
+        )
+      }
+    }
+
+    // Tahap 1: Coba High Accuracy (GPS Satelit / Wi-Fi presisi)
+    navigator.geolocation.getCurrentPosition(
+      onSuccess,
+      () => {
+        // Tahap 2 (Fallback PC/Laptop): Coba Low Accuracy (Jaringan / Wi-Fi / OS Location)
+        navigator.geolocation.getCurrentPosition(onSuccess, onFinalError, {
+          enableHighAccuracy: false,
+          timeout: 8000,
+          maximumAge: 60000,
+        })
       },
       {
         enableHighAccuracy: true,
-        timeout: 12000,
+        timeout: 6000,
         maximumAge: 0,
       }
     )
@@ -182,9 +229,18 @@ export default function ClockInOutPage() {
   }, [])
 
   // Hitung target lokasi terdekat dan jarak ke lokasi
+  // PENTING: Jika GPS belum siap/ditolak di PC, nearestTarget tetap menampilkan target kantor user (bukan null)
   const { nearestTarget, distanceMeters, isWithinRadius } = useMemo(() => {
-    if (!gpsCoords || !userTargets || userTargets.length === 0) {
+    if (!userTargets || userTargets.length === 0) {
       return { nearestTarget: null, distanceMeters: null, isWithinRadius: false }
+    }
+
+    if (!gpsCoords) {
+      return {
+        nearestTarget: userTargets[0],
+        distanceMeters: null,
+        isWithinRadius: false,
+      }
     }
 
     let nearest = null
@@ -207,7 +263,7 @@ export default function ClockInOutPage() {
     const inRadius = minDistance <= allowedRadius
 
     return {
-      nearestTarget: nearest,
+      nearestTarget: nearest || userTargets[0],
       distanceMeters: minDistance,
       isWithinRadius: inRadius,
     }
@@ -283,12 +339,16 @@ export default function ClockInOutPage() {
   const handleConfirmWarningSubmit = (e) => {
     e.preventDefault()
     if (!warningReason.trim() || warningReason.trim().length < 4) {
-      alert('Harap masukkan alasan atau keterangan dinas luar minimal 4 karakter.')
+      alert('Harap masukkan alasan atau keterangan minimal 4 karakter.')
       return
     }
 
     setSubmitting(true)
-    const formattedNote = `[Di Luar Radius: ${distanceMeters || '0'}m] ${warningReason.trim()}`
+    const prefix =
+      distanceMeters != null
+        ? `[Di Luar Radius: ${distanceMeters}m]`
+        : `[Mode PC / Tanpa Sensor GPS]`
+    const formattedNote = `${prefix} ${warningReason.trim()}`
 
     if (warningAction === 'in') {
       executeClockIn(formattedNote)
@@ -566,8 +626,14 @@ export default function ClockInOutPage() {
                 <div className='flex items-center justify-between text-xs'>
                   <span>Jarak Terdeteksi:</span>
                   <span className='font-bold font-mono text-amber-700'>
-                    {distanceMeters > 1000 ? `${(distanceMeters / 1000).toFixed(2)} km` : `${distanceMeters} meter`}
-                    <span className='text-[10px] text-gray-500 font-normal ml-1'>(Maks: 300m)</span>
+                    {distanceMeters != null ? (
+                      <>
+                        {distanceMeters > 1000 ? `${(distanceMeters / 1000).toFixed(2)} km` : `${distanceMeters} meter`}
+                        <span className='text-[10px] text-gray-500 font-normal ml-1'>(Maks: 300m)</span>
+                      </>
+                    ) : (
+                      <span>Tidak terdeteksi (PC / Tanpa Sensor GPS)</span>
+                    )}
                   </span>
                 </div>
                 {isMockGps && (
@@ -577,20 +643,41 @@ export default function ClockInOutPage() {
                   </div>
                 )}
                 <p className='text-[11px] text-amber-700 leading-relaxed border-t border-amber-200/60 pt-2'>
-                  Presensi ini tetap akan dicatat, namun ditandai berstatus <strong>"Di Luar Radius"</strong> dan dilaporkan ke HR/Atasan.
+                  Presensi ini tetap akan dicatat, namun ditandai berstatus <strong>"Di Luar Radius / Mode B"</strong> dan dilaporkan ke HR/Atasan.
                 </p>
               </div>
 
-              {/* Form Input Alasan Wajib */}
+              {/* Form Input Alasan Wajib + Quick Chips */}
               <div>
-                <label className='font-bold text-gray-800 block mb-1'>
-                  Alasan / Keterangan Dinas Luar <span className='text-rose-500'>*</span>
+                <label className='font-bold text-gray-800 block mb-1.5'>
+                  Alasan / Keterangan Presensi <span className='text-rose-500'>*</span>
                 </label>
+                <div className='flex flex-wrap gap-1.5 mb-2'>
+                  {[
+                    'Absen dari PC Kantor (Tanpa Sensor GPS)',
+                    'Dinas Luar / Kunjungan Customer',
+                    'Meeting Luar Kantor',
+                    'Kendala Sinyal GPS Gedung',
+                  ].map((preset) => (
+                    <button
+                      key={preset}
+                      type='button'
+                      onClick={() => setWarningReason(preset)}
+                      className={`px-2.5 py-1 rounded-lg border text-[11px] font-medium transition cursor-pointer ${
+                        warningReason === preset
+                          ? 'bg-amber-600 text-white border-amber-600'
+                          : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-amber-50 hover:border-amber-200'
+                      }`}
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
                 <textarea
                   rows={3}
                   value={warningReason}
                   onChange={(e) => setWarningReason(e.target.value)}
-                  placeholder='Contoh: Kunjungan toko customer, meeting luar kantor, atau kendala sinyal GPS gedung...'
+                  placeholder='Pilih salah satu alasan di atas atau ketik keterangan Anda...'
                   required
                   className='w-full rounded-2xl border border-gray-300 p-3 text-xs leading-relaxed focus:outline-hidden focus:ring-2 focus:ring-amber-500'
                 />
