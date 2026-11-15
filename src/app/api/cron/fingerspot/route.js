@@ -58,6 +58,9 @@ async function handleScheduledSync(req) {
       })
     }
 
+    const { searchParams } = new URL(req.url)
+    const isMock = searchParams.get('mock') === '1' || searchParams.get('simulate') === '1'
+
     // 3. Tentukan rentang penarikan: hari ini dan kemarin
     const now = new Date()
     const todayStr = now.toISOString().split('T')[0]
@@ -70,7 +73,26 @@ async function handleScheduledSync(req) {
       startDate: yesterdayStr,
       endDate: todayStr,
       settings,
+      forceMock: isMock,
     })
+
+    // Standby Mode (jika token belum diisi dan simulasi tidak aktif)
+    if (fetchResult.isStandby) {
+      await updateFingerspotSettings({
+        lastSyncAt: new Date(),
+        lastSyncStatus: 'STANDBY',
+        lastSyncMessage: `[Cron Siaga] ${fetchResult.message}`,
+        lastSyncCount: 0,
+      })
+
+      return NextResponse.json({
+        success: true,
+        status: 'STANDBY',
+        cronExecutedAt: new Date().toISOString(),
+        message: fetchResult.message,
+        hint: 'Cloud ID dan API Token belum diisi. Sistem tetap berjalan aman tanpa error.',
+      })
+    }
 
     if (!fetchResult.success && (!fetchResult.data || fetchResult.data.length === 0)) {
       await updateFingerspotSettings({
@@ -112,22 +134,25 @@ async function handleScheduledSync(req) {
     })
 
     // 6. Update status berhasil
+    const statusNote = fetchResult.isMock ? '[Simulasi] ' : ''
     await updateFingerspotSettings({
       lastSyncAt: new Date(),
       lastSyncStatus: 'SUCCESS',
-      lastSyncMessage: `[Cron] Berhasil memproses ${processResult.savedCount} presensi gudang (${yesterdayStr} s/d ${todayStr})`,
+      lastSyncMessage: `[Cron] ${statusNote}Berhasil memproses ${processResult.savedCount} presensi gudang (${yesterdayStr} s/d ${todayStr})`,
       lastSyncCount: processResult.savedCount,
     })
 
     return NextResponse.json({
       success: true,
+      status: 'SUCCESS',
+      isMock: Boolean(fetchResult.isMock),
       cronExecutedAt: new Date().toISOString(),
       totalFetched: processResult.totalFetched,
       savedCount: processResult.savedCount,
       matchedCount: processResult.matchedCount,
       skippedCount: processResult.skippedCount,
       errors: processResult.errors,
-      message: processResult.message,
+      message: `${statusNote}${processResult.message}`,
     })
   } catch (error) {
     console.error('Error executing Fingerspot cron sync:', error)

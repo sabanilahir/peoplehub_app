@@ -31,6 +31,23 @@ export async function POST(req) {
       forceMock,
     })
 
+    if (fetchResult.isStandby) {
+      await updateFingerspotSettings({
+        lastSyncAt: new Date(),
+        lastSyncStatus: 'STANDBY',
+        lastSyncMessage: fetchResult.message,
+        lastSyncCount: 0,
+      })
+
+      return NextResponse.json({
+        success: true,
+        status: 'STANDBY',
+        totalFetched: 0,
+        savedCount: 0,
+        message: fetchResult.message,
+      })
+    }
+
     if (!fetchResult.success && (!fetchResult.data || fetchResult.data.length === 0)) {
       await updateFingerspotSettings({
         lastSyncAt: new Date(),

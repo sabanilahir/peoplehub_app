@@ -16,6 +16,7 @@ export async function getFingerspotSettings() {
         deviceSn: 'FSPOT-GUDANG-01',
         deviceName: 'Mesin Fingerspot Gudang',
         syncEnabled: true,
+        simulationMode: true,
         autoSyncInterval: 30,
         cronSecret: 'san_fingerspot_cron_key_2026',
         lastSyncStatus: 'NO_DATA',
@@ -47,17 +48,22 @@ export async function updateFingerspotSettings(data) {
  */
 export async function fetchFingerspotAttLog({ startDate, endDate, settings, forceMock = false }) {
   const cfg = settings || (await getFingerspotSettings())
+  const isSimulation = Boolean(forceMock || cfg.simulationMode)
 
-  // Jika forceMock atau jika kredensial belum diisi, kita siapkan simulasi data scan karyawan gudang aktual
-  if (forceMock || !cfg.apiToken || !cfg.cloudId) {
-    if (!forceMock && (!cfg.apiToken || !cfg.cloudId)) {
+  // 1. Jika belum ada kredensial dan simulasi tidak aktif -> Mode Standby (Siaga)
+  if (!cfg.apiToken || !cfg.cloudId) {
+    if (!isSimulation) {
       return {
-        success: false,
-        error: 'API Token atau Cloud ID Fingerspot.iO belum dikonfigurasi di pengaturan',
+        success: true,
+        isStandby: true,
+        message: 'Fingerspot dalam mode siaga: Menunggu pengisian Cloud ID dan API Token di Pengaturan Lokasi Kerja.',
         data: [],
       }
     }
+  }
 
+  // 2. Jika mode simulasi aktif (atau dipaksa via parameter)
+  if (isSimulation) {
     // Generator simulasi scan karyawan gudang riil PeopleHub
     const targetDate = startDate || new Date().toISOString().split('T')[0]
     const gudangEmps = await prisma.employee.findMany({
@@ -68,8 +74,8 @@ export async function fetchFingerspotAttLog({ startDate, endDate, settings, forc
           { dept: { contains: 'supplychain', mode: 'insensitive' } },
         ],
       },
-      select: { id: true, nik: true, name: true },
-      take: 20,
+      select: { id: true, nik: true, name: true, location: true, dept: true },
+      take: 25,
     })
 
     const mockLogs = []
@@ -113,7 +119,7 @@ export async function fetchFingerspotAttLog({ startDate, endDate, settings, forc
     return {
       success: true,
       isMock: true,
-      message: `Simulasi Fingerspot: ${mockLogs.length} scan log dihasilkan untuk ${gudangEmps.length} staf gudang`,
+      message: `[Mode Simulasi] ${mockLogs.length} scan log dihasilkan untuk ${gudangEmps.length} staf gudang`,
       data: mockLogs,
     }
   }

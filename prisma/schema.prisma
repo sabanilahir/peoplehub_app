@@ -660,6 +660,7 @@ model FingerspotSettings {
   deviceSn         String    @default("FSPOT-GUDANG-01")
   deviceName       String    @default("Mesin Fingerspot Gudang")
   syncEnabled      Boolean   @default(true)
+  simulationMode   Boolean   @default(true)
   autoSyncInterval Int       @default(30) // Interval penarikan dalam menit
   cronSecret       String    @default("san_fingerspot_cron_key_2026")
   lastSyncAt       DateTime?

@@ -42,6 +42,7 @@ import {
   Eye,
   EyeOff,
   RefreshCw,
+  Info,
 } from 'lucide-react'
 
 function WorkLocationSettingsContent() {
@@ -69,6 +70,7 @@ function WorkLocationSettingsContent() {
     deviceSn: 'FSPOT-GUDANG-01',
     deviceName: 'Mesin Fingerspot Gudang',
     syncEnabled: true,
+    simulationMode: true,
     autoSyncInterval: 30,
     cronSecret: 'san_fingerspot_cron_key_2026',
     lastSyncAt: null,
@@ -83,6 +85,7 @@ function WorkLocationSettingsContent() {
   const [testResult, setTestResult] = useState(null)
   const [showToken, setShowToken] = useState(false)
   const [copiedCron, setCopiedCron] = useState(false)
+  const [copiedCronParam, setCopiedCronParam] = useState(false)
 
   // Geofencing Target Locations State
   const storeEmployees = useEmployeeStore((s) => s.employees)
@@ -1697,6 +1700,46 @@ function WorkLocationSettingsContent() {
               </div>
             )}
 
+            {/* Standby / Simulation Mode Status Banner */}
+            {(!fingerspotSettings.cloudId || !fingerspotSettings.apiToken) && (
+              <div
+                className={`mt-4 p-4 rounded-xl border text-xs flex items-start gap-3 transition-colors ${
+                  fingerspotSettings.simulationMode
+                    ? 'bg-amber-50/90 border-amber-200 text-amber-900'
+                    : 'bg-blue-50/90 border-blue-200 text-blue-900'
+                }`}
+              >
+                <Info
+                  className={`w-5 h-5 flex-shrink-0 mt-0.5 ${
+                    fingerspotSettings.simulationMode ? 'text-amber-600' : 'text-blue-600'
+                  }`}
+                />
+                <div className='flex-1 leading-relaxed'>
+                  <div className='font-bold text-xs sm:text-sm flex items-center gap-2'>
+                    <span>
+                      {fingerspotSettings.simulationMode
+                        ? '🟡 Kredensial Fingerspot Belum Diisi — Mode Simulasi Aktif'
+                        : '🔵 Kredensial Fingerspot Belum Diisi — Mode Siaga (Standby) Aktif'}
+                    </span>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                        fingerspotSettings.simulationMode
+                          ? 'bg-amber-200/80 text-amber-800'
+                          : 'bg-blue-200/80 text-blue-800'
+                      }`}
+                    >
+                      {fingerspotSettings.simulationMode ? 'Testing Sandbox' : 'Standby'}
+                    </span>
+                  </div>
+                  <p className='mt-1 text-[11px] text-gray-700'>
+                    {fingerspotSettings.simulationMode
+                      ? 'Cloud ID dan API Bearer belum diterima dari Fingerspot. Dengan Mode Simulasi ini, tombol "Sync Sekarang" dan cron scheduler akan otomatis menghasilkan data presensi realistis dari staf gudang nyata (Achmad Rizali, Agung Hakiki, dsb.) untuk memverifikasi alur presensi, potongan denda, dan laporan kehadiran.'
+                      : 'Sistem dalam mode siaga aman. Eksekusi crontab otomatis akan merespons HTTP 200 (STANDBY) tanpa melempar pesan error dan tanpa menyimpan data tiruan, sampai Cloud ID dan API Token dimasukkan.'}
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Form */}
             <form onSubmit={handleSaveFingerspotSettings} className='mt-6 space-y-5 text-xs'>
               {/* Toggle Sync Enabled */}
@@ -1719,6 +1762,35 @@ function WorkLocationSettingsContent() {
                     className='sr-only peer'
                   />
                   <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-teal-600"></div>
+                </label>
+              </div>
+
+              {/* Toggle Simulation Mode */}
+              <div className='flex items-center justify-between p-3.5 bg-amber-50/60 rounded-xl border border-amber-200/80'>
+                <div>
+                  <div className='font-bold text-amber-950 text-sm flex items-center gap-2'>
+                    <span>Mode Simulasi / Testing Data Gudang</span>
+                    <span className='px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-200 text-amber-900 border border-amber-300'>
+                      Sandbox
+                    </span>
+                  </div>
+                  <div className='text-gray-600 text-[11px] mt-0.5 max-w-2xl'>
+                    Aktifkan jika belum memiliki Bearer Token dan Cloud ID dari Fingerspot. Sistem akan men-generate dan memproses data presensi karyawan gudang nyata untuk simulasi jam masuk, pulang, dan denda.
+                  </div>
+                </div>
+                <label className='relative inline-flex items-center cursor-pointer'>
+                  <input
+                    type='checkbox'
+                    checked={fingerspotSettings.simulationMode ?? true}
+                    onChange={(e) =>
+                      setFingerspotSettings({
+                        ...fingerspotSettings,
+                        simulationMode: e.target.checked,
+                      })
+                    }
+                    className='sr-only peer'
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-600"></div>
                 </label>
               </div>
 
@@ -1853,7 +1925,7 @@ function WorkLocationSettingsContent() {
           </div>
 
           {/* Card Panduan Penjadwalan VPS Rocky Linux */}
-          <div className='rounded-2xl border border-blue-200 bg-blue-50/40 p-6 space-y-4'>
+          <div className='rounded-2xl border border-blue-200 bg-blue-50/40 p-6 space-y-5'>
             <div className='flex items-start gap-3'>
               <div className='p-2 bg-blue-100 text-blue-700 rounded-xl mt-0.5 flex-shrink-0'>
                 <Clock className='w-5 h-5' />
@@ -1863,32 +1935,84 @@ function WorkLocationSettingsContent() {
                   Panduan Pemasangan Penarikan Terjadwal Otomatis (Crontab VPS)
                 </h4>
                 <p className='text-xs text-blue-800 mt-1 leading-relaxed'>
-                  Agar PeopleHub secara otomatis menarik presensi karyawan gudang setiap 30 menit (tanpa harus klik tombol manual), pasang baris crontab berikut pada server Rocky Linux 9 Anda:
+                  Agar PeopleHub secara otomatis menarik presensi karyawan gudang setiap 30 menit (tanpa harus klik tombol manual), pasang baris crontab berikut pada server Rocky Linux 9 Anda. Mendukung otorisasi via Header Bearer maupun Parameter URL (?key=...):
                 </p>
 
-                <div className='mt-3 bg-gray-900 text-gray-100 p-3.5 rounded-xl font-mono text-[11px] flex items-center justify-between border border-gray-800 shadow-inner overflow-x-auto'>
-                  <code className='text-emerald-300'>
-                    */30 * * * * curl -s -X POST https://san-peoplehub.my.id/api/cron/fingerspot -H &quot;Authorization: Bearer {fingerspotSettings.cronSecret || 'san_fingerspot_cron_key_2026'}&quot; &gt; /dev/null 2&gt;&amp;1
-                  </code>
-                  <button
-                    type='button'
-                    onClick={() => {
-                      const cmd = `*/30 * * * * curl -s -X POST https://san-peoplehub.my.id/api/cron/fingerspot -H "Authorization: Bearer ${fingerspotSettings.cronSecret || 'san_fingerspot_cron_key_2026'}" > /dev/null 2>&1`
-                      navigator.clipboard.writeText(cmd)
-                      setCopiedCron(true)
-                      setTimeout(() => setCopiedCron(false), 3000)
-                    }}
-                    className='ml-3 px-3 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg text-[10px] font-sans font-bold flex items-center gap-1 flex-shrink-0 transition cursor-pointer'
+                {/* Option 1: URL Parameter */}
+                <div className='mt-4 space-y-1.5'>
+                  <div className='flex items-center justify-between text-[11px] font-bold text-gray-700'>
+                    <span>Opsi 1: Parameter URL (Praktis &amp; Mudah Diuji)</span>
+                    <span className='text-[10px] text-gray-500 font-normal'>Dapat dites langsung lewat browser</span>
+                  </div>
+                  <div className='bg-gray-900 text-gray-100 p-3.5 rounded-xl font-mono text-[11px] flex items-center justify-between border border-gray-800 shadow-inner overflow-x-auto'>
+                    <code className='text-emerald-300 break-all'>
+                      */30 * * * * curl -s -X POST &quot;https://san-peoplehub.my.id/api/cron/fingerspot?key={fingerspotSettings.cronSecret || 'san_fingerspot_cron_key_2026'}&quot; &gt; /dev/null 2&gt;&amp;1
+                    </code>
+                    <button
+                      type='button'
+                      onClick={() => {
+                        const cmd = `*/30 * * * * curl -s -X POST "https://san-peoplehub.my.id/api/cron/fingerspot?key=${fingerspotSettings.cronSecret || 'san_fingerspot_cron_key_2026'}" > /dev/null 2>&1`
+                        navigator.clipboard.writeText(cmd)
+                        setCopiedCronParam(true)
+                        setTimeout(() => setCopiedCronParam(false), 3000)
+                      }}
+                      className='ml-3 px-3 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg text-[10px] font-sans font-bold flex items-center gap-1 flex-shrink-0 transition cursor-pointer'
+                    >
+                      {copiedCronParam ? <Check className='w-3 h-3 text-emerald-400' /> : <Copy className='w-3 h-3' />}
+                      {copiedCronParam ? 'Tersalin!' : 'Salin Opsi 1'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Option 2: Header Authorization */}
+                <div className='mt-3 space-y-1.5'>
+                  <div className='flex items-center justify-between text-[11px] font-bold text-gray-700'>
+                    <span>Opsi 2: Header Authorization Bearer (Standar API)</span>
+                  </div>
+                  <div className='bg-gray-900 text-gray-100 p-3.5 rounded-xl font-mono text-[11px] flex items-center justify-between border border-gray-800 shadow-inner overflow-x-auto'>
+                    <code className='text-cyan-300 break-all'>
+                      */30 * * * * curl -s -X POST https://san-peoplehub.my.id/api/cron/fingerspot -H &quot;Authorization: Bearer {fingerspotSettings.cronSecret || 'san_fingerspot_cron_key_2026'}&quot; &gt; /dev/null 2&gt;&amp;1
+                    </code>
+                    <button
+                      type='button'
+                      onClick={() => {
+                        const cmd = `*/30 * * * * curl -s -X POST https://san-peoplehub.my.id/api/cron/fingerspot -H "Authorization: Bearer ${fingerspotSettings.cronSecret || 'san_fingerspot_cron_key_2026'}" > /dev/null 2>&1`
+                        navigator.clipboard.writeText(cmd)
+                        setCopiedCron(true)
+                        setTimeout(() => setCopiedCron(false), 3000)
+                      }}
+                      className='ml-3 px-3 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg text-[10px] font-sans font-bold flex items-center gap-1 flex-shrink-0 transition cursor-pointer'
+                    >
+                      {copiedCron ? <Check className='w-3 h-3 text-emerald-400' /> : <Copy className='w-3 h-3' />}
+                      {copiedCron ? 'Tersalin!' : 'Salin Opsi 2'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Testing Note */}
+                <div className='mt-3 p-3 bg-white/80 rounded-xl border border-blue-100 text-[11px] text-gray-600 space-y-1'>
+                  <div className='font-bold text-gray-800 flex items-center gap-1.5'>
+                    <Sparkles className='w-3.5 h-3.5 text-blue-600' />
+                    <span>Uji Langsung Cron via Browser:</span>
+                  </div>
+                  <p>
+                    Anda dapat langsung menguji cron kapan saja dengan membuka URL berikut di browser:
+                  </p>
+                  <a
+                    href={`/api/cron/fingerspot?key=${encodeURIComponent(fingerspotSettings.cronSecret || 'san_fingerspot_cron_key_2026')}`}
+                    target='_blank'
+                    rel='noreferrer'
+                    className='inline-flex items-center gap-1 text-teal-700 hover:text-teal-800 font-mono text-[10px] font-bold bg-teal-50 px-2 py-1 rounded-lg border border-teal-200 mt-0.5'
                   >
-                    {copiedCron ? <Check className='w-3 h-3 text-emerald-400' /> : <Copy className='w-3 h-3' />}
-                    {copiedCron ? 'Tersalin!' : 'Salin Sintaks'}
-                  </button>
+                    <span>/api/cron/fingerspot?key={fingerspotSettings.cronSecret || 'san_fingerspot_cron_key_2026'}</span>
+                    <ExternalLink className='w-3 h-3' />
+                  </a>
                 </div>
 
                 <div className='mt-2.5 text-[11px] text-blue-700 flex items-center gap-1.5'>
                   <CheckCircle2 className='w-3.5 h-3.5 text-blue-600 flex-shrink-0' />
                   <span>
-                    Buka terminal SSH VPS Anda, ketik <code>crontab -e</code>, tempel baris di atas pada baris paling bawah, lalu simpan.
+                    Buka terminal SSH VPS Rocky Linux Anda, ketik <code>crontab -e</code>, tempel salah satu baris di atas pada baris paling bawah, lalu simpan (<code>:wq</code>).
                   </span>
                 </div>
               </div>

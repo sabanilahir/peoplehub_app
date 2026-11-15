@@ -83,6 +83,7 @@ export async function POST(req) {
       deviceSn: formData.deviceSn,
       deviceName: formData.deviceName,
       syncEnabled: formData.syncEnabled !== undefined ? Boolean(formData.syncEnabled) : true,
+      simulationMode: formData.simulationMode !== undefined ? Boolean(formData.simulationMode) : true,
       autoSyncInterval: Number(formData.autoSyncInterval) || 30,
       cronSecret: formData.cronSecret || 'san_fingerspot_cron_key_2026',
     })
