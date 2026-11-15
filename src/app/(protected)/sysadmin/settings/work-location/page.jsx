@@ -429,6 +429,23 @@ function WorkLocationSettingsContent() {
     XLSX.writeFile(wb, 'Template_Titik_Distributor_Sales.xlsx')
   }
 
+  const handleDownloadCsvTemplate = () => {
+    const csvContent =
+      'Kode Lokasi,Nama Karyawan Sales,Nama Distributor,Alamat Kantor,Kota,Provinsi,Latitude,Longitude,Radius (Meter),Status Aktif,Catatan\n' +
+      'DIST-01,Rini Indriani,PT Rezeki Kita,"Jln. A Yani Km 14,5 Samping Bank BRI, Kel. Gambut, Kec. Gambut",Banjarmasin / Gambut,Kalimantan Selatan,-3.4047,114.6706,300,Ya,Distributor Area Sales Kalimantan Selatan\n' +
+      'DIST-02,Dedi Irawan,CV Sinar Abadi,Jl. Raya Darmo No. 45,Surabaya,Jawa Timur,-7.2891,112.7383,300,Ya,Distributor Area Surabaya\n'
+
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', 'Template_Titik_Distributor_Sales.csv')
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
   const handleExportExcel = () => {
     const salesTargets = targets.filter((t) => t.type === 'sales_distributor')
     if (salesTargets.length === 0) {
@@ -468,6 +485,54 @@ function WorkLocationSettingsContent() {
     XLSX.utils.book_append_sheet(wb, ws, 'Distributor Sales')
     const dateStr = new Date().toISOString().split('T')[0]
     XLSX.writeFile(wb, `Data_Titik_Distributor_Area_Sales_${dateStr}.xlsx`)
+  }
+
+  const handleExportCsv = () => {
+    const salesTargets = targets.filter((t) => t.type === 'sales_distributor')
+    if (salesTargets.length === 0) {
+      alert('Tidak ada data distributor sales untuk diexport.')
+      return
+    }
+
+    const header = [
+      'Kode Lokasi',
+      'Nama Karyawan Sales',
+      'Nama Distributor',
+      'Alamat Kantor',
+      'Kota',
+      'Provinsi',
+      'Latitude',
+      'Longitude',
+      'Radius (Meter)',
+      'Status Aktif',
+      'Catatan',
+    ]
+
+    const rows = salesTargets.map((t, idx) => [
+      t.code || `DIST-${String(idx + 1).padStart(2, '0')}`,
+      `"${(t.employeeName || '').replace(/"/g, '""')}"`,
+      `"${(t.distributorName || t.name || '').replace(/"/g, '""')}"`,
+      `"${(t.address || '').replace(/"/g, '""')}"`,
+      `"${(t.city || '').replace(/"/g, '""')}"`,
+      `"${(t.province || '').replace(/"/g, '""')}"`,
+      t.latitude,
+      t.longitude,
+      t.radiusMeters || 300,
+      t.active ? 'Ya' : 'Tidak',
+      `"${(t.notes || '').replace(/"/g, '""')}"`,
+    ])
+
+    const csvContent = [header.join(','), ...rows.map((r) => r.join(','))].join('\n')
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    const dateStr = new Date().toISOString().split('T')[0]
+    link.setAttribute('download', `Data_Titik_Distributor_Area_Sales_${dateStr}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
   }
 
   const handleFileSelect = async (e) => {
@@ -1163,18 +1228,30 @@ function WorkLocationSettingsContent() {
                   />
                 </div>
 
-                {/* Export Excel */}
-                <button
-                  type='button'
-                  onClick={handleExportExcel}
-                  title='Export data distributor sales ke file Excel'
-                  className='inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-gray-700 rounded-xl text-xs font-semibold hover:bg-gray-50 transition shadow-2xs cursor-pointer'
-                >
-                  <Download className='w-3.5 h-3.5 text-gray-500' />
-                  Export
-                </button>
+                {/* Export Buttons */}
+                <div className='flex items-center gap-1 border border-gray-300 rounded-xl bg-white p-0.5 shadow-2xs'>
+                  <button
+                    type='button'
+                    onClick={handleExportExcel}
+                    title='Export data distributor sales ke format Excel (.xlsx)'
+                    className='inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-gray-700 hover:bg-gray-100 text-xs font-semibold transition cursor-pointer'
+                  >
+                    <Download className='w-3 h-3 text-emerald-600' />
+                    Excel
+                  </button>
+                  <span className='w-px h-4 bg-gray-200'></span>
+                  <button
+                    type='button'
+                    onClick={handleExportCsv}
+                    title='Export data distributor sales ke format CSV (.csv)'
+                    className='inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-gray-700 hover:bg-gray-100 text-xs font-semibold transition cursor-pointer'
+                  >
+                    <Download className='w-3 h-3 text-blue-600' />
+                    CSV
+                  </button>
+                </div>
 
-                {/* Import Excel */}
+                {/* Upload CSV / Excel */}
                 <button
                   type='button'
                   onClick={() => {
@@ -1183,11 +1260,11 @@ function WorkLocationSettingsContent() {
                     setParsedRows([])
                     setImportErrors([])
                   }}
-                  title='Upload massal titik lokasi distributor dari file Excel / CSV'
-                  className='inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white rounded-xl text-xs font-semibold hover:bg-emerald-700 transition shadow-2xs cursor-pointer'
+                  title='Upload massal titik lokasi distributor dari file CSV / Excel'
+                  className='inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition shadow-2xs cursor-pointer'
                 >
                   <Upload className='w-3.5 h-3.5' />
-                  Upload Excel
+                  Upload CSV / Excel
                 </button>
 
                 {/* Tambah Titik Manual */}
@@ -1918,10 +1995,10 @@ function WorkLocationSettingsContent() {
                 </div>
                 <div>
                   <h3 className='font-bold text-gray-900 text-sm'>
-                    Upload Massal Titik Lokasi Distributor Area Sales
+                    Upload Massal CSV / Excel Titik Lokasi Distributor Area Sales
                   </h3>
                   <p className='text-xs text-gray-500'>
-                    Unggah file Excel (.xlsx, .xls) atau CSV untuk menambah dan memperbarui banyak titik sekaligus.
+                    Unggah file CSV (.csv) atau Excel (.xlsx, .xls) untuk menambah dan memperbarui banyak titik sekaligus.
                   </p>
                 </div>
               </div>
@@ -1941,28 +2018,44 @@ function WorkLocationSettingsContent() {
                 <div className='flex items-start gap-2.5'>
                   <FileSpreadsheet className='w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0' />
                   <div>
-                    <span className='font-bold'>Gunakan Format Spreadsheet Resmi</span>
+                    <span className='font-bold'>Gunakan Format Spreadsheet Resmi (CSV / Excel)</span>
                     <p className='text-[11px] text-blue-700 mt-0.5'>
                       Pastikan kolom nama karyawan sales, nama distributor, serta koordinat Latitude dan Longitude terisi dengan benar.
                     </p>
                   </div>
                 </div>
-                <div className='flex items-center gap-2 flex-shrink-0'>
+                <div className='flex items-center flex-wrap gap-2 flex-shrink-0'>
+                  <button
+                    type='button'
+                    onClick={handleDownloadCsvTemplate}
+                    className='inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-700 text-white rounded-lg font-semibold hover:bg-blue-800 transition shadow-2xs cursor-pointer'
+                  >
+                    <Download className='w-3.5 h-3.5' />
+                    Template CSV
+                  </button>
                   <button
                     type='button'
                     onClick={handleDownloadTemplate}
                     className='inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-blue-300 text-blue-700 rounded-lg font-semibold hover:bg-blue-100 transition shadow-2xs cursor-pointer'
                   >
                     <Download className='w-3.5 h-3.5' />
-                    Download Template
+                    Template Excel
+                  </button>
+                  <button
+                    type='button'
+                    onClick={handleExportCsv}
+                    className='inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300 rounded-lg font-medium transition shadow-2xs cursor-pointer'
+                  >
+                    <Download className='w-3.5 h-3.5' />
+                    Export CSV
                   </button>
                   <button
                     type='button'
                     onClick={handleExportExcel}
-                    className='inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition shadow-2xs cursor-pointer'
+                    className='inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300 rounded-lg font-medium transition shadow-2xs cursor-pointer'
                   >
                     <Download className='w-3.5 h-3.5' />
-                    Export Data Saat Ini
+                    Export Excel
                   </button>
                 </div>
               </div>
@@ -1970,7 +2063,7 @@ function WorkLocationSettingsContent() {
               {/* File Upload Drop Area */}
               <div>
                 <label className='block font-bold text-gray-700 mb-1.5'>
-                  Pilih File Excel / CSV
+                  Pilih File CSV (.csv) atau Excel (.xlsx, .xls)
                 </label>
                 <div
                   onClick={() => fileInputRef.current?.click()}
@@ -1979,7 +2072,7 @@ function WorkLocationSettingsContent() {
                   <input
                     ref={fileInputRef}
                     type='file'
-                    accept='.xlsx, .xls, .csv'
+                    accept='.csv, .xlsx, .xls'
                     className='hidden'
                     onChange={handleFileSelect}
                   />
@@ -1994,10 +2087,10 @@ function WorkLocationSettingsContent() {
                   ) : (
                     <div>
                       <p className='font-semibold text-gray-700'>
-                        Klik untuk memilih file spreadsheet (.xlsx / .csv)
+                        Klik untuk memilih file CSV (.csv) atau Excel (.xlsx / .xls)
                       </p>
                       <p className='text-[11px] text-gray-400 mt-1'>
-                        Atau seret dan lepas file ke area ini
+                        Atau seret dan lepas file CSV / Excel Anda ke area ini
                       </p>
                     </div>
                   )}
