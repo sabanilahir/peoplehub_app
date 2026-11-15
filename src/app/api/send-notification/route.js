@@ -1,42 +1,44 @@
-import nodemailer from 'nodemailer'
+import { NextResponse } from 'next/server'
+import { sendNotificationEmail } from '@/lib/emailService'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-// Sends the resolved Career Site candidate-confirmation email (subject/body
-// already filled in with real data by the caller — see
-// src/store/notificationSettingsStore.js resolveTemplate) via the SMTP
-// mailbox from cPanel. Kept server-side so SMTP_PASS never reaches the
-// browser bundle.
+/**
+ * Endpoint pengiriman email notifikasi lamaran kandidat (Career Site)
+ * Memakai emailService terpadu agar mematuhi pengaturan SMTP PeopleHub.
+ */
 export async function POST(req) {
-  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM } = process.env
-  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
-    return Response.json({ error: 'SMTP belum diset di environment.' }, { status: 503 })
+  let payload
+  try {
+    payload = await req.json()
+  } catch {
+    return NextResponse.json({ error: 'Body tidak valid.' }, { status: 400 })
   }
 
-  let payload
-  try { payload = await req.json() } catch { return Response.json({ error: 'Body tidak valid.' }, { status: 400 }) }
-  const { to, subject, body } = payload || {}
+  const { to, subject, body, candidateName } = payload || {}
   if (!to || !subject || !body) {
-    return Response.json({ error: 'to, subject, dan body wajib diisi.' }, { status: 400 })
+    return NextResponse.json({ error: 'to, subject, dan body wajib diisi.' }, { status: 400 })
   }
 
   try {
-    const port = Number(SMTP_PORT) || 465
-    const transporter = nodemailer.createTransport({
-      host: SMTP_HOST,
-      port,
-      secure: port === 465,
-      auth: { user: SMTP_USER, pass: SMTP_PASS },
-    })
-    const info = await transporter.sendMail({
-      from: SMTP_FROM || SMTP_USER,
+    const result = await sendNotificationEmail({
       to,
       subject,
-      text: body,
+      body,
+      ctaText: 'Lihat Lowongan Lainnya',
+      ctaUrl: '/careers',
+      accentColor: '#14b8a6', // Teal
+      eventKey: 'candidate_applied',
+      recipientName: candidateName || '',
     })
-    return Response.json({ id: info.messageId || null })
+
+    if (!result.success) {
+      return NextResponse.json({ error: result.error || 'Gagal mengirim email.' }, { status: 500 })
+    }
+
+    return NextResponse.json({ id: result.messageId || null })
   } catch (err) {
-    return Response.json({ error: err?.message || 'Gagal mengirim email.' }, { status: 500 })
+    return NextResponse.json({ error: err?.message || 'Gagal mengirim email.' }, { status: 500 })
   }
 }

@@ -394,11 +394,12 @@ export async function GET() {
       })
     }
 
-    // Auto-seed menu Aset Perusahaan (HR & ESS), Offboarding, dan Personnel Action jika belum ada
+    // Auto-seed menu Aset Perusahaan (HR & ESS), Offboarding, Personnel Action, dan Notifikasi jika belum ada
     const hasHrAsset = menus.some((m) => m.key === 'hr-asset')
     const hasEssAsset = menus.some((m) => m.key === 'ess-my-assets')
     const hasHrPA = menus.some((m) => m.key === 'hr-personnel-action')
     const hasHrOffboarding = menus.some((m) => m.key === 'hr-offboarding')
+    const hasSysNotification = menus.some((m) => m.key === 'sysadmin-notification')
 
     // Clean up duplicate legacy hr-offboarding-monitor if found
     if (menus.some((m) => m.key === 'hr-offboarding-monitor' || m.id === 318)) {
@@ -416,7 +417,7 @@ export async function GET() {
       }
     }
 
-    if ((!hasHrAsset || !hasEssAsset || !hasHrPA || !hasHrOffboarding) && menus.length > 0) {
+    if ((!hasHrAsset || !hasEssAsset || !hasHrPA || !hasHrOffboarding || !hasSysNotification) && menus.length > 0) {
       const hrParent = menus.find((m) => m.key === 'hr')
       const essParent = menus.find((m) => m.key === 'ess')
 
@@ -545,6 +546,39 @@ export async function GET() {
           })
         } catch (e) {
           console.error('[Menu Auto-seed ess-my-assets Error]:', e)
+        }
+      }
+
+      const sysParent = menus.find((m) => m.key === 'sysadmin')
+      if (!hasSysNotification && sysParent) {
+        try {
+          await prisma.menuItem.upsert({
+            where: { key: 'sysadmin-notification' },
+            create: {
+              id: 518,
+              key: 'sysadmin-notification',
+              label: 'Email & Notifikasi',
+              icon: 'mail',
+              href: '/sysadmin/settings/notification-setup',
+              parentId: sysParent.id,
+              roles: JSON.stringify(['superadmin', 'hr_manager', 'hr']),
+              departments: JSON.stringify(['*']),
+              order: 11,
+              active: true,
+            },
+            update: {
+              label: 'Email & Notifikasi',
+              icon: 'mail',
+              href: '/sysadmin/settings/notification-setup',
+              parentId: sysParent.id,
+              roles: JSON.stringify(['superadmin', 'hr_manager', 'hr']),
+              departments: JSON.stringify(['*']),
+              order: 11,
+              active: true,
+            },
+          })
+        } catch (e) {
+          console.error('[Menu Auto-seed sysadmin-notification Error]:', e)
         }
       }
 

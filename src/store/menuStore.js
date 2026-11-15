@@ -285,6 +285,7 @@ export const DEFAULT_MENUS = [
   { id: 507, key: "sysadmin-branding", permissionKey: "system_branding", label: "Branding", icon: "building", href: "/sysadmin/branding/company-logo", parentId: 50, roles: '["superadmin"]', order: 8, active: true },
   { id: 509, key: "sysadmin-workflow-entry", permissionKey: "system_workflow_entry", label: "Workflow Engine", icon: "gitbranch", href: "/sysadmin/workflow", parentId: 50, roles: '["superadmin","sysadmin"]', order: 9, active: true },
   { id: 516, key: "sysadmin-work-location", permissionKey: "system_work_location", label: "Aturan Jam Kerja & Lokasi", icon: "clock", href: "/sysadmin/settings/work-location", parentId: 50, roles: '["superadmin","hr_manager","hr"]', order: 10, active: true },
+  { id: 518, key: "sysadmin-notification", permissionKey: "system_notification", label: "Email & Notifikasi", icon: "mail", href: "/sysadmin/settings/notification-setup", parentId: 50, roles: '["superadmin","hr_manager","hr"]', departments: '["*"]', order: 11, active: true },
 
   // Workflow Management (Flowable + BPMN.js)
   { id: 510, key: "sysadmin-workflow", label: "Workflow Engine", icon: "gitbranch", roles: '["superadmin","sysadmin","hr_manager","hr","hr_officer"]', order: 9, active: true },

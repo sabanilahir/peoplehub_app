@@ -79,6 +79,7 @@ export const DEFAULT_PERMISSIONS = [
   { id: 507, key: 'system_branding', label: 'Branding', group: 'sysadmin' },
   { id: 509, key: 'system_workflow_entry', label: 'Workflow Engine', group: 'sysadmin' },
   { id: 516, key: 'system_work_location', label: 'Aturan Jam Kerja & Lokasi', group: 'sysadmin' },
+  { id: 518, key: 'system_notification', label: 'Pengaturan Email & Notifikasi', group: 'sysadmin' },
 
   // ==================== 6. Workflow Engine ====================
   { id: 511, key: 'workflow_engine_main', label: 'Workflow Menu', group: 'sysadmin-workflow' },
@@ -168,6 +169,7 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     ...WORKFLOW_KEYS,
     'system_work_location',
     'system_leave_workflow',
+    'system_notification',
     'workflow_engine_userlists',
   ],
   hr: [
@@ -189,6 +191,7 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     'hr_personnel_action',
     'hr_offboarding',
     'system_work_location',
+    'system_notification',
     ...WORKFLOW_KEYS,
     'workflow_engine_userlists',
   ],
