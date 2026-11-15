@@ -5,15 +5,21 @@ import { usePersonnelActionStore, PA_ACTION_COLOR, PA_ACTION_ICON, PA_STATUS_COL
 import { useEmployeeStore } from '@/store/employeeStore'
 import { useT } from '@/store/languageStore'
 
-const ACTIONS = (t) => [
+const ALL_ACTIONS = (t) => [
   { key: 'Promote',                href: 'promote',                desc: t('Kenaikan posisi & grade karyawan', 'Position & grade promotion'),             color: 'border-red-200 hover:border-red-400' },
   { key: 'Transfer',               href: 'transfer',               desc: t('Mutasi antar departemen (satu perusahaan)', 'Transfer within company'),        color: 'border-blue-200 hover:border-blue-400' },
   { key: 'Demote',                 href: 'demote',                 desc: t('Penurunan posisi atau grade karyawan', 'Position or grade demotion'),          color: 'border-orange-200 hover:border-orange-400' },
   { key: 'Transfer Across Company',href: 'transfer-across-company',desc: t('Mutasi lintas perusahaan dalam group', 'Transfer across group companies'),     color: 'border-indigo-200 hover:border-indigo-400' },
-  { key: 'Terminate',              href: 'terminate',              desc: t('Pemutusan hubungan kerja', 'Employment termination'),                          color: 'border-red-200 hover:border-red-400' },
+  { key: 'Terminate',              href: 'terminate',              desc: t('Pemutusan hubungan kerja & pengunduran diri (Resign)', 'Employment termination & Resignation'), color: 'border-red-200 hover:border-red-400' },
   { key: 'Rehire',                 href: 'rehire',                 desc: t('Rekrutmen kembali mantan karyawan', 'Re-hire former employee'),                color: 'border-green-200 hover:border-green-400' },
   { key: 'Change Employment Type', href: 'change-employment-type', desc: t('Ubah jenis kepegawaian (kontrak ↔ tetap)', 'Change employment type'),          color: 'border-cyan-200 hover:border-cyan-400' },
-  { key: 'Extend Contract',        href: 'extend-contract',        desc: t('Perpanjangan kontrak kerja', 'Extend employment contract'),                   color: 'border-teal-200 hover:border-teal-400' },
+  { key: 'Extend Contract',        href: 'extend-contract',        desc: t('Perpanjangan masa berlaku kontrak kerja (PKWT)', 'Extend employment contract period'), color: 'border-teal-200 hover:border-teal-400' },
+]
+
+// Ditampilkan di dashboard Personnel Action: Hanya Terminate dan Extend Contract sesuai kebutuhan operasional
+const ACTIONS = (t) => [
+  { key: 'Terminate',              href: 'terminate',              desc: t('Pemutusan hubungan kerja & pengunduran diri (Resign)', 'Employment termination & Resignation'), color: 'border-red-200 hover:border-red-400' },
+  { key: 'Extend Contract',        href: 'extend-contract',        desc: t('Perpanjangan masa berlaku kontrak kerja (PKWT)', 'Extend employment contract period'), color: 'border-teal-200 hover:border-teal-400' },
 ]
 
 export default function PersonnelActionIndex() {
@@ -21,41 +27,48 @@ export default function PersonnelActionIndex() {
   const { pas }      = usePersonnelActionStore()
   const { employees } = useEmployeeStore()
 
-  const total   = pas.length
-  const draft   = pas.filter(p => p.status === 'Draft').length
-  const pending = pas.filter(p => p.status === 'Submitted').length
-  const applied = pas.filter(p => p.status === 'Applied').length
+  // Hanya perhitungkan dan tampilkan aksi Terminate dan Extend Contract
+  const relevantPas = pas.filter(p => ['Terminate', 'Extend Contract'].includes(p.action))
+  const total   = relevantPas.length
+  const draft   = relevantPas.filter(p => p.status === 'Draft').length
+  const pending = relevantPas.filter(p => p.status === 'Submitted').length
+  const applied = relevantPas.filter(p => p.status === 'Applied').length
 
   return (
     <div className='min-h-screen bg-gray-50'>
       {/* Header */}
       <div className='bg-gradient-to-r from-violet-700 to-red-600 text-white px-8 py-6'>
         <h1 className='text-2xl font-bold'>Personnel Action</h1>
-        <p className='text-violet-200 text-sm mt-0.5'>Employee Movement — {t('pilih jenis aksi yang ingin diproses', 'select the action type to process')}</p>
+        <p className='text-violet-200 text-sm mt-0.5'>Employee Movement — {t('pilih jenis aksi yang ingin diproses (Terminate / Extend Contract)', 'select action type to process (Terminate / Extend Contract)')}</p>
       </div>
 
-      {/* Action cards */}
+      {/* Action cards: Terminate & Extend Contract */}
       <div className='px-8 py-6'>
-        <div className='grid grid-cols-4 gap-4'>
+        <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
           {ACTIONS(t).map(a => {
             const count = pas.filter(p => p.action === a.key).length
             const draftCount = pas.filter(p => p.action === a.key && p.status === 'Draft').length
             const submittedCount = pas.filter(p => p.action === a.key && p.status === 'Submitted').length
             return (
               <Link key={a.key} href={`/hr/employee/personnel-action/${a.href}`}
-                className={`bg-white rounded-2xl border-2 ${a.color} shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all p-5 flex flex-col gap-3`}>
+                className={`bg-white rounded-2xl border-2 ${a.color} shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all p-6 flex flex-col gap-4 group`}>
                 <div className='flex items-start justify-between'>
-                  <span className='text-3xl'>{PA_ACTION_ICON[a.key]}</span>
+                  <span className='text-4xl group-hover:scale-105 transition-transform'>{PA_ACTION_ICON[a.key]}</span>
                   <div className='flex flex-col items-end gap-1'>
-                    {draftCount > 0 && <span className='text-xs font-semibold bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full'>{draftCount} draft</span>}
-                    {submittedCount > 0 && <span className='text-xs font-semibold bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full'>{submittedCount} pending</span>}
+                    {draftCount > 0 && <span className='text-xs font-semibold bg-gray-100 text-gray-700 px-2.5 py-0.5 rounded-full border border-gray-200'>{draftCount} draft</span>}
+                    {submittedCount > 0 && <span className='text-xs font-semibold bg-yellow-100 text-yellow-800 px-2.5 py-0.5 rounded-full border border-yellow-200'>{submittedCount} pending</span>}
                   </div>
                 </div>
                 <div>
-                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full inline-block mb-1.5 ${PA_ACTION_COLOR[a.key]}`}>{a.key}</span>
+                  <span className={`text-xs font-bold px-3 py-1 rounded-full inline-block mb-2 ${PA_ACTION_COLOR[a.key]}`}>{a.key}</span>
                   <p className='text-xs text-gray-500 leading-relaxed'>{a.desc}</p>
                 </div>
-                <p className='text-xl font-bold text-gray-900 mt-auto'>{count} <span className='text-sm font-normal text-gray-400'>PA</span></p>
+                <div className='flex items-center justify-between mt-auto pt-3 border-t border-gray-100'>
+                  <p className='text-2xl font-bold text-gray-900'>{count} <span className='text-sm font-normal text-gray-400'>PA</span></p>
+                  <span className='text-xs font-semibold text-gray-500 group-hover:text-red-600 flex items-center gap-1 transition-colors'>
+                    {t('Kelola', 'Manage')} →
+                  </span>
+                </div>
               </Link>
             )
           })}
@@ -111,11 +124,11 @@ export default function PersonnelActionIndex() {
               </tr>
             </thead>
             <tbody className='divide-y divide-gray-50'>
-              {pas.length === 0 ? (
-                <tr><td colSpan={6} className='text-center py-10 text-gray-400 text-sm'>{t('Belum ada Personnel Action', 'No Personnel Actions yet')}</td></tr>
-              ) : [...pas].sort((a,b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 10).map(pa => {
+              {relevantPas.length === 0 ? (
+                <tr><td colSpan={6} className='text-center py-10 text-gray-400 text-sm'>{t('Belum ada data Terminate atau Extend Contract', 'No Terminate or Extend Contract actions yet')}</td></tr>
+              ) : [...relevantPas].sort((a,b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 10).map(pa => {
                 const e = employees.find(x => x.id === pa.employeeId)
-                const act = ACTIONS(t).find(x => x.key === pa.action)
+                const act = ALL_ACTIONS(t).find(x => x.key === pa.action)
                 return (
                   <tr key={pa.id} className='hover:bg-gray-50/50'>
                     <td className='px-4 py-3'>
