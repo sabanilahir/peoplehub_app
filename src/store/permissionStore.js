@@ -29,6 +29,7 @@ export const DEFAULT_PERMISSIONS = [
   { id: 108, key: 'ess_payslip', label: 'Payslip', group: 'ess' },
   { id: 109, key: 'ess_livestream', label: 'Live Streaming Host', group: 'ess' },
   { id: 110, key: 'ess_overtime', label: 'Apply Overtime (Pengajuan Lembur)', group: 'ess' },
+  { id: 111, key: 'ess_my_assets', label: 'Aset Saya', group: 'ess' },
 
   // ==================== 2. Learning (LMS) ====================
   { id: 201, key: 'lms_dashboard', label: 'Dashboard', group: 'lms' },
@@ -56,6 +57,7 @@ export const DEFAULT_PERMISSIONS = [
   { id: 309, key: 'hr_livestream_schedule', label: 'Livestream Schedule', group: 'hr' },
   { id: 310, key: 'hr_livestream_payroll', label: 'Livestream Payroll', group: 'hr' },
   { id: 315, key: 'hr_holiday_calendar', label: 'Kalender Hari Libur', group: 'hr' },
+  { id: 317, key: 'hr_asset', label: 'Manajemen Aset Perusahaan', group: 'hr' },
 
   // ==================== 4. MSS ====================
   { id: 401, key: 'mss_attendance', label: 'Team Attendance', group: 'mss' },
@@ -181,6 +183,7 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     'hr_org_chart',
     'hr_livestream_schedule',
     'hr_holiday_calendar',
+    'hr_asset',
     'system_work_location',
     ...WORKFLOW_KEYS,
     'workflow_engine_userlists',
@@ -200,6 +203,7 @@ export const DEFAULT_ROLE_PERMISSIONS = {
     'hr_org_chart',
     'hr_livestream_schedule',
     'hr_holiday_calendar',
+    'hr_asset',
     'workflow_tasks',
     'workflow_my_requests',
     'workflow_engine_userlists',

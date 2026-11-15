@@ -394,6 +394,83 @@ export async function GET() {
       })
     }
 
+    // Auto-seed menu Aset Perusahaan (HR & ESS) jika belum ada
+    const hasHrAsset = menus.some((m) => m.key === 'hr-asset')
+    const hasEssAsset = menus.some((m) => m.key === 'ess-my-assets')
+
+    if ((!hasHrAsset || !hasEssAsset) && menus.length > 0) {
+      const hrParent = menus.find((m) => m.key === 'hr')
+      const essParent = menus.find((m) => m.key === 'ess')
+
+      if (!hasHrAsset && hrParent) {
+        try {
+          await prisma.menuItem.upsert({
+            where: { key: 'hr-asset' },
+            create: {
+              id: 316,
+              key: 'hr-asset',
+              label: 'Manajemen Aset',
+              icon: 'package',
+              href: '/hr/asset',
+              parentId: hrParent.id,
+              roles: JSON.stringify(['superadmin', 'admin', 'hr', 'hr_manager', 'hr_officer']),
+              departments: JSON.stringify(['*']),
+              order: 13,
+              active: true,
+            },
+            update: {
+              label: 'Manajemen Aset',
+              icon: 'package',
+              href: '/hr/asset',
+              parentId: hrParent.id,
+              roles: JSON.stringify(['superadmin', 'admin', 'hr', 'hr_manager', 'hr_officer']),
+              departments: JSON.stringify(['*']),
+              order: 13,
+              active: true,
+            },
+          })
+        } catch (e) {
+          console.error('[Menu Auto-seed hr-asset Error]:', e)
+        }
+      }
+
+      if (!hasEssAsset && essParent) {
+        try {
+          await prisma.menuItem.upsert({
+            where: { key: 'ess-my-assets' },
+            create: {
+              id: 110,
+              key: 'ess-my-assets',
+              label: 'Aset Saya',
+              icon: 'package',
+              href: '/ess/my-assets',
+              parentId: essParent.id,
+              roles: JSON.stringify(['*']),
+              departments: JSON.stringify(['*']),
+              order: 11,
+              active: true,
+            },
+            update: {
+              label: 'Aset Saya',
+              icon: 'package',
+              href: '/ess/my-assets',
+              parentId: essParent.id,
+              roles: JSON.stringify(['*']),
+              departments: JSON.stringify(['*']),
+              order: 11,
+              active: true,
+            },
+          })
+        } catch (e) {
+          console.error('[Menu Auto-seed ess-my-assets Error]:', e)
+        }
+      }
+
+      menus = await prisma.menuItem.findMany({
+        orderBy: { order: 'asc' },
+      })
+    }
+
     return Response.json(menus)
   } catch {
     return dbDown()

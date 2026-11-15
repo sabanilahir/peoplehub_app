@@ -235,6 +235,7 @@ export const DEFAULT_MENUS = [
   { id: 108, key: "ess-payslip", permissionKey: "ess_payslip", label: "Payslip", icon: "dollar", href: "/ess/payslip", parentId: 10, roles: '["*"]', departments: '["*"]', order: 8, active: true },
   { id: 109, key: "ess-livestream", permissionKey: "ess_livestream", label: "Live Streaming Host", icon: "video", href: "/ess/livestream", parentId: 10, roles: '["*"]', departments: '["Live Streaming","Livestream"]', order: 9, active: true },
   { id: 110, key: "ess-overtime", permissionKey: "ess_overtime", label: "Apply Overtime", icon: "clock", href: "/ess/overtime", parentId: 10, roles: '["*"]', departments: '["*"]', order: 10, active: true },
+  { id: 111, key: "ess-my-assets", permissionKey: "ess_my_assets", label: "Aset Saya", icon: "package", href: "/ess/my-assets", parentId: 10, roles: '["*"]', departments: '["*"]', order: 11, active: true },
 
   { id: 20, key: "lms", label: "Learning", icon: "book", roles: '["hr_officer","hr_manager","manager","superadmin"]', order: 3, active: true },
   { id: 201, key: "lms-dashboard", permissionKey: "lms_dashboard", label: "Dashboard", icon: "book", href: "/ess/learning/dashboard", parentId: 20, roles: '["hr_officer","hr_manager","manager","superadmin"]', order: 1, active: true },
@@ -262,6 +263,7 @@ export const DEFAULT_MENUS = [
   { id: 309, key: "hr-livestream-schedule", permissionKey: "hr_livestream_schedule", label: "Livestream Schedule", icon: "calendarcheck", href: "/hr/livestream/schedule", parentId: 30, roles: '["hr","hr_officer","hr_manager","superadmin"]', order: 13, active: true },
   { id: 310, key: "hr-livestream-payroll", permissionKey: "hr_livestream_payroll", label: "Livestream Payroll", icon: "coins", href: "/hr/livestream/payroll", parentId: 30, roles: '["hr","hr_manager","superadmin"]', order: 14, active: true },
   { id: 312, key: "hr-holiday-calendar", permissionKey: "hr_holiday_calendar", label: "Kalender Hari Libur", icon: "calendar", href: "/hr/absence/holiday-calendar", parentId: 30, roles: '["hr","hr_officer","hr_manager","superadmin"]', departments: '["*"]', order: 15, active: true },
+  { id: 316, key: "hr-asset", permissionKey: "hr_asset", label: "Manajemen Aset", icon: "package", href: "/hr/asset", parentId: 30, roles: '["hr","hr_officer","hr_manager","superadmin"]', departments: '["*"]', order: 16, active: true },
 
   { id: 40, key: "mss", label: "MSS", icon: "briefcase", roles: '["manager","hr_manager","superadmin"]', order: 5, active: true },
   { id: 401, key: "mss-attendance", permissionKey: "mss_attendance", label: "Team Attendance", icon: "calendar", href: "/mss/team-attendance", parentId: 40, roles: '["manager","hr_manager","superadmin"]', order: 1, active: true },

@@ -184,6 +184,8 @@ model Employee {
   attendance  Attendance[]
   overtimes   OvertimeRecord[]
   workLocationTargets WorkLocationTarget[]
+  assignedAssets      CompanyAsset[]
+  assetHandoverLogs   AssetHandoverLog[]
 
   @@index([nik])
   @@index([managerId])
@@ -669,6 +671,63 @@ model FingerspotSettings {
   lastSyncCount    Int       @default(0)
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
+}
+
+// --- COMPANY ASSET MANAGEMENT (PENCATATAN ASET KARYAWAN) ---
+model CompanyAsset {
+  id                 Int                @id @default(autoincrement())
+  assetCode          String             @unique // Contoh: AST-IT-2026-001
+  name               String             // Contoh: Laptop MacBook Pro 14" M3
+  category           String             // IT_EQUIPMENT, VEHICLE, FACILITY, TOOLS, OTHERS
+  brand              String?            // Apple, Lenovo, Dell, Honda, dll.
+  model              String?            // ThinkPad T14, Vario 125, dll.
+  serialNumber       String?            // Serial Number / IMEI / No Rangka
+  plateNumber        String?            // Nomor Polisi (khusus kendaraan)
+  specifications     String?            // Spesifikasi teknis (RAM, SSD, Warna, dsb)
+  purchaseDate       DateTime?          // Tanggal beli
+  purchaseCost       Float?             // Harga perolehan
+  warrantyExpiry     DateTime?          // Tanggal garansi habis
+  condition          String             @default("Baik") // Baru, Sangat Baik, Baik, Rusak Ringan, Rusak Berat
+  status             String             @default("AVAILABLE") // AVAILABLE, IN_USE, UNDER_MAINTENANCE, LOST, DISPOSED
+  notes              String?
+
+  currentEmployeeId  Int?
+  currentEmployee    Employee?          @relation(fields: [currentEmployeeId], references: [id])
+  assignedDate       DateTime?
+  expectedReturnDate DateTime?
+
+  handoverLogs       AssetHandoverLog[]
+
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  @@index([category])
+  @@index([status])
+  @@index([currentEmployeeId])
+}
+
+model AssetHandoverLog {
+  id          Int          @id @default(autoincrement())
+  assetId     Int
+  asset       CompanyAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  employeeId  Int
+  employee    Employee     @relation(fields: [employeeId], references: [id])
+
+  type        String       // HANDOVER (Peminjaman) | RETURN (Pengembalian) | MAINTENANCE | DISPOSE
+  bastNumber  String?      // Nomor BAST resmi
+  actionDate  DateTime     @default(now())
+  condition   String       // Kondisi saat transaksi
+  accessories String?      // Kelengkapan (Charger, Tas, Helm, STNK, dll)
+  picUserId   Int?         // ID petugas HR/GA/IT
+  picName     String?      // Nama petugas HR/GA/IT
+  notes       String?
+  documentUrl String?
+
+  createdAt   DateTime     @default(now())
+
+  @@index([assetId])
+  @@index([employeeId])
+  @@index([actionDate])
 }
 
 

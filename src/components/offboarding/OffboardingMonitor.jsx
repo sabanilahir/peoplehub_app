@@ -275,6 +275,10 @@ function CaseView({ t, c, currentUser }) {
               className='flex items-center gap-2 px-4 py-2 text-sm font-semibold text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 transition'>
               <IcDown /> {t('Generate Clearance Certificate', 'Generate Clearance Certificate')}
             </button>
+            <a href={`/hr/asset?search=${encodeURIComponent(employee?.name || '')}`}
+              className='flex items-center gap-2 px-4 py-2 text-sm font-semibold text-teal-800 bg-teal-50 border border-teal-200 rounded-xl hover:bg-teal-100 transition'>
+              <span>📦</span> {t('Cek & Kembalikan Aset', 'Check & Return Assets')}
+            </a>
           </div>
           {!done && <p className='text-xs text-amber-600 mt-2'>{t('Catatan: clearance belum 100% — certificate mencerminkan status saat ini.', 'Note: clearance is not 100% — the certificate reflects the current status.')}</p>}
         </div>

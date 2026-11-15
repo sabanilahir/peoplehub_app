@@ -14,8 +14,9 @@ import { PTKP_STATUSES } from '@/lib/payrollCalc'
 import { useT } from '@/store/languageStore'
 import { RELS, GENDERS, RELIGIONS, MARITAL, COUNTRIES, CITIES, EDU_LEVELS, SKILL_LVLS } from '@/utils/constants'
 import { FormField, Input, Select, ActionButton, StatusBadge, DocCompletionDonut } from '@/components/ui'
+import { generateHandoverBastPdf } from '@/lib/assetBastDocs'
 
-const TABS = ['Employment', 'Bio', 'Dependent', 'Profile', 'History', 'Salary', 'Personal Document']
+const TABS = ['Employment', 'Bio', 'Dependent', 'Profile', 'History', 'Salary', 'Personal Document', 'Asset']
 
 const DOC_ICON = (fileType) => {
   if (fileType?.includes('pdf')) return '📄'
@@ -170,6 +171,31 @@ export default function EmployeeProfilePage() {
       }
     }
   }, [emp])
+
+  const [empAssets, setEmpAssets] = useState([])
+  const [loadingAssets, setLoadingAssets] = useState(false)
+
+  const fetchEmpAssets = async () => {
+    if (!emp?.id) return
+    try {
+      setLoadingAssets(true)
+      const res = await fetch(`/api/assets?employeeId=${emp.id}`)
+      const json = await res.json()
+      if (json.success && Array.isArray(json.data)) {
+        setEmpAssets(json.data)
+      }
+    } catch (e) {
+      console.error('Fetch employee assets error:', e)
+    } finally {
+      setLoadingAssets(false)
+    }
+  }
+
+  useEffect(() => {
+    if (tab === 'Asset' && emp?.id) {
+      fetchEmpAssets()
+    }
+  }, [tab, emp?.id])
 
   if (!emp) {
     return (
@@ -1347,6 +1373,126 @@ export default function EmployeeProfilePage() {
                     <button onClick={() => removeDocument(doc)} className='shrink-0 text-gray-400 hover:text-red-600' aria-label={t('Hapus','Delete')}>
                       <Icon e='🗑️' size={13} />
                     </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Asset (Company Assets) ────────────────────────────────── */}
+        {tab === 'Asset' && (
+          <div>
+            <div className='flex items-center justify-between mb-4 flex-wrap gap-3'>
+              <div>
+                <h3 className='text-sm font-bold text-gray-800'>{t('Aset Perusahaan yang Dipinjamkan', 'Assigned Company Assets')}</h3>
+                <p className='text-xs text-gray-400'>
+                  {t('Daftar fasilitas dan aset inventaris kerja yang saat ini tercatat atas nama karyawan ini.',
+                     'List of equipment and corporate assets currently assigned to this employee.')}
+                </p>
+              </div>
+              <div className='flex items-center gap-2'>
+                <button
+                  type='button'
+                  onClick={fetchEmpAssets}
+                  className='px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-600 hover:bg-gray-50 transition cursor-pointer'
+                >
+                  🔄 {t('Muat Ulang', 'Refresh')}
+                </button>
+                <a
+                  href='/hr/asset'
+                  className='px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-bold transition shadow-xs flex items-center gap-1.5'
+                >
+                  <span>📦</span>
+                  <span>{t('Kelola di Menu Aset', 'Manage in Assets')}</span>
+                </a>
+              </div>
+            </div>
+
+            {loadingAssets ? (
+              <div className='py-12 text-center text-xs text-gray-400'>
+                <span className='animate-spin inline-block mr-2'>⏳</span>
+                {t('Memuat daftar aset karyawan...', 'Loading employee assets...')}
+              </div>
+            ) : empAssets.length === 0 ? (
+              <div className='rounded-2xl border border-dashed border-gray-200 p-8 text-center text-xs text-gray-400 space-y-2'>
+                <div className='text-3xl'>📦</div>
+                <p className='font-semibold text-gray-700'>
+                  {t('Tidak ada aset yang sedang dipinjamkan.', 'No company assets currently assigned.')}
+                </p>
+                <p className='text-gray-400 max-w-sm mx-auto'>
+                  {t('Karyawan ini belum menerima fasilitas laptop, kendaraan, atau alat kerja inventaris.',
+                     'This employee has not been assigned any laptop, vehicle, or workplace gear.')}
+                </p>
+                <div className='pt-2'>
+                  <a
+                    href='/hr/asset'
+                    className='inline-block px-3 py-1.5 bg-teal-50 text-teal-800 font-bold border border-teal-200 rounded-lg text-xs hover:bg-teal-100 transition'
+                  >
+                    + {t('Pinjamkan Aset Sekarang', 'Assign Asset Now')}
+                  </a>
+                </div>
+              </div>
+            ) : (
+              <div className='space-y-3'>
+                {empAssets.map((asset) => (
+                  <div
+                    key={asset.id}
+                    className='p-4 rounded-xl border border-gray-200 bg-gray-50/50 hover:bg-white hover:shadow-xs transition flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs'
+                  >
+                    <div className='space-y-1'>
+                      <div className='flex items-center gap-2'>
+                        <span className='px-2 py-0.5 rounded font-mono font-bold text-[10px] bg-slate-200 text-slate-800'>
+                          {asset.assetCode}
+                        </span>
+                        <span className='font-bold text-gray-900 text-sm'>{asset.name}</span>
+                        <span className='px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800'>
+                          {asset.category?.replace(/_/g, ' ')}
+                        </span>
+                      </div>
+                      <div className='text-gray-600'>
+                        {asset.brand} {asset.model} • <strong className='font-mono text-teal-700'>{asset.serialNumber ? `SN: ${asset.serialNumber}` : asset.plateNumber ? `Nopol: ${asset.plateNumber}` : ''}</strong>
+                      </div>
+                      {asset.specifications && (
+                        <div className='text-gray-500 text-[11px]'>
+                          {asset.specifications}
+                        </div>
+                      )}
+                      <div className='text-[11px] text-gray-400 pt-1'>
+                        {t('Diserahkan Sejak: ', 'Assigned Date: ')}
+                        <strong className='text-gray-700'>
+                          {asset.assignedDate ? new Date(asset.assignedDate).toLocaleDateString('id-ID') : '-'}
+                        </strong>
+                        {' • '}
+                        {t('Kondisi: ', 'Condition: ')}
+                        <strong className='text-emerald-700'>{asset.condition}</strong>
+                      </div>
+                    </div>
+
+                    <div className='shrink-0 flex items-center gap-2'>
+                      <button
+                        type='button'
+                        onClick={async () => {
+                          try {
+                            await generateHandoverBastPdf({
+                              company: 'San PeopleHub',
+                              asset,
+                              employee: emp,
+                              picName: 'HR / GA Department',
+                              accessories: 'Lengkap Sesuai BAST Penyerahan',
+                              bastNumber: `BAST/AST/2026/${asset.assetCode.split('-').pop()}`,
+                              handoverDate: asset.assignedDate || new Date(),
+                            })
+                          } catch (err) {
+                            alert('Gagal unduh BAST: ' + err.message)
+                          }
+                        }}
+                        className='px-3 py-1.5 bg-white hover:bg-gray-100 text-teal-800 border border-gray-200 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-2xs cursor-pointer'
+                      >
+                        <span>📄</span>
+                        <span>{t('Unduh BAST (PDF)', 'Download BAST')}</span>
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
