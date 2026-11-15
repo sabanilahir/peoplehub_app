@@ -316,7 +316,7 @@ function WorkLocationSettingsContent() {
         name: resolvedName,
         distributorName:
           targetForm.type === 'head_office'
-            ? targetForm.distributorName || 'Kantor Pusat Head Office'
+            ? resolvedName
             : targetForm.distributorName || resolvedName,
         latitude: latNum,
         longitude: lngNum,

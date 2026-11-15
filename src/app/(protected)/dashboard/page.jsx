@@ -45,6 +45,15 @@ function getGreeting(t) {
   return t('Good Evening', 'Good Evening')
 }
 
+/* ── Target Location Helper ────────────────────────────────────────────────── */
+function resolveTargetName(target) {
+  if (!target) return 'Area Kantor'
+  if (target.type === 'head_office') {
+    return target.name || target.distributorName || 'Head Office (HO)'
+  }
+  return target.distributorName || target.name || 'Kantor'
+}
+
 /* ── My Time Card widget ───────────────────────────────────────────────────── */
 // Backed by the same attendance record as the Clock In/Out page, so the two
 // can never disagree, and times survive a reload.
@@ -143,7 +152,7 @@ function TimeCardWidget({
             <span className='flex items-center gap-1.5 truncate'>
               <MapPin className='w-3 h-3 text-emerald-300 flex-shrink-0' />
               <span className='truncate font-medium'>
-                {nearestTarget?.distributorName || nearestTarget?.name || 'Area Kantor'}
+                {resolveTargetName(nearestTarget)}
               </span>
             </span>
             <span className='text-[10px] font-bold text-emerald-300 font-mono ml-2 flex-shrink-0'>
@@ -1166,7 +1175,7 @@ export default function DashboardPage() {
       checkInLat: gpsCoords?.lat || null,
       checkInLng: gpsCoords?.lng || null,
       checkInDistance: distanceMeters != null ? Math.round(distanceMeters) : null,
-      checkInLocation: nearestTarget ? (nearestTarget.distributorName || nearestTarget.name) : 'Lokasi Terdeteksi',
+      checkInLocation: nearestTarget ? resolveTargetName(nearestTarget) : 'Lokasi Terdeteksi',
       isWithinRadius: Boolean(isWithinRadius),
       accuracyMeters: gpsCoords?.accuracy || null,
       isMockGps: Boolean(isMockGps),
@@ -1186,7 +1195,7 @@ export default function DashboardPage() {
       checkOutLat: gpsCoords?.lat || null,
       checkOutLng: gpsCoords?.lng || null,
       checkOutDistance: distanceMeters != null ? Math.round(distanceMeters) : null,
-      checkOutLocation: nearestTarget ? (nearestTarget.distributorName || nearestTarget.name) : 'Lokasi Terdeteksi',
+      checkOutLocation: nearestTarget ? resolveTargetName(nearestTarget) : 'Lokasi Terdeteksi',
       isWithinRadius: Boolean(isWithinRadius),
       accuracyMeters: gpsCoords?.accuracy || null,
       isMockGps: Boolean(isMockGps),
@@ -1372,7 +1381,7 @@ export default function DashboardPage() {
                 <div className='flex items-center justify-between font-bold text-xs'>
                   <span>Lokasi Target:</span>
                   <span className='font-mono text-gray-800'>
-                    {nearestTarget?.distributorName || nearestTarget?.name || 'Kantor'}
+                    {resolveTargetName(nearestTarget)}
                   </span>
                 </div>
                 <div className='flex items-center justify-between text-xs'>

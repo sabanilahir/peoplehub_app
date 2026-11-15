@@ -11,7 +11,7 @@ export const DEFAULT_TARGET_LOCATIONS = [
     type: 'head_office',
     employeeId: null,
     employeeName: null,
-    distributorName: 'Kantor Pusat Manusistem / Gemilang Nusantara',
+    distributorName: 'Head Office (HO)',
     address: 'Jl. Terusan Bandengan Ruko Harmoni Mas Blok E No. 26, Pejagalan, Penjaringan, Jakarta Utara',
     city: 'Jakarta Utara',
     province: 'DKI Jakarta',

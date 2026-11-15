@@ -269,6 +269,15 @@ export default function ClockInOutPage() {
     }
   }, [gpsCoords, userTargets])
 
+  // Helper resolusi nama target (untuk HO selalu prioritaskan name yang diset di settings)
+  const resolveTargetName = (target) => {
+    if (!target) return 'Mencari Lokasi Target...'
+    if (target.type === 'head_office') {
+      return target.name || target.distributorName || 'Head Office (HO)'
+    }
+    return target.distributorName || target.name || 'Kantor'
+  }
+
   // Eksekusi Absen Masuk (Clock In)
   const executeClockIn = (extraNote = '') => {
     const time = nowHHMM()
@@ -280,7 +289,7 @@ export default function ClockInOutPage() {
       checkInLat: gpsCoords?.lat || null,
       checkInLng: gpsCoords?.lng || null,
       checkInDistance: distanceMeters,
-      checkInLocation: nearestTarget ? (nearestTarget.distributorName || nearestTarget.name) : 'Lokasi Terdeteksi',
+      checkInLocation: nearestTarget ? resolveTargetName(nearestTarget) : 'Lokasi Terdeteksi',
       isWithinRadius: Boolean(isWithinRadius),
       accuracyMeters: gpsCoords?.accuracy || null,
       isMockGps: Boolean(isMockGps),
@@ -300,7 +309,7 @@ export default function ClockInOutPage() {
       checkOutLat: gpsCoords?.lat || null,
       checkOutLng: gpsCoords?.lng || null,
       checkOutDistance: distanceMeters,
-      checkOutLocation: nearestTarget ? (nearestTarget.distributorName || nearestTarget.name) : 'Lokasi Terdeteksi',
+      checkOutLocation: nearestTarget ? resolveTargetName(nearestTarget) : 'Lokasi Terdeteksi',
       isWithinRadius: Boolean(isWithinRadius),
       accuracyMeters: gpsCoords?.accuracy || null,
       isMockGps: Boolean(isMockGps),
@@ -433,9 +442,7 @@ export default function ClockInOutPage() {
               <div>
                 <div className='flex items-center gap-2 flex-wrap'>
                   <span className='font-bold text-gray-900 text-sm'>
-                    {nearestTarget
-                      ? nearestTarget.distributorName || nearestTarget.name
-                      : 'Mencari Lokasi Target...'}
+                    {resolveTargetName(nearestTarget)}
                   </span>
 
                   {gpsStatus === 'ready' && !loadingTargets && (
@@ -620,7 +627,7 @@ export default function ClockInOutPage() {
                 <div className='flex items-center justify-between font-bold text-xs'>
                   <span>Lokasi Target:</span>
                   <span className='font-mono text-gray-800'>
-                    {nearestTarget?.distributorName || nearestTarget?.name || 'Kantor'}
+                    {resolveTargetName(nearestTarget)}
                   </span>
                 </div>
                 <div className='flex items-center justify-between text-xs'>
