@@ -62,16 +62,36 @@ export default function PersonnelActionIndex() {
         </div>
       </div>
 
-      {/* Offboarding checklist shortcut */}
-      <div className='px-8'>
-        <Link href='/hr/employee/personnel-action/offboarding-checklist'
-          className='flex items-center gap-4 bg-white rounded-2xl border-2 border-indigo-200 hover:border-indigo-400 shadow-sm hover:shadow-md transition-all p-5'>
-          <span className='text-3xl'><Icon e='📋' size={15} /></span>
-          <div className='flex-1'>
-            <p className='font-bold text-gray-900'>{t('Master Employee Offboarding Checklist', 'Master Employee Offboarding Checklist')}</p>
-            <p className='text-xs text-gray-500 mt-0.5'>{t('Kelola aktivitas offboarding untuk karyawan yang resign-nya telah disetujui HR', 'Manage offboarding activities for employees whose resignation has been approved by HR')}</p>
+      {/* Offboarding quick shortcuts */}
+      <div className='px-8 grid grid-cols-1 md:grid-cols-2 gap-4'>
+        <Link href='/hr/employee/personnel-action/offboarding-monitor'
+          className='flex items-center gap-4 bg-white rounded-2xl border-2 border-red-200 hover:border-red-400 shadow-sm hover:shadow-md transition-all p-5 group'>
+          <span className='p-3 bg-red-50 text-red-600 rounded-xl group-hover:scale-105 transition-transform flex items-center justify-center'>
+            <Icon e='userMinus' size={24} />
+          </span>
+          <div className='flex-1 min-w-0'>
+            <div className='flex items-center gap-2'>
+              <p className='font-bold text-gray-900'>{t('Offboarding Monitor & Exit Clearance', 'Offboarding Monitor & Exit Clearance')}</p>
+              <span className='text-[10px] bg-red-100 text-red-700 font-bold px-1.5 py-0.5 rounded'>HR / GA</span>
+            </div>
+            <p className='text-xs text-gray-500 mt-1 line-clamp-2'>{t('Pantau progres clearance karyawan keluar, pengembalian aset, dan terbitkan Paklaring / Surat Pengalaman Kerja.', 'Monitor employee exit clearance, asset returns, and issue experience certificates.')}</p>
           </div>
-          <span className='text-indigo-600 text-sm font-semibold'>{t('Buka', 'Open')} →</span>
+          <span className='text-red-600 text-sm font-semibold whitespace-nowrap'>{t('Pantau', 'Monitor')} →</span>
+        </Link>
+
+        <Link href='/hr/employee/personnel-action/offboarding-checklist'
+          className='flex items-center gap-4 bg-white rounded-2xl border-2 border-indigo-200 hover:border-indigo-400 shadow-sm hover:shadow-md transition-all p-5 group'>
+          <span className='p-3 bg-indigo-50 text-indigo-600 rounded-xl group-hover:scale-105 transition-transform flex items-center justify-center'>
+            <Icon e='clipboardList' size={24} />
+          </span>
+          <div className='flex-1 min-w-0'>
+            <div className='flex items-center gap-2'>
+              <p className='font-bold text-gray-900'>{t('Master Offboarding Checklist', 'Master Offboarding Checklist')}</p>
+              <span className='text-[10px] bg-indigo-100 text-indigo-700 font-bold px-1.5 py-0.5 rounded'>Config</span>
+            </div>
+            <p className='text-xs text-gray-500 mt-1 line-clamp-2'>{t('Kelola daftar butir checklist serah terima departemen HR, IT, GA, dan Finance.', 'Manage checklist items for HR, IT, GA, and Finance departments.')}</p>
+          </div>
+          <span className='text-indigo-600 text-sm font-semibold whitespace-nowrap'>{t('Kelola', 'Manage')} →</span>
         </Link>
       </div>
 

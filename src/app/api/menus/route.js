@@ -394,13 +394,46 @@ export async function GET() {
       })
     }
 
-    // Auto-seed menu Aset Perusahaan (HR & ESS) jika belum ada
+    // Auto-seed menu Aset Perusahaan (HR & ESS) dan Offboarding Monitor jika belum ada
     const hasHrAsset = menus.some((m) => m.key === 'hr-asset')
     const hasEssAsset = menus.some((m) => m.key === 'ess-my-assets')
+    const hasHrOffboarding = menus.some((m) => m.key === 'hr-offboarding-monitor')
 
-    if ((!hasHrAsset || !hasEssAsset) && menus.length > 0) {
+    if ((!hasHrAsset || !hasEssAsset || !hasHrOffboarding) && menus.length > 0) {
       const hrParent = menus.find((m) => m.key === 'hr')
       const essParent = menus.find((m) => m.key === 'ess')
+
+      if (!hasHrOffboarding && hrParent) {
+        try {
+          await prisma.menuItem.upsert({
+            where: { key: 'hr-offboarding-monitor' },
+            create: {
+              id: 318,
+              key: 'hr-offboarding-monitor',
+              label: 'Offboarding Monitor',
+              icon: 'userMinus',
+              href: '/hr/employee/personnel-action/offboarding-monitor',
+              parentId: hrParent.id,
+              roles: JSON.stringify(['superadmin', 'admin', 'hr', 'hr_manager', 'hr_officer']),
+              departments: JSON.stringify(['*']),
+              order: 17,
+              active: true,
+            },
+            update: {
+              label: 'Offboarding Monitor',
+              icon: 'userMinus',
+              href: '/hr/employee/personnel-action/offboarding-monitor',
+              parentId: hrParent.id,
+              roles: JSON.stringify(['superadmin', 'admin', 'hr', 'hr_manager', 'hr_officer']),
+              departments: JSON.stringify(['*']),
+              order: 17,
+              active: true,
+            },
+          })
+        } catch (e) {
+          console.error('[Menu Auto-seed hr-offboarding-monitor Error]:', e)
+        }
+      }
 
       if (!hasHrAsset && hrParent) {
         try {

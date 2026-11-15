@@ -275,7 +275,7 @@ function CaseView({ t, c, currentUser }) {
               className='flex items-center gap-2 px-4 py-2 text-sm font-semibold text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 transition'>
               <IcDown /> {t('Generate Clearance Certificate', 'Generate Clearance Certificate')}
             </button>
-            <a href={`/hr/asset?search=${encodeURIComponent(employee?.name || '')}`}
+            <a href={`/hr/asset?search=${encodeURIComponent(emp?.name || '')}`}
               className='flex items-center gap-2 px-4 py-2 text-sm font-semibold text-teal-800 bg-teal-50 border border-teal-200 rounded-xl hover:bg-teal-100 transition'>
               <span>📦</span> {t('Cek & Kembalikan Aset', 'Check & Return Assets')}
             </a>

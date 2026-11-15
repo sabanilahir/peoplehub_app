@@ -17,11 +17,13 @@ const PAGES = [
   { label: 'Payslip',                    href: '/ess/payslip',                                  icon: '💰', section: 'Employee Self-Service' },
   { label: 'My Onboarding',              href: '/ess/onboarding',                               icon: '🎯', section: 'Employee Self-Service' },
   { label: 'Aset Saya (My Assets)',      href: '/ess/my-assets',                                icon: '📦', section: 'Employee Self-Service' },
+  { label: 'Offboarding Saya (My Resignation)', href: '/ess/offboarding',                       icon: '🚪', section: 'Employee Self-Service' },
   // MSS
   { label: 'Apply Leave (My Team)',      href: '/mss/apply-leave-team',                         icon: '📝', section: 'Manager Self-Service' },
   { label: 'Approve Leave',             href: '/mss/approve-leave',                            icon: '✅', section: 'Manager Self-Service' },
   { label: 'Onboarding Tim Saya',       href: '/mss/approve-onboarding',                       icon: '📋', section: 'Manager Self-Service' },
   { label: 'Team Attendance',           href: '/mss/team-attendance',                          icon: '📋', section: 'Manager Self-Service' },
+  { label: 'Offboarding Tim (Resign Approval)', href: '/mss/offboarding',                      icon: '🚪', section: 'Manager Self-Service' },
   // HR - Employee
   { label: 'Emergency SOS Log',         href: '/hr/emergency-sos',                             icon: '🆘', section: 'HR Administration' },
   { label: 'Employee Data',             href: '/hr/employee',                                  icon: '📋', section: 'HR Administration' },
@@ -46,6 +48,9 @@ const PAGES = [
   { label: 'Rehire',                    href: '/hr/employee/personnel-action/rehire',           icon: '🔄', section: 'HR · Personnel Action' },
   { label: 'Change Employment Type',    href: '/hr/employee/personnel-action/change-employment-type', icon: '📋', section: 'HR · Personnel Action' },
   { label: 'Extend Contract',           href: '/hr/employee/personnel-action/extend-contract',  icon: '📅', section: 'HR · Personnel Action' },
+  { label: 'Offboarding Monitor (Exit Clearance)', href: '/hr/employee/personnel-action/offboarding-monitor', icon: '🚪', section: 'HR · Personnel Action' },
+  { label: 'Offboarding Overview',      href: '/hr/employee/personnel-action/offboarding-overview', icon: '📊', section: 'HR · Personnel Action' },
+  { label: 'Master Offboarding Checklist', href: '/hr/employee/personnel-action/offboarding-checklist', icon: '📋', section: 'HR · Personnel Action' },
   // HR - Structure
   { label: 'Enterprise',                href: '/hr/structure/enterprise',                      icon: '🌐', section: 'HR · Structure' },
   { label: 'Division',                  href: '/hr/structure/division',                        icon: '🏛️', section: 'HR · Structure' },
