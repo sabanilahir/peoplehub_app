@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, Suspense } from 'react'
+import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import * as XLSX from 'xlsx'
 import { useEmployeeStore } from '@/store/employeeStore'
@@ -1670,6 +1671,15 @@ function WorkLocationSettingsContent() {
                   <RefreshCw className={`w-3.5 h-3.5 ${syncingFingerspot ? 'animate-spin' : ''}`} />
                   {syncingFingerspot ? 'Menarik Data...' : 'Sync Hari Ini Sekarang'}
                 </button>
+
+                <Link
+                  href="/hr/attendance"
+                  className='inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border border-teal-200 bg-teal-50 text-teal-800 text-xs font-semibold hover:bg-teal-100 transition shadow-2xs cursor-pointer'
+                  title="Buka menu Upload Excel Fingerspot di modul Attendance"
+                >
+                  <Upload className='w-3.5 h-3.5' />
+                  Upload Excel Fingerspot
+                </Link>
               </div>
             </div>
 

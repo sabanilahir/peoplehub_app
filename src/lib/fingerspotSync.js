@@ -354,3 +354,6 @@ export async function processFingerspotLogs(rawLogs = [], { sourceLabel = 'Mesin
     message: `Berhasil memproses ${savedCount} presensi karyawan gudang dari ${rawLogs.length} scan log Fingerspot.`,
   }
 }
+
+export { normalizeFingerspotRows } from './fingerspotExcelParser.js'
+

@@ -1,6 +1,8 @@
 'use client'
 import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
+import * as XLSX from 'xlsx'
+import { normalizeFingerspotRows, generateFingerspotTemplate } from '@/lib/fingerspotExcelParser'
 import { useAttendanceStore, todayStr } from '@/store/attendanceStore'
 import { useEmployeeStore } from '@/store/employeeStore'
 import { useStructureStore } from '@/store/structureStore'
@@ -327,6 +329,129 @@ export default function HRAttendancePage() {
       })
     } finally {
       setIsSyncingFingerspot(false)
+    }
+  }
+
+  // Fingerspot Excel/CSV Upload Modal State & Handlers
+  const [uploadModalOpen, setUploadModalOpen] = useState(false)
+  const [uploadFile, setUploadFile] = useState(null)
+  const [uploadParsedRows, setUploadParsedRows] = useState([])
+  const [uploadNormalizedLogs, setUploadNormalizedLogs] = useState([])
+  const [uploadFormatType, setUploadFormatType] = useState('raw_log') // 'raw_log' | 'daily_summary'
+  const [uploadMatchedCount, setUploadMatchedCount] = useState(0)
+  const [uploadUnmatchedCount, setUploadUnmatchedCount] = useState(0)
+  const [uploadProcessing, setUploadProcessing] = useState(false)
+  const [uploadResult, setUploadResult] = useState(null)
+  const [uploadErrors, setUploadErrors] = useState([])
+
+  const handleSelectUploadFile = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadFile(file)
+    setUploadErrors([])
+    setUploadResult(null)
+
+    try {
+      const data = await file.arrayBuffer()
+      const wb = XLSX.read(data, { type: 'array', cellDates: false, raw: false, dateNF: 'yyyy-mm-dd hh:mm:ss' })
+      const firstSheetName = wb.SheetNames[0]
+      const ws = wb.Sheets[firstSheetName]
+      const rows = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false })
+
+      if (rows.length === 0) {
+        setUploadErrors(['File Excel/CSV tidak memiliki baris data atau kosong.'])
+        return
+      }
+
+      setUploadParsedRows(rows)
+
+      // Cek apakah format rekap harian atau log scan
+      const sample = rows[0]
+      const hasInOrOut = Object.keys(sample).some((k) =>
+        /jam\s*masuk|jam\s*pulang|check\s*in|check\s*out|masuk|pulang/i.test(k)
+      )
+      setUploadFormatType(hasInOrOut ? 'daily_summary' : 'raw_log')
+
+      // Normalisasi
+      const normalized = normalizeFingerspotRows(rows)
+      setUploadNormalizedLogs(normalized)
+
+      if (normalized.length === 0) {
+        setUploadErrors([
+          'Format kolom tidak dikenali. Pastikan file memiliki kolom PIN / NIK dan Tanggal/Waktu scan.',
+        ])
+        return
+      }
+
+      // Hitung kecocokan karyawan dengan employeeStore
+      const matchedSet = new Set()
+      const unmatchedSet = new Set()
+
+      normalized.forEach((log) => {
+        const pin = String(log.pin).trim().toLowerCase()
+        const found = employees.find(
+          (emp) =>
+            String(emp.id) === pin ||
+            (emp.nik && String(emp.nik).trim().toLowerCase() === pin) ||
+            (log.name && emp.name && emp.name.toLowerCase().includes(log.name.toLowerCase()))
+        )
+        if (found) {
+          matchedSet.add(pin)
+        } else {
+          unmatchedSet.add(pin)
+        }
+      })
+
+      setUploadMatchedCount(matchedSet.size)
+      setUploadUnmatchedCount(unmatchedSet.size)
+    } catch (err) {
+      console.error('Error reading upload file:', err)
+      setUploadErrors([`Gagal membaca file: ${err.message}`])
+    }
+  }
+
+  const handleExecuteUploadFingerspot = async () => {
+    if (!uploadNormalizedLogs || uploadNormalizedLogs.length === 0) {
+      alert('Tidak ada log scan valid untuk diproses.')
+      return
+    }
+
+    try {
+      setUploadProcessing(true)
+      const res = await fetch('/api/attendance/fingerspot/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          logs: uploadNormalizedLogs,
+          fileName: uploadFile?.name || 'export_fingerspot.xlsx',
+        }),
+      })
+
+      const data = await res.json()
+      if (data.success) {
+        setUploadResult({
+          type: 'success',
+          text: `✅ ${data.message}`,
+          details: data,
+        })
+        setActionMsg({
+          type: 'success',
+          text: `✅ Berhasil memproses ${data.savedCount} presensi gudang dari file "${uploadFile?.name}".`,
+        })
+        fetchFilteredRecords(dateFrom, dateTo)
+      } else {
+        setUploadResult({
+          type: 'error',
+          text: `❌ ${data.error || 'Gagal memproses file Fingerspot'}`,
+        })
+      }
+    } catch (err) {
+      setUploadResult({
+        type: 'error',
+        text: `❌ Terjadi kesalahan jaringan saat upload: ${err.message}`,
+      })
+    } finally {
+      setUploadProcessing(false)
     }
   }
 
@@ -1162,6 +1287,22 @@ export default function HRAttendancePage() {
             >
               <Icon e="⚡" size={14} />
               <span>Sync Fingerspot (Gudang)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setUploadModalOpen(true)
+                setUploadFile(null)
+                setUploadParsedRows([])
+                setUploadNormalizedLogs([])
+                setUploadResult(null)
+                setUploadErrors([])
+              }}
+              className="flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 transition shadow-sm cursor-pointer"
+              title="Unggah file export Excel (.xlsx, .xls) atau CSV dari mesin Fingerspot Gudang"
+            >
+              <Icon e="📤" size={14} />
+              <span>Upload Excel Fingerspot</span>
             </button>
             <button
               onClick={() => setAddModalOpen(true)}
@@ -2603,6 +2744,226 @@ export default function HRAttendancePage() {
                   <>
                     <span>⚡</span>
                     Mulai Tarik Data Presensi
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal Dialog: Upload Excel / CSV Fingerspot Gudang ── */}
+      {uploadModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs overflow-y-auto">
+          <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 my-8">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4 bg-teal-50/50">
+              <div className="flex items-center gap-2.5">
+                <span className="p-2 bg-teal-100 text-teal-800 rounded-xl text-base">📤</span>
+                <div>
+                  <h3 className="font-bold text-gray-900 text-sm">
+                    Upload File Export Fingerspot (Lokasi Gudang)
+                  </h3>
+                  <p className="text-[11px] text-gray-500 mt-0.5">
+                    Impor log scan absensi biometrik karyawan gudang dari file Excel (.xlsx, .xls) atau CSV
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setUploadModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+              {/* Petunjuk & Unduh Template */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 bg-blue-50/60 rounded-xl border border-blue-100 text-xs">
+                <div>
+                  <div className="font-bold text-blue-900 flex items-center gap-1.5">
+                    <span>💡 Format Didukung: Log Scan &amp; Rekap Harian</span>
+                  </div>
+                  <p className="text-blue-700 text-[11px] mt-0.5">
+                    Mendukung hasil export langsung dari mesin (Flashdisk) maupun software Fingerspot.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => generateFingerspotTemplate('raw_log')}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white hover:bg-blue-100/60 border border-blue-200 text-blue-800 rounded-lg text-[11px] font-semibold transition cursor-pointer shadow-2xs"
+                  >
+                    <span>📥 Template Log Scan</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => generateFingerspotTemplate('daily_summary')}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white hover:bg-blue-100/60 border border-blue-200 text-blue-800 rounded-lg text-[11px] font-semibold transition cursor-pointer shadow-2xs"
+                  >
+                    <span>📥 Template Rekap Harian</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Upload Input Area */}
+              <div className="border-2 border-dashed border-gray-300 hover:border-teal-500 rounded-2xl p-6 text-center transition bg-gray-50/50 hover:bg-teal-50/20">
+                <input
+                  type="file"
+                  id="fingerspot-file-input"
+                  accept=".xlsx, .xls, .csv, .txt"
+                  onChange={handleSelectUploadFile}
+                  className="hidden"
+                />
+                <label
+                  htmlFor="fingerspot-file-input"
+                  className="cursor-pointer flex flex-col items-center justify-center gap-2"
+                >
+                  <span className="p-3 bg-white border border-gray-200 rounded-2xl text-2xl shadow-xs">
+                    📂
+                  </span>
+                  <div>
+                    <span className="font-bold text-xs text-teal-800 hover:underline">
+                      Klik untuk memilih file
+                    </span>{' '}
+                    <span className="text-xs text-gray-500">atau seret file ke sini</span>
+                  </div>
+                  <p className="text-[10px] text-gray-400">
+                    Format: Excel (.xlsx, .xls) atau CSV (.csv, .txt) • Maksimal 10 MB
+                  </p>
+                </label>
+              </div>
+
+              {/* Error messages */}
+              {uploadErrors.length > 0 && (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 space-y-1">
+                  {uploadErrors.map((err, i) => (
+                    <div key={i} className="flex items-center gap-1.5">
+                      <span>⚠️</span>
+                      <span>{err}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Result message */}
+              {uploadResult && (
+                <div
+                  className={`p-3.5 rounded-xl border text-xs font-medium flex items-center justify-between ${
+                    uploadResult.type === 'success'
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                      : 'bg-rose-50 border-rose-200 text-rose-800'
+                  }`}
+                >
+                  <span>{uploadResult.text}</span>
+                  {uploadResult.type === 'success' && (
+                    <span className="text-[10px] bg-emerald-200 text-emerald-900 font-bold px-2 py-0.5 rounded-full">
+                      Tersimpan di DB
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* Pratinjau File yang Dipilih */}
+              {uploadFile && uploadNormalizedLogs.length > 0 && (
+                <div className="space-y-3 pt-2 border-t border-gray-100">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <div className="font-bold text-xs text-gray-800 flex items-center gap-2">
+                        <span>📄 {uploadFile.name}</span>
+                        <span className="text-[10px] text-gray-400 font-normal">
+                          ({(uploadFile.size / 1024).toFixed(1)} KB)
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-gray-500 mt-0.5">
+                        Tipe terdeteksi:{' '}
+                        <span className="font-semibold text-teal-700">
+                          {uploadFormatType === 'daily_summary'
+                            ? 'Format Rekap Harian (In / Out)'
+                            : 'Format Log Scan Mentah (AttLog)'}
+                        </span>
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="px-2.5 py-1 bg-teal-50 border border-teal-200 text-teal-800 rounded-lg text-[11px] font-semibold">
+                        Total {uploadNormalizedLogs.length} Baris Scan
+                      </span>
+                      <span className="px-2.5 py-1 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg text-[11px] font-semibold">
+                        ✓ {uploadMatchedCount} Karyawan Cocok
+                      </span>
+                      {uploadUnmatchedCount > 0 && (
+                        <span className="px-2.5 py-1 bg-amber-50 border border-amber-200 text-amber-800 rounded-lg text-[11px] font-semibold">
+                          ⚠️ {uploadUnmatchedCount} PIN Tidak Dikenal
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Cuplikan 5 Baris Pertama */}
+                  <div>
+                    <div className="text-[11px] font-semibold text-gray-600 mb-1.5">
+                      Pratinjau Data (5 Baris Pertama):
+                    </div>
+                    <div className="border border-gray-200 rounded-xl overflow-hidden shadow-2xs">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-gray-50 text-gray-600 font-semibold border-b border-gray-200">
+                          <tr>
+                            <th className="py-2 px-3">PIN / NIK</th>
+                            <th className="py-2 px-3">Nama (File)</th>
+                            <th className="py-2 px-3">Waktu Scan</th>
+                            <th className="py-2 px-3">SN Mesin</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {uploadNormalizedLogs.slice(0, 5).map((row, idx) => (
+                            <tr key={idx} className="hover:bg-gray-50/60 font-mono text-[11px]">
+                              <td className="py-1.5 px-3 font-bold text-gray-900">{row.pin}</td>
+                              <td className="py-1.5 px-3 font-sans text-gray-700">{row.name || '—'}</td>
+                              <td className="py-1.5 px-3 text-teal-700">{row.scan_date}</td>
+                              <td className="py-1.5 px-3 text-gray-500">{row.sn || 'FSPOT-GUDANG-01'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {uploadNormalizedLogs.length > 5 && (
+                      <p className="text-[10px] text-gray-400 mt-1 italic text-right">
+                        ...dan {uploadNormalizedLogs.length - 5} baris data lainnya
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="border-t border-gray-100 px-6 py-3.5 bg-gray-50/50 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => setUploadModalOpen(false)}
+                className="px-4 py-2 border border-gray-300 rounded-xl text-xs font-semibold text-gray-700 hover:bg-gray-100 transition cursor-pointer"
+              >
+                Tutup
+              </button>
+
+              <button
+                type="button"
+                disabled={uploadProcessing || uploadNormalizedLogs.length === 0}
+                onClick={handleExecuteUploadFingerspot}
+                className="inline-flex items-center gap-2 px-5 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold transition shadow-sm disabled:opacity-50 cursor-pointer"
+              >
+                {uploadProcessing ? (
+                  <>
+                    <span className="animate-spin inline-block">⏳</span>
+                    <span>Memproses &amp; Menyimpan Presensi...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>💾</span>
+                    <span>Simpan Presensi Gudang ({uploadNormalizedLogs.length} Data)</span>
                   </>
                 )}
               </button>
