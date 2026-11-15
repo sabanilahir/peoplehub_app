@@ -10,6 +10,7 @@ import { useT } from '@/store/languageStore'
 import { todayStr, fmtDate, daysBetween, lwdOf, clearanceProgress } from '@/lib/offboarding'
 import { autoAssignOffboardingForEmployee } from '@/lib/offboardingAutoAssign'
 import { HR_ROLES as HR_MENU_ROLES } from '@/constants/roles'
+import RecordResignModal from '@/components/offboarding/RecordResignModal'
 
 // ─── Inline line icons ──────────────────────────────────────────────────────
 const svg = (children, size = 16) => (props) => (
@@ -43,6 +44,7 @@ export default function OffboardingApproval() {
   const [selected, setSelected] = useState(null)   // PA in detail modal
   const [rejectNote, setRejectNote] = useState('')
   const [confirmApply, setConfirmApply] = useState(null)  // PA pending finalize
+  const [isRecordModalOpen, setIsRecordModalOpen] = useState(false)
   const [msg, setMsg] = useState(null)
   const flash = (text, type = 'success') => { setMsg({ text, type }); setTimeout(() => setMsg(null), 3000) }
 
@@ -112,8 +114,18 @@ export default function OffboardingApproval() {
       <div className='max-w-6xl mx-auto px-6 py-8'>
 
         {/* Header */}
-        <h1 className='text-2xl font-bold text-gray-900'>{t('Persetujuan Offboarding', 'Offboarding Approval')}</h1>
-        <p className='text-gray-500 mt-1'>{t('Setujui pengajuan resign dari manager, pantau prosesnya, lalu finalisasi (nonaktifkan) karyawan saat Last Working Day tiba.', 'Approve resignation requests from managers, track the process, then finalize (deactivate) the employee once the Last Working Day arrives.')}</p>
+        <div className='flex flex-wrap items-center justify-between gap-4'>
+          <div>
+            <h1 className='text-2xl font-bold text-gray-900'>{t('Persetujuan Offboarding', 'Offboarding Approval')}</h1>
+            <p className='text-gray-500 mt-1'>{t('Setujui pengajuan resign dari manager, pantau prosesnya, lalu finalisasi (nonaktifkan) karyawan saat Last Working Day tiba.', 'Approve resignation requests from managers, track the process, then finalize (deactivate) the employee once the Last Working Day arrives.')}</p>
+          </div>
+          <button
+            onClick={() => setIsRecordModalOpen(true)}
+            className='flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm text-white bg-red-600 hover:bg-red-700 shadow-sm transition'
+          >
+            <span className='text-lg leading-none'>+</span> {t('Catat Resign (Email / Surat Fisik)', 'Record Resign (Email / Hardcopy)')}
+          </button>
+        </div>
 
         {/* Stat row */}
         <div className='mt-6 grid grid-cols-1 sm:grid-cols-3 gap-4'>
@@ -254,8 +266,14 @@ export default function OffboardingApproval() {
                   <RV label={t('Kategori Alasan', 'Reason Category')} value={selected.reasonCategory} />
                 </div>
                 <RV label={t('Rehire Eligibility', 'Rehire Eligibility')} value={selected.rehireEligible} />
+                {selected.submissionChannel && (
+                  <RV label={t('Metode Pengajuan', 'Submission Channel')} value={selected.submissionChannel === 'physical' ? '📄 Surat Fisik (Hardcopy)' : '✉️ Email Pengunduran Diri'} />
+                )}
+                {selected.physicalArchiveLocation && (
+                  <RV label={t('Lokasi Simpan Berkas Fisik', 'Physical Archive Location')} value={selected.physicalArchiveLocation} />
+                )}
                 {selected.note && <RV label={t('Penjelasan', 'Detail')} value={selected.note} />}
-                {selected.resignLetter && <RV label={t('Surat Resign', 'Resignation Letter')} value={selected.resignLetter} />}
+                {selected.resignLetter && <RV label={t('Surat Resign', 'Resignation Letter')} value={`📎 ${selected.resignLetter}`} />}
                 {selected.submittedByName && <p className='text-xs text-gray-400'>{t('Diajukan oleh', 'Submitted by')}: {selected.submittedByName}</p>}
                 {selected.rejectNote && (
                   <div className='bg-red-50 rounded-xl px-4 py-3'>
@@ -305,6 +323,22 @@ export default function OffboardingApproval() {
           </div>
         </div>
       )}
+
+      <RecordResignModal
+        isOpen={isRecordModalOpen}
+        onClose={() => setIsRecordModalOpen(false)}
+        onSuccess={({ pa, targetStatus, autoAssignResult }) => {
+          if (targetStatus === 'Approved') {
+            flash(
+              autoAssignResult?.assigned
+                ? t(`Resign dicatat & disetujui. Checklist "${autoAssignResult.templateName}" otomatis didistribusikan.`, `Resignation recorded & approved. Checklist "${autoAssignResult.templateName}" auto-assigned.`)
+                : t('Resign dicatat & disetujui. Silakan cek Offboarding Monitor.', 'Resignation recorded & approved. Check Offboarding Monitor.')
+            )
+          } else {
+            flash(t(`Pengajuan resign disimpan sebagai ${targetStatus}.`, `Resignation saved as ${targetStatus}.`))
+          }
+        }}
+      />
 
       {msg && (
         <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-xl shadow-xl text-sm font-semibold pointer-events-none ${msg.type === 'error' ? 'bg-red-600 text-white' : 'bg-green-600 text-white'}`}>{msg.text}</div>

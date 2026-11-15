@@ -13,6 +13,7 @@ import {
   approvedResignEmployees, clearanceProgress,
 } from '@/lib/offboarding'
 import { generatePaklaring, generateClearanceCertificate } from '@/lib/offboardingDocs'
+import RecordResignModal from '@/components/offboarding/RecordResignModal'
 
 const svg = (children, size = 15) => (props) => (
   <svg width={size} height={size} viewBox='0 0 24 24' fill='none' stroke='currentColor'
@@ -42,6 +43,9 @@ export default function OffboardingMonitor() {
   const { items = [] } = useOffboardingChecklistStore()
   const { sends = {} } = useOffboardingNotifyStore()
   const { schedules = [] } = useExitInterviewStore()
+  const [isRecordModalOpen, setIsRecordModalOpen] = useState(false)
+  const [msg, setMsg] = useState(null)
+  const flash = (text, type = 'success') => { setMsg({ text, type }); setTimeout(() => setMsg(null), 3000) }
 
   const dpName  = id => departments.find(x => x.id === Number(id))?.name || ''
   const posName = id => positions.find(x => x.id === Number(id))?.name || ''
@@ -85,8 +89,18 @@ export default function OffboardingMonitor() {
   return (
     <div className='min-h-screen bg-gray-50'>
       <div className='max-w-6xl mx-auto px-6 py-8'>
-        <h1 className='text-2xl font-bold text-gray-900'>Offboarding Monitor</h1>
-        <p className='text-gray-500 mt-1'>{t('Pipeline offboarding, progres clearance, dan case view per karyawan dalam satu tempat.', 'Offboarding pipeline, clearance progress, and per-employee case view in one place.')}</p>
+        <div className='flex flex-wrap items-center justify-between gap-4'>
+          <div>
+            <h1 className='text-2xl font-bold text-gray-900'>Offboarding Monitor</h1>
+            <p className='text-gray-500 mt-1'>{t('Pipeline offboarding, progres clearance, dan case view per karyawan dalam satu tempat.', 'Offboarding pipeline, clearance progress, and per-employee case view in one place.')}</p>
+          </div>
+          <button
+            onClick={() => setIsRecordModalOpen(true)}
+            className='flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm text-white bg-red-600 hover:bg-red-700 shadow-sm transition'
+          >
+            <span className='text-lg leading-none'>+</span> {t('Catat Resign (Email / Surat Fisik)', 'Record Resign (Email / Hardcopy)')}
+          </button>
+        </div>
 
         {/* Stats */}
         <div className='mt-6 grid grid-cols-2 lg:grid-cols-4 gap-4'>
@@ -179,6 +193,26 @@ export default function OffboardingMonitor() {
 
         {/* Case view */}
         {sel && <CaseView t={t} c={sel} currentUser={currentUser} />}
+
+        <RecordResignModal
+          isOpen={isRecordModalOpen}
+          onClose={() => setIsRecordModalOpen(false)}
+          onSuccess={({ pa, targetStatus, autoAssignResult }) => {
+            if (targetStatus === 'Approved') {
+              flash(
+                autoAssignResult?.assigned
+                  ? t(`Resign dicatat & disetujui. Checklist "${autoAssignResult.templateName}" otomatis didistribusikan.`, `Resignation recorded & approved. Checklist "${autoAssignResult.templateName}" auto-assigned.`)
+                  : t('Resign dicatat & disetujui. Pipeline offboarding aktif.', 'Resignation recorded & approved. Offboarding pipeline active.')
+              )
+            } else {
+              flash(t(`Pengajuan resign disimpan sebagai ${targetStatus}.`, `Resignation saved as ${targetStatus}.`))
+            }
+          }}
+        />
+
+        {msg && (
+          <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-xl shadow-xl text-sm font-semibold pointer-events-none ${msg.type === 'error' ? 'bg-red-600 text-white' : 'bg-green-600 text-white'}`}>{msg.text}</div>
+        )}
       </div>
     </div>
   )
@@ -228,10 +262,22 @@ function CaseView({ t, c, currentUser }) {
       <div className='px-6 py-5 border-b border-gray-50 flex flex-wrap items-center gap-4'>
         <div className='w-12 h-12 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0' style={{ background: 'linear-gradient(135deg,#DC2626,#B91C1C)' }}>{initials(emp.name)}</div>
         <div className='min-w-0'>
-          <p className='font-bold text-gray-900'>{emp.name} <span className='ml-1 font-mono text-xs text-gray-400'>{pa?.paNumber}</span></p>
+          <div className='flex items-center gap-2'>
+            <p className='font-bold text-gray-900'>{emp.name} <span className='ml-1 font-mono text-xs text-gray-400'>{pa?.paNumber}</span></p>
+            {pa?.submissionChannel && (
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                pa.submissionChannel === 'physical' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'
+              }`}>
+                {pa.submissionChannel === 'physical' ? '📄 Surat Fisik' : '✉️ Email'}
+              </span>
+            )}
+          </div>
           <p className='text-xs text-gray-500'>{emp.nik} · {c.position} · {c.dept} · {c.company}</p>
         </div>
         <div className='ml-auto flex flex-wrap gap-x-6 gap-y-1 text-xs'>
+          {pa?.physicalArchiveLocation && (
+            <span><span className='text-gray-400'>Arsip:</span> <span className='font-semibold text-gray-700'>{pa.physicalArchiveLocation}</span></span>
+          )}
           <span><span className='text-gray-400'>Notice</span> <span className='font-semibold text-gray-700'>{fmtDate(pa?.noticeDate)}</span></span>
           <span><span className='text-gray-400'>LWD</span> <span className='font-semibold text-gray-700'>{fmtDate(lwd)}</span></span>
           <span><span className='text-gray-400'>Effective</span> <span className='font-semibold text-gray-700'>{fmtDate(pa?.effectiveDate)}</span></span>
@@ -279,6 +325,11 @@ function CaseView({ t, c, currentUser }) {
               className='flex items-center gap-2 px-4 py-2 text-sm font-semibold text-teal-800 bg-teal-50 border border-teal-200 rounded-xl hover:bg-teal-100 transition'>
               <span>📦</span> {t('Cek & Kembalikan Aset', 'Check & Return Assets')}
             </a>
+            {pa?.resignLetter && (
+              <span className='flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-gray-700 bg-gray-50 border border-gray-200 rounded-xl'>
+                <span>📎</span> {pa.resignLetter}
+              </span>
+            )}
           </div>
           {!done && <p className='text-xs text-amber-600 mt-2'>{t('Catatan: clearance belum 100% — certificate mencerminkan status saat ini.', 'Note: clearance is not 100% — the certificate reflects the current status.')}</p>}
         </div>

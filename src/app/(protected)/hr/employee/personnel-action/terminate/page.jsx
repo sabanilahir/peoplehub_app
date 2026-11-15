@@ -12,7 +12,8 @@ const COLOR  = 'from-red-700 to-red-500'
 const todayStr = () => new Date().toISOString().split('T')[0]
 
 const EMPTY = {
-  employeeId: '', reason: '', effectiveDate: '', note: '',
+  employeeId: '', reason: '', effectiveDate: '', lastWorkingDay: '', noticeDate: todayStr(), note: '',
+  submissionChannel: 'physical', physicalArchiveLocation: '', resignLetter: '',
   fromCompanyId: '', fromDivisionId: '', fromBusinessUnitId: '', fromDepartmentId: '',
   fromPositionId: '', fromGradeId: '', fromEmploymentType: '', fromEndDate: '', fromStatus: '',
   toCompanyId: '', toDivisionId: '', toBusinessUnitId: '', toDepartmentId: '',
@@ -131,7 +132,15 @@ export default function TerminatePage() {
     if (!form.employeeId)    return flash(t('Pilih karyawan.','Select an employee.'), 'error')
     if (!form.effectiveDate) return flash(t('Last Working Date wajib diisi.','Last Working Date is required.'), 'error')
     if (!form.reason)        return flash(t('Reason wajib dipilih.','Reason is required.'), 'error')
-    const pa = { ...form, action: ACTION, status: targetStatus, createdAt: form.createdAt || todayStr(), appliedAt: targetStatus === 'Applied' ? todayStr() : (form.appliedAt || '') }
+    const pa = {
+      ...form,
+      action: ACTION,
+      lastWorkingDay: form.lastWorkingDay || form.effectiveDate,
+      effectiveDate: form.effectiveDate || form.lastWorkingDay,
+      status: targetStatus,
+      createdAt: form.createdAt || todayStr(),
+      appliedAt: targetStatus === 'Applied' ? todayStr() : (form.appliedAt || '')
+    }
     if (modal?.mode === 'create') { pa.paNumber = nextNumber(); addPA(pa) } else updatePA(form.id, pa)
     if (targetStatus === 'Applied' && modal?.pa?.status !== 'Applied') applyToEmployee(pa)
     setModal(null)
@@ -274,6 +283,21 @@ export default function TerminatePage() {
                       {isView || isApplied ? <RV value={form.note} />
                         : <textarea value={form.note || ''} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} rows={2}
                             className='w-full px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:border-red-400 resize-none' />}
+                    </Field>
+                  </div>
+                  <div className='col-span-2'>
+                    <Field label={t('Surat / Bukti Resign (Opsional)', 'Resignation Letter / Proof (Optional)')}>
+                      {isView || isApplied ? (
+                        form.resignLetter ? <RV value={`📎 ${form.resignLetter}`} /> : <RV value='—' />
+                      ) : (
+                        <div className='flex items-center gap-2'>
+                          <input type='file' accept='.pdf,.jpg,.jpeg,.png,.doc,.docx,.eml' onChange={e => {
+                            const f = e.target.files?.[0]
+                            if (f) setForm(fm => ({ ...fm, resignLetter: f.name }))
+                          }} className='text-xs text-gray-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-red-50 file:text-red-700 hover:file:bg-red-100 cursor-pointer' />
+                          {form.resignLetter && <span className='text-xs text-green-700 font-semibold'>📎 {form.resignLetter}</span>}
+                        </div>
+                      )}
                     </Field>
                   </div>
                 </div>
