@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
+import { useState, useEffect, useRef, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
+import * as XLSX from 'xlsx'
 import { useEmployeeStore } from '@/store/employeeStore'
 import {
   PageHeader,
@@ -32,6 +33,10 @@ import {
   Check,
   Loader2,
   RotateCcw,
+  Upload,
+  Download,
+  FileSpreadsheet,
+  AlertCircle,
 } from 'lucide-react'
 
 function WorkLocationSettingsContent() {
@@ -97,6 +102,15 @@ function WorkLocationSettingsContent() {
     active: true,
     notes: '',
   })
+
+  // Bulk Upload / Import Modal State
+  const [showImportModal, setShowImportModal] = useState(false)
+  const [importFile, setImportFile] = useState(null)
+  const [parsedRows, setParsedRows] = useState([])
+  const [importErrors, setImportErrors] = useState([])
+  const [importMode, setImportMode] = useState('upsert') // 'upsert' | 'insert_only' | 'replace_all'
+  const [isImporting, setIsImporting] = useState(false)
+  const fileInputRef = useRef(null)
 
   // Modal Rules Create / Edit
   const [showModal, setShowModal] = useState(false)
@@ -362,6 +376,227 @@ function WorkLocationSettingsContent() {
       }
     } catch (err) {
       console.error(err)
+    }
+  }
+
+  // ── Bulk Upload & Export Titik Distributor Area Sales ──────────
+  const handleDownloadTemplate = () => {
+    const templateData = [
+      {
+        'Kode Lokasi': 'DIST-01',
+        'Nama Karyawan Sales': 'Rini Indriani',
+        'Nama Distributor': 'PT Rezeki Kita',
+        'Alamat Kantor': 'Jln. A Yani Km 14,5 Samping Bank BRI, Kel. Gambut, Kec. Gambut',
+        'Kota': 'Banjarmasin / Gambut',
+        'Provinsi': 'Kalimantan Selatan',
+        'Latitude': -3.4047,
+        'Longitude': 114.6706,
+        'Radius (Meter)': 300,
+        'Status Aktif': 'Ya',
+        'Catatan': 'Distributor Area Sales Kalimantan Selatan',
+      },
+      {
+        'Kode Lokasi': 'DIST-02',
+        'Nama Karyawan Sales': 'Dedi Irawan',
+        'Nama Distributor': 'CV Sinar Abadi',
+        'Alamat Kantor': 'Jl. Raya Darmo No. 45',
+        'Kota': 'Surabaya',
+        'Provinsi': 'Jawa Timur',
+        'Latitude': -7.2891,
+        'Longitude': 112.7383,
+        'Radius (Meter)': 300,
+        'Status Aktif': 'Ya',
+        'Catatan': 'Distributor Area Surabaya',
+      },
+    ]
+
+    const ws = XLSX.utils.json_to_sheet(templateData)
+    ws['!cols'] = [
+      { wch: 14 },
+      { wch: 22 },
+      { wch: 25 },
+      { wch: 45 },
+      { wch: 20 },
+      { wch: 20 },
+      { wch: 14 },
+      { wch: 14 },
+      { wch: 14 },
+      { wch: 12 },
+      { wch: 35 },
+    ]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Template Distributor')
+    XLSX.writeFile(wb, 'Template_Titik_Distributor_Sales.xlsx')
+  }
+
+  const handleExportExcel = () => {
+    const salesTargets = targets.filter((t) => t.type === 'sales_distributor')
+    if (salesTargets.length === 0) {
+      alert('Tidak ada data distributor sales untuk diexport.')
+      return
+    }
+
+    const exportData = salesTargets.map((t, idx) => ({
+      'Kode Lokasi': t.code || `DIST-${String(idx + 1).padStart(2, '0')}`,
+      'Nama Karyawan Sales': t.employeeName || '',
+      'Nama Distributor': t.distributorName || t.name || '',
+      'Alamat Kantor': t.address || '',
+      'Kota': t.city || '',
+      'Provinsi': t.province || '',
+      'Latitude': t.latitude,
+      'Longitude': t.longitude,
+      'Radius (Meter)': t.radiusMeters || 300,
+      'Status Aktif': t.active ? 'Ya' : 'Tidak',
+      'Catatan': t.notes || '',
+    }))
+
+    const ws = XLSX.utils.json_to_sheet(exportData)
+    ws['!cols'] = [
+      { wch: 14 },
+      { wch: 22 },
+      { wch: 25 },
+      { wch: 45 },
+      { wch: 20 },
+      { wch: 20 },
+      { wch: 14 },
+      { wch: 14 },
+      { wch: 14 },
+      { wch: 12 },
+      { wch: 35 },
+    ]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Distributor Sales')
+    const dateStr = new Date().toISOString().split('T')[0]
+    XLSX.writeFile(wb, `Data_Titik_Distributor_Area_Sales_${dateStr}.xlsx`)
+  }
+
+  const handleFileSelect = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImportFile(file)
+    setImportErrors([])
+    setParsedRows([])
+
+    try {
+      const data = await file.arrayBuffer()
+      const wb = XLSX.read(data, { type: 'array' })
+      const firstSheetName = wb.SheetNames[0]
+      const ws = wb.Sheets[firstSheetName]
+      const rows = XLSX.utils.sheet_to_json(ws, { defval: '' })
+
+      if (rows.length === 0) {
+        setImportErrors(['File Excel/CSV kosong atau tidak memiliki baris data.'])
+        return
+      }
+
+      const existingSales = targets.filter((t) => t.type === 'sales_distributor')
+      const existingCodeSet = new Set(existingSales.map((t) => (t.code || '').toUpperCase()))
+      const existingPairSet = new Set(
+        existingSales.map((t) => `${t.employeeName || ''}___${t.distributorName || t.name}`.trim().toLowerCase())
+      )
+
+      const validationErrors = []
+      const processed = rows.map((row, idx) => {
+        const rowNum = idx + 2
+
+        const code = String(row['Kode Lokasi'] || row['Kode'] || row['code'] || '').trim()
+        const employeeName = String(row['Nama Karyawan Sales'] || row['Nama Karyawan'] || row['employeeName'] || '').trim()
+        const distributorName = String(row['Nama Distributor'] || row['Distributor'] || row['distributorName'] || row['Nama Titik'] || row['name'] || '').trim()
+        const address = String(row['Alamat Kantor'] || row['Alamat'] || row['address'] || '').trim()
+        const city = String(row['Kota'] || row['Kota / Kabupaten'] || row['city'] || '').trim()
+        const province = String(row['Provinsi'] || row['province'] || '').trim()
+        const rawLat = String(row['Latitude'] || row['lat'] || '').replace(',', '.').trim()
+        const rawLng = String(row['Longitude'] || row['lng'] || row['long'] || '').replace(',', '.').trim()
+        const rawRadius = row['Radius (Meter)'] || row['Radius'] || row['radiusMeters'] || 300
+        const rawActive = String(row['Status Aktif'] || row['Status'] || row['active'] || 'Ya').trim().toLowerCase()
+        const notes = String(row['Catatan'] || row['notes'] || '').trim()
+
+        const latNum = parseFloat(rawLat)
+        const lngNum = parseFloat(rawLng)
+        const radiusNum = parseInt(rawRadius, 10) || 300
+        const isActive = rawActive === 'ya' || rawActive === 'true' || rawActive === '1' || rawActive === 'yes'
+
+        const rowErrors = []
+        if (!distributorName) rowErrors.push('Nama distributor kosong')
+        if (isNaN(latNum) || latNum < -90 || latNum > 90) rowErrors.push(`Latitude tidak valid: ${rawLat}`)
+        if (isNaN(lngNum) || lngNum < -180 || lngNum > 180) rowErrors.push(`Longitude tidak valid: ${rawLng}`)
+
+        if (rowErrors.length > 0) {
+          validationErrors.push(`Baris ${rowNum}: ${rowErrors.join(', ')}`)
+        }
+
+        const isUpdate = (code && existingCodeSet.has(code.toUpperCase())) ||
+          existingPairSet.has(`${employeeName}___${distributorName}`.trim().toLowerCase())
+
+        return {
+          _rowNum: rowNum,
+          _isValid: rowErrors.length === 0,
+          _errorMsg: rowErrors.join(', '),
+          _actionType: isUpdate ? 'update' : 'new',
+          code,
+          employeeName,
+          distributorName,
+          name: distributorName,
+          address,
+          city,
+          province,
+          latitude: isNaN(latNum) ? 0 : latNum,
+          longitude: isNaN(lngNum) ? 0 : lngNum,
+          radiusMeters: radiusNum,
+          active: isActive,
+          notes,
+        }
+      })
+
+      setParsedRows(processed)
+      setImportErrors(validationErrors)
+    } catch (err) {
+      console.error(err)
+      setImportErrors([`Gagal membaca file: ${err.message}`])
+    }
+  }
+
+  const handleExecuteBulkImport = async () => {
+    const validRows = parsedRows.filter((r) => r._isValid)
+    if (validRows.length === 0) {
+      alert('Tidak ada baris data valid yang dapat disimpan.')
+      return
+    }
+
+    if (importMode === 'replace_all') {
+      const confirmReplace = confirm(
+        '⚠️ PERINGATAN: Mode "Ganti Seluruh Data" akan menghapus SELURUH titik distributor sales lama dan menggantinya dengan isi file ini. Lanjutkan?'
+      )
+      if (!confirmReplace) return
+    }
+
+    try {
+      setIsImporting(true)
+      const res = await fetch('/api/work-locations/targets/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          targets: validRows,
+          mode: importMode,
+        }),
+      })
+
+      const data = await res.json()
+      if (data.success) {
+        showToast(`✅ ${data.message}`)
+        setShowImportModal(false)
+        setParsedRows([])
+        setImportFile(null)
+        if (fileInputRef.current) fileInputRef.current.value = ''
+        await fetchTargets()
+      } else {
+        alert(data.error || 'Gagal memproses upload massal.')
+      }
+    } catch (err) {
+      console.error(err)
+      alert('Terjadi kesalahan jaringan saat upload.')
+    } finally {
+      setIsImporting(false)
     }
   }
 
@@ -916,7 +1151,7 @@ function WorkLocationSettingsContent() {
                 </p>
               </div>
 
-              <div className='flex items-center gap-3'>
+              <div className='flex items-center flex-wrap gap-2'>
                 <div className='relative'>
                   <Search className='w-4 h-4 text-gray-400 absolute left-3 top-2.5' />
                   <input
@@ -924,12 +1159,42 @@ function WorkLocationSettingsContent() {
                     value={targetSearch}
                     onChange={(e) => setTargetSearch(e.target.value)}
                     placeholder='Cari sales / distributor / kota...'
-                    className='pl-9 pr-3.5 py-1.5 border border-gray-200 rounded-xl text-xs w-64 focus:outline-hidden focus:ring-2 focus:ring-teal-500 bg-white'
+                    className='pl-9 pr-3.5 py-1.5 border border-gray-200 rounded-xl text-xs w-56 focus:outline-hidden focus:ring-2 focus:ring-teal-500 bg-white'
                   />
                 </div>
+
+                {/* Export Excel */}
                 <button
+                  type='button'
+                  onClick={handleExportExcel}
+                  title='Export data distributor sales ke file Excel'
+                  className='inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 text-gray-700 rounded-xl text-xs font-semibold hover:bg-gray-50 transition shadow-2xs cursor-pointer'
+                >
+                  <Download className='w-3.5 h-3.5 text-gray-500' />
+                  Export
+                </button>
+
+                {/* Import Excel */}
+                <button
+                  type='button'
+                  onClick={() => {
+                    setShowImportModal(true)
+                    setImportFile(null)
+                    setParsedRows([])
+                    setImportErrors([])
+                  }}
+                  title='Upload massal titik lokasi distributor dari file Excel / CSV'
+                  className='inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white rounded-xl text-xs font-semibold hover:bg-emerald-700 transition shadow-2xs cursor-pointer'
+                >
+                  <Upload className='w-3.5 h-3.5' />
+                  Upload Excel
+                </button>
+
+                {/* Tambah Titik Manual */}
+                <button
+                  type='button'
                   onClick={() => handleOpenTargetCreate('sales_distributor')}
-                  className='inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 text-white rounded-xl text-xs font-semibold hover:bg-blue-700 transition shadow-2xs'
+                  className='inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 text-white rounded-xl text-xs font-semibold hover:bg-blue-700 transition shadow-2xs cursor-pointer'
                 >
                   <Plus className='w-3.5 h-3.5' />
                   Tambah Titik
@@ -1638,6 +1903,310 @@ function WorkLocationSettingsContent() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* ── Modal Bulk Upload Titik Lokasi Distributor ────────────────── */}
+      {showImportModal && (
+        <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs'>
+          <div className='w-full max-w-4xl max-h-[90vh] rounded-2xl bg-white shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150'>
+            {/* Header */}
+            <div className='flex items-center justify-between border-b border-gray-100 px-6 py-4 bg-gray-50/50'>
+              <div className='flex items-center gap-2.5'>
+                <div className='p-2 bg-emerald-100 text-emerald-700 rounded-xl'>
+                  <FileSpreadsheet className='w-5 h-5' />
+                </div>
+                <div>
+                  <h3 className='font-bold text-gray-900 text-sm'>
+                    Upload Massal Titik Lokasi Distributor Area Sales
+                  </h3>
+                  <p className='text-xs text-gray-500'>
+                    Unggah file Excel (.xlsx, .xls) atau CSV untuk menambah dan memperbarui banyak titik sekaligus.
+                  </p>
+                </div>
+              </div>
+              <button
+                type='button'
+                onClick={() => setShowImportModal(false)}
+                className='text-gray-400 hover:text-gray-600 p-1.5 rounded-lg hover:bg-gray-100 cursor-pointer'
+              >
+                <X className='w-5 h-5' />
+              </button>
+            </div>
+
+            {/* Content Body */}
+            <div className='p-6 overflow-y-auto space-y-5 text-xs flex-1'>
+              {/* Template Download & Instructions banner */}
+              <div className='flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 bg-blue-50/70 border border-blue-200 rounded-xl text-blue-900'>
+                <div className='flex items-start gap-2.5'>
+                  <FileSpreadsheet className='w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0' />
+                  <div>
+                    <span className='font-bold'>Gunakan Format Spreadsheet Resmi</span>
+                    <p className='text-[11px] text-blue-700 mt-0.5'>
+                      Pastikan kolom nama karyawan sales, nama distributor, serta koordinat Latitude dan Longitude terisi dengan benar.
+                    </p>
+                  </div>
+                </div>
+                <div className='flex items-center gap-2 flex-shrink-0'>
+                  <button
+                    type='button'
+                    onClick={handleDownloadTemplate}
+                    className='inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-blue-300 text-blue-700 rounded-lg font-semibold hover:bg-blue-100 transition shadow-2xs cursor-pointer'
+                  >
+                    <Download className='w-3.5 h-3.5' />
+                    Download Template
+                  </button>
+                  <button
+                    type='button'
+                    onClick={handleExportExcel}
+                    className='inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition shadow-2xs cursor-pointer'
+                  >
+                    <Download className='w-3.5 h-3.5' />
+                    Export Data Saat Ini
+                  </button>
+                </div>
+              </div>
+
+              {/* File Upload Drop Area */}
+              <div>
+                <label className='block font-bold text-gray-700 mb-1.5'>
+                  Pilih File Excel / CSV
+                </label>
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  className='border-2 border-dashed border-gray-300 hover:border-emerald-500 rounded-2xl p-6 text-center cursor-pointer transition bg-gray-50/50 hover:bg-emerald-50/20'
+                >
+                  <input
+                    ref={fileInputRef}
+                    type='file'
+                    accept='.xlsx, .xls, .csv'
+                    className='hidden'
+                    onChange={handleFileSelect}
+                  />
+                  <Upload className='w-8 h-8 text-gray-400 mx-auto mb-2' />
+                  {importFile ? (
+                    <div>
+                      <p className='font-bold text-gray-800 text-sm'>{importFile.name}</p>
+                      <p className='text-[11px] text-gray-500 mt-0.5'>
+                        {(importFile.size / 1024).toFixed(1)} KB · Klik untuk mengganti file
+                      </p>
+                    </div>
+                  ) : (
+                    <div>
+                      <p className='font-semibold text-gray-700'>
+                        Klik untuk memilih file spreadsheet (.xlsx / .csv)
+                      </p>
+                      <p className='text-[11px] text-gray-400 mt-1'>
+                        Atau seret dan lepas file ke area ini
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Import Mode Options */}
+              <div className='bg-gray-50 p-3.5 rounded-xl border border-gray-200'>
+                <label className='block font-bold text-gray-800 mb-2'>
+                  Strategi Penyimpanan Data:
+                </label>
+                <div className='grid grid-cols-1 md:grid-cols-3 gap-2.5'>
+                  <label
+                    className={`flex items-start gap-2 p-2.5 rounded-xl border cursor-pointer transition ${
+                      importMode === 'upsert'
+                        ? 'bg-white border-emerald-500 shadow-2xs text-emerald-950 ring-1 ring-emerald-500'
+                        : 'bg-white/60 border-gray-200 text-gray-600 hover:bg-white'
+                    }`}
+                  >
+                    <input
+                      type='radio'
+                      name='importMode'
+                      value='upsert'
+                      checked={importMode === 'upsert'}
+                      onChange={(e) => setImportMode(e.target.value)}
+                      className='mt-0.5 text-emerald-600 focus:ring-emerald-500'
+                    />
+                    <div>
+                      <div className='font-bold text-xs'>Perbarui & Tambah (Upsert)</div>
+                      <div className='text-[11px] text-gray-500 leading-tight mt-0.5'>
+                        Update titik jika sudah ada, buat baru jika belum terdaftar (Rekomendasi).
+                      </div>
+                    </div>
+                  </label>
+
+                  <label
+                    className={`flex items-start gap-2 p-2.5 rounded-xl border cursor-pointer transition ${
+                      importMode === 'insert_only'
+                        ? 'bg-white border-emerald-500 shadow-2xs text-emerald-950 ring-1 ring-emerald-500'
+                        : 'bg-white/60 border-gray-200 text-gray-600 hover:bg-white'
+                    }`}
+                  >
+                    <input
+                      type='radio'
+                      name='importMode'
+                      value='insert_only'
+                      checked={importMode === 'insert_only'}
+                      onChange={(e) => setImportMode(e.target.value)}
+                      className='mt-0.5 text-emerald-600 focus:ring-emerald-500'
+                    />
+                    <div>
+                      <div className='font-bold text-xs'>Hanya Tambah Baru</div>
+                      <div className='text-[11px] text-gray-500 leading-tight mt-0.5'>
+                        Hanya memasukkan data baru dan melewati titik yang kodenya sudah ada.
+                      </div>
+                    </div>
+                  </label>
+
+                  <label
+                    className={`flex items-start gap-2 p-2.5 rounded-xl border cursor-pointer transition ${
+                      importMode === 'replace_all'
+                        ? 'bg-white border-rose-500 shadow-2xs text-rose-950 ring-1 ring-rose-500'
+                        : 'bg-white/60 border-gray-200 text-gray-600 hover:bg-white'
+                    }`}
+                  >
+                    <input
+                      type='radio'
+                      name='importMode'
+                      value='replace_all'
+                      checked={importMode === 'replace_all'}
+                      onChange={(e) => setImportMode(e.target.value)}
+                      className='mt-0.5 text-rose-600 focus:ring-rose-500'
+                    />
+                    <div>
+                      <div className='font-bold text-xs text-rose-700'>Ganti Seluruh Data</div>
+                      <div className='text-[11px] text-gray-500 leading-tight mt-0.5'>
+                        Hapus semua 22 titik sales lama dan gantikan penuh dengan isi file.
+                      </div>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              {/* Error messages if any */}
+              {importErrors.length > 0 && (
+                <div className='p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 space-y-1'>
+                  <div className='flex items-center gap-1.5 font-bold'>
+                    <AlertCircle className='w-4 h-4 text-rose-600' />
+                    Ditemukan {importErrors.length} Peringatan / Kesalahan Format:
+                  </div>
+                  <ul className='list-disc list-inside text-[11px] max-h-28 overflow-y-auto space-y-0.5 text-rose-700'>
+                    {importErrors.map((err, i) => (
+                      <li key={i}>{err}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Preview Table */}
+              {parsedRows.length > 0 && (
+                <div>
+                  <div className='flex items-center justify-between mb-2'>
+                    <div className='font-bold text-gray-800 text-xs flex items-center gap-2'>
+                      Pratinjau Data ({parsedRows.length} Baris Terbaca)
+                      <span className='px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800'>
+                        {parsedRows.filter((r) => r._isValid).length} Valid
+                      </span>
+                      {parsedRows.filter((r) => !r._isValid).length > 0 && (
+                        <span className='px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800'>
+                          {parsedRows.filter((r) => !r._isValid).length} Error
+                        </span>
+                      )}
+                    </div>
+                    <span className='text-[11px] text-gray-400'>
+                      Menampilkan maksimal 50 baris pertama
+                    </span>
+                  </div>
+
+                  <div className='border border-gray-200 rounded-xl overflow-hidden max-h-60 overflow-y-auto'>
+                    <table className='w-full text-left text-xs'>
+                      <thead className='bg-gray-100 sticky top-0 text-[11px] font-bold text-gray-600 uppercase border-b border-gray-200'>
+                        <tr>
+                          <th className='py-2 px-3 w-10 text-center'>No</th>
+                          <th className='py-2 px-3'>Status</th>
+                          <th className='py-2 px-3'>Karyawan Sales</th>
+                          <th className='py-2 px-3'>Distributor & Kota</th>
+                          <th className='py-2 px-3'>Koordinat</th>
+                          <th className='py-2 px-3 text-center'>Radius</th>
+                        </tr>
+                      </thead>
+                      <tbody className='divide-y divide-gray-100'>
+                        {parsedRows.slice(0, 50).map((row, idx) => (
+                          <tr
+                            key={idx}
+                            className={row._isValid ? 'hover:bg-gray-50' : 'bg-rose-50/50'}
+                          >
+                            <td className='py-1.5 px-3 text-center text-gray-400 text-[11px]'>
+                              {row._rowNum}
+                            </td>
+                            <td className='py-1.5 px-3'>
+                              {!row._isValid ? (
+                                <span className='px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700'>
+                                  Format Salah
+                                </span>
+                              ) : row._actionType === 'update' ? (
+                                <span className='px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700'>
+                                  Perbarui (Update)
+                                </span>
+                              ) : (
+                                <span className='px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700'>
+                                  Baru (Insert)
+                                </span>
+                              )}
+                            </td>
+                            <td className='py-1.5 px-3 font-semibold text-gray-900'>
+                              {row.employeeName || <span className='text-gray-400 italic'>-</span>}
+                            </td>
+                            <td className='py-1.5 px-3'>
+                              <div className='font-medium text-gray-800'>{row.distributorName}</div>
+                              {row.city && (
+                                <div className='text-[10px] text-gray-400'>{row.city}</div>
+                              )}
+                            </td>
+                            <td className='py-1.5 px-3 font-mono text-[11px] text-gray-600'>
+                              {row._isValid ? `${row.latitude}, ${row.longitude}` : (
+                                <span className='text-rose-600 font-sans text-[11px]'>{row._errorMsg}</span>
+                              )}
+                            </td>
+                            <td className='py-1.5 px-3 text-center text-gray-600'>
+                              {row.radiusMeters}m
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className='border-t border-gray-100 px-6 py-3.5 bg-gray-50/50 flex items-center justify-between'>
+              <button
+                type='button'
+                onClick={() => setShowImportModal(false)}
+                className='px-4 py-2 border border-gray-300 rounded-xl text-xs font-semibold text-gray-700 hover:bg-gray-100 transition cursor-pointer'
+              >
+                Batal
+              </button>
+
+              <button
+                type='button'
+                disabled={isImporting || parsedRows.filter((r) => r._isValid).length === 0}
+                onClick={handleExecuteBulkImport}
+                className='inline-flex items-center gap-2 px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer'
+              >
+                {isImporting ? (
+                  <>
+                    <Loader2 className='w-4 h-4 animate-spin' />
+                    Menyimpan ke Database...
+                  </>
+                ) : (
+                  <>
+                    <Upload className='w-4 h-4' />
+                    Simpan & Terapkan ({parsedRows.filter((r) => r._isValid).length} Titik)
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
