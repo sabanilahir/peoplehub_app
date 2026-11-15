@@ -230,6 +230,9 @@ export default function HRAttendancePage() {
   const [modalPage, setModalPage] = useState(1)
   const modalPageSize = 15
 
+  // Drill-down Modal State
+  const [selectedEmpDetail, setSelectedEmpDetail] = useState(null)
+
   // Reset pagination saat filter berubah
   useEffect(() => {
     setSummaryPage(1)
@@ -240,9 +243,6 @@ export default function HRAttendancePage() {
   useEffect(() => {
     setModalPage(1)
   }, [selectedEmpDetail])
-
-  // Drill-down Modal State
-  const [selectedEmpDetail, setSelectedEmpDetail] = useState(null)
 
   // Real-time Calculation States
   const [calculatingEdit, setCalculatingEdit] = useState(false)
