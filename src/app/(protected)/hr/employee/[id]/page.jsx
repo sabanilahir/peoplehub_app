@@ -98,6 +98,7 @@ const BIO_EMPTY_RECORD = {
   gender: '', birthDate: '', birthPlace: '', nationality: '', religion: '', maritalStatus: '',
   phone: '', email: '', personalEmail: '', address: '', city: '', country: '',
   ktp: '', npwp: '', bpjs: '',
+  bankName: 'BCA', bankAccountNumber: '', bankAccountHolder: '',
 }
 
 export default function EmployeeProfilePage() {
@@ -256,6 +257,7 @@ export default function EmployeeProfilePage() {
     phone: emp.phone, email: emp.email, personalEmail: emp.personalEmail,
     address: emp.address, city: emp.city, country: emp.country,
     ktp: emp.ktp, npwp: emp.npwp, bpjs: emp.bpjs,
+    bankName: emp.bankName || 'BCA', bankAccountNumber: emp.bankAccountNumber || '', bankAccountHolder: emp.bankAccountHolder || emp.name,
   }
 
   // No dated record yet? Show a synthetic "Hire" baseline (from the
@@ -545,9 +547,15 @@ export default function EmployeeProfilePage() {
       phone: f.phone, email: f.email, personalEmail: f.personalEmail,
       address: f.address, city: f.city, country: f.country,
       ktp: f.ktp, npwp: f.npwp, bpjs: f.bpjs,
+      bankName: f.bankName || 'BCA', bankAccountNumber: f.bankAccountNumber || '', bankAccountHolder: f.bankAccountHolder || emp.name,
     }
     if (f.id) updateBioHistory(emp.id, f.id, payload)
     else addBioHistory(emp.id, payload)
+    updateEmployee(emp.id, {
+      bankName: payload.bankName,
+      bankAccountNumber: payload.bankAccountNumber,
+      bankAccountHolder: payload.bankAccountHolder,
+    })
     closeBioModal()
   }
 
@@ -862,6 +870,14 @@ export default function EmployeeProfilePage() {
                 <KVRow label='KTP'  value={displayBio.ktp} />
                 <KVRow label='NPWP' value={displayBio.npwp} />
                 <KVRow label='BPJS' value={displayBio.bpjs} />
+              </div>
+            </div>
+            <div className='border-t border-gray-100 pt-5'>
+              <h3 className='text-xs font-bold text-gray-400 uppercase tracking-wide mb-3'>{t('Informasi Rekening Bank Payroll', 'Payroll Bank Account')}</h3>
+              <div className='grid grid-cols-1 sm:grid-cols-3 gap-x-8 gap-y-4'>
+                <KVRow label={t('Nama Bank', 'Bank Name')} value={emp.bankName || displayBio.bankName || 'BCA'} />
+                <KVRow label={t('Nomor Rekening', 'Account Number')} value={emp.bankAccountNumber || displayBio.bankAccountNumber} />
+                <KVRow label={t('Nama Pemilik Rekening', 'Account Holder')} value={emp.bankAccountHolder || displayBio.bankAccountHolder || emp.name} />
               </div>
             </div>
 
@@ -1907,6 +1923,31 @@ export default function EmployeeProfilePage() {
                 </FormField>
                 <FormField label='BPJS'>
                   <Input value={bioModal.form.bpjs} onChange={e=>setBioModal(m=>({...m, form:{...m.form, bpjs:e.target.value}}))} />
+                </FormField>
+              </div>
+            </div>
+
+            <div className='border-t border-gray-100 pt-4 mb-4'>
+              <h4 className='text-xs font-bold text-gray-400 uppercase tracking-wide mb-2'>{t('Informasi Rekening Bank Payroll', 'Payroll Bank Account')}</h4>
+              <div className='grid grid-cols-1 sm:grid-cols-3 gap-3'>
+                <FormField label={t('Nama Bank', 'Bank Name')}>
+                  <Select value={bioModal.form.bankName || 'BCA'} onChange={e=>setBioModal(m=>({...m, form:{...m.form, bankName:e.target.value}}))}>
+                    <option value='BCA'>BCA (Bank Central Asia)</option>
+                    <option value='MANDIRI'>Bank Mandiri</option>
+                    <option value='BNI'>BNI (Bank Negara Indonesia)</option>
+                    <option value='BRI'>BRI (Bank Rakyat Indonesia)</option>
+                    <option value='PERMATA'>Bank Permata</option>
+                    <option value='CIMB'>CIMB Niaga</option>
+                    <option value='BSI'>Bank Syariah Indonesia (BSI)</option>
+                    <option value='DANAMON'>Bank Danamon</option>
+                    <option value='LAINNYA'>Bank Lainnya</option>
+                  </Select>
+                </FormField>
+                <FormField label={t('Nomor Rekening', 'Account Number')}>
+                  <Input placeholder='Contoh: 67543580' value={bioModal.form.bankAccountNumber || ''} onChange={e=>setBioModal(m=>({...m, form:{...m.form, bankAccountNumber:e.target.value.replace(/[^0-9]/g, '')}}))} />
+                </FormField>
+                <FormField label={t('Nama Pemilik Rekening', 'Account Holder')}>
+                  <Input placeholder={emp.name} value={bioModal.form.bankAccountHolder || ''} onChange={e=>setBioModal(m=>({...m, form:{...m.form, bankAccountHolder:e.target.value}}))} />
                 </FormField>
               </div>
             </div>

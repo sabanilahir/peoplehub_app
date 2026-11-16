@@ -4,6 +4,13 @@ import Link from 'next/link'
 import { exportCsv } from '@/utils/exportCsv'
 import { useT } from '@/store/languageStore'
 import {
+  buildBcaTransferRows,
+  exportBcaTransferExcel,
+  getMonthCode,
+  getDefaultRemark,
+  BANK_DIRECTORY,
+} from '@/lib/bankDisbursementEngine'
+import {
   PageHeader,
   StatCard,
   SectionCard,
@@ -79,6 +86,177 @@ export default function OdooPayrollSyncPage() {
   const [selectedDetail, setSelectedDetail] = useState(null)
   const [pendingOtCount, setPendingOtCount] = useState(0)
 
+  // Top-Level Active Tab
+  const [activeMainTab, setActiveMainTab] = useState('sync') // 'sync' | 'disbursement'
+
+  // Tab 2: Bank Disbursement States
+  const [disbursementLoading, setDisbursementLoading] = useState(false)
+  const [disbursementData, setDisbursementData] = useState([])
+  const [disbursementStats, setDisbursementStats] = useState({
+    totalEmployees: 0,
+    totalAmount: 0,
+    readyCount: 0,
+    missingAccountCount: 0,
+  })
+  const [disbursementSource, setDisbursementSource] = useState('')
+  const [disbursementRemark, setDisbursementRemark] = useState('')
+  const [disbursementPrefix, setDisbursementPrefix] = useState('')
+  const [disbursementSearch, setDisbursementSearch] = useState('')
+  const [disbursementBankFilter, setDisbursementBankFilter] = useState('all') // 'all' | 'BCA' | 'non-bca'
+  const [disbursementStatusFilter, setDisbursementStatusFilter] = useState('all') // 'all' | 'ready' | 'missing'
+
+  // Bank Quick-Edit Modal State
+  const [bankEditModal, setBankEditModal] = useState(null) // { open, empId, name, bankName, bankAccountNumber, bankAccountHolder }
+  const [bankSaving, setBankSaving] = useState(false)
+
+  // Flash helper
+  const flash = (text, type = 'success') => {
+    setActionMsg({ text, type })
+    setTimeout(() => setActionMsg(null), 4000)
+  }
+
+  // Fetch Bank Disbursement Data (Net Salary Odoo & Rekening)
+  const fetchDisbursementData = async (from = range.dateFrom, to = range.dateTo) => {
+    try {
+      setDisbursementLoading(true)
+      let url = '/api/odoo/payroll/disbursement'
+      const params = new URLSearchParams()
+      if (from) params.set('dateFrom', from)
+      if (to) params.set('dateTo', to)
+      const qs = params.toString()
+      if (qs) url += `?${qs}`
+
+      const res = await fetch(url)
+      const json = await res.json()
+      if (json.success) {
+        setDisbursementData(json.data || [])
+        setDisbursementStats(json.stats || {})
+        setDisbursementSource(json.source || '')
+
+        const targetDate = to || from || new Date().toISOString()
+        setDisbursementRemark((prev) => prev || getDefaultRemark(targetDate))
+        setDisbursementPrefix((prev) => prev || `${getMonthCode(targetDate)}0814`)
+      } else {
+        flash(json.error || 'Gagal memuat data setoran transfer bank.', 'error')
+      }
+    } catch (err) {
+      console.error(err)
+      flash('Terjadi kendala jaringan saat memuat data setoran bank.', 'error')
+    } finally {
+      setDisbursementLoading(false)
+    }
+  }
+
+  // Filtered Disbursement Items
+  const filteredDisbursementItems = useMemo(() => {
+    return disbursementData.filter((item) => {
+      // 1. Search filter
+      if (disbursementSearch.trim()) {
+        const q = disbursementSearch.toLowerCase()
+        const matchName = (item.name || '').toLowerCase().includes(q)
+        const matchNik = (item.nik || '').toLowerCase().includes(q)
+        const matchAcc = String(item.bankAccountNumber || '').toLowerCase().includes(q)
+        if (!matchName && !matchNik && !matchAcc) return false
+      }
+
+      // 2. Bank Filter
+      const bName = (item.bankName || 'BCA').toUpperCase()
+      if (disbursementBankFilter === 'BCA' && !bName.includes('BCA')) return false
+      if (disbursementBankFilter === 'non-bca' && bName.includes('BCA')) return false
+
+      // 3. Status Filter
+      const isReady = item.netSalary > 0 && item.bankAccountNumber && String(item.bankAccountNumber).trim().length >= 5
+      if (disbursementStatusFilter === 'ready' && !isReady) return false
+      if (disbursementStatusFilter === 'missing' && isReady) return false
+
+      return true
+    })
+  }, [disbursementData, disbursementSearch, disbursementBankFilter, disbursementStatusFilter])
+
+  // Handler Download File Excel Setoran Bank BCA (.xlsx)
+  const handleDownloadBcaExcel = () => {
+    if (disbursementData.length === 0) {
+      flash('Tidak ada data karyawan untuk diunduh.', 'error')
+      return
+    }
+
+    const itemsToExport = filteredDisbursementItems.length > 0 ? filteredDisbursementItems : disbursementData
+
+    const rows = buildBcaTransferRows(itemsToExport, {
+      prefix: disbursementPrefix || `${getMonthCode(range.dateTo)}0814`,
+      customRemark: disbursementRemark || getDefaultRemark(range.dateTo),
+      dateRef: range.dateTo || range.dateFrom,
+    })
+
+    const filename = `Setoran_BCA_${disbursementPrefix || 'PAYROLL'}_${range.dateTo || 'periode'}.xlsx`
+    exportBcaTransferExcel(rows, filename)
+    flash(`File Excel (${itemsToExport.length} baris transfer) berhasil diunduh!`, 'success')
+  }
+
+  // Handler Simpan Rekening Bank (Quick-Edit)
+  const handleSaveBankModal = async (e) => {
+    e?.preventDefault?.()
+    if (!bankEditModal?.empId) return
+
+    try {
+      setBankSaving(true)
+      const res = await fetch('/api/odoo/payroll/disbursement', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          empId: bankEditModal.empId,
+          bankName: bankEditModal.bankName,
+          bankAccountNumber: bankEditModal.bankAccountNumber,
+          bankAccountHolder: bankEditModal.bankAccountHolder,
+        }),
+      })
+      const json = await res.json()
+      if (json.success) {
+        flash(`Nomor rekening untuk ${bankEditModal.name} berhasil disimpan!`, 'success')
+        setDisbursementData((prev) =>
+          prev.map((it) =>
+            it.id === bankEditModal.empId
+              ? {
+                  ...it,
+                  bankName: bankEditModal.bankName,
+                  bankAccountNumber: bankEditModal.bankAccountNumber,
+                  bankAccountHolder: bankEditModal.bankAccountHolder,
+                }
+              : it
+          )
+        )
+        setDisbursementStats((prev) => {
+          const updatedItems = disbursementData.map((it) =>
+            it.id === bankEditModal.empId
+              ? {
+                  ...it,
+                  bankName: bankEditModal.bankName,
+                  bankAccountNumber: bankEditModal.bankAccountNumber,
+                  bankAccountHolder: bankEditModal.bankAccountHolder,
+                }
+              : it
+          )
+          const readyCount = updatedItems.filter(
+            (it) => it.netSalary > 0 && it.bankAccountNumber && String(it.bankAccountNumber).trim().length >= 5
+          ).length
+          return {
+            ...prev,
+            readyCount,
+            missingAccountCount: updatedItems.length - readyCount,
+          }
+        })
+        setBankEditModal(null)
+      } else {
+        flash(json.error || 'Gagal menyimpan rekening bank.', 'error')
+      }
+    } catch (err) {
+      console.error(err)
+      flash('Terjadi kesalahan jaringan saat menyimpan rekening.', 'error')
+    } finally {
+      setBankSaving(false)
+    }
+  }
+
   // Cek pengajuan lembur yang masih Pending dalam periode ini
   useEffect(() => {
     if (range.dateFrom && range.dateTo) {
@@ -120,6 +298,7 @@ export default function OdooPayrollSyncPage() {
 
   useEffect(() => {
     fetchPreview()
+    fetchDisbursementData()
   }, [])
 
   // Eksekusi Sinkronisasi ke Odoo
@@ -340,8 +519,12 @@ export default function OdooPayrollSyncPage() {
 
       <PageHeader
         icon="💼"
-        title="Integrasi Odoo Payroll (Cut-Off 26 - 25)"
-        subtitle="Otomatisasi pengiriman denda keterlambatan presensi dan reward kehadiran ke Items Payroll Odoo (hr.payslip.input)."
+        title={activeMainTab === 'sync' ? "Integrasi Odoo Payroll (Cut-Off 26 - 25)" : "Setoran Transfer Bank Payroll (Format BCA)"}
+        subtitle={
+          activeMainTab === 'sync'
+            ? "Otomatisasi pengiriman denda keterlambatan presensi dan reward kehadiran ke Items Payroll Odoo (hr.payslip.input)."
+            : "Data transfer bank untuk disetorkan ke bank, dengan nominal ditarik dari hasil generate payslip Odoo (Net Salary)."
+        }
         actions={
           <div className="flex items-center gap-2">
             <Link
@@ -351,33 +534,92 @@ export default function OdooPayrollSyncPage() {
               <Icon e="🏢" size={14} />
               <span>Kalkulator Payroll HO</span>
             </Link>
-            <button
-              onClick={handleExportCsv}
-              className="flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 transition shadow-sm"
-            >
-              <Icon e="📥" size={14} />
-              <span>Export CSV</span>
-            </button>
-            <button
-              onClick={() => fetchPreview(range.dateFrom, range.dateTo)}
-              disabled={loading}
-              className="flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 transition shadow-sm"
-            >
-              <Icon e="🔄" size={14} />
-              <span>Refresh</span>
-            </button>
-            <button
-              onClick={handleExecuteSync}
-              disabled={syncing || loading}
-              className="flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg text-white shadow-sm transition disabled:opacity-50"
-              style={{ background: 'linear-gradient(135deg, #052B52, #039299)' }}
-            >
-              <Icon e="🚀" size={14} />
-              <span>{syncing ? 'Mengirim ke Odoo...' : 'Kirim ke Items Payroll Odoo'}</span>
-            </button>
+            {activeMainTab === 'sync' ? (
+              <>
+                <button
+                  onClick={handleExportCsv}
+                  className="flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 transition shadow-sm cursor-pointer"
+                >
+                  <Icon e="📥" size={14} />
+                  <span>Export CSV</span>
+                </button>
+                <button
+                  onClick={() => fetchPreview(range.dateFrom, range.dateTo)}
+                  disabled={loading}
+                  className="flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 transition shadow-sm cursor-pointer"
+                >
+                  <Icon e="🔄" size={14} />
+                  <span>Refresh</span>
+                </button>
+                <button
+                  onClick={handleExecuteSync}
+                  disabled={syncing || loading}
+                  className="flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg text-white shadow-sm transition disabled:opacity-50 cursor-pointer"
+                  style={{ background: 'linear-gradient(135deg, #052B52, #039299)' }}
+                >
+                  <Icon e="🚀" size={14} />
+                  <span>{syncing ? 'Mengirim ke Odoo...' : 'Kirim ke Items Payroll Odoo'}</span>
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => fetchDisbursementData(range.dateFrom, range.dateTo)}
+                  disabled={disbursementLoading}
+                  className="flex items-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 transition shadow-sm cursor-pointer"
+                >
+                  <Icon e="🔄" size={14} />
+                  <span>Refresh Odoo</span>
+                </button>
+                <button
+                  onClick={handleDownloadBcaExcel}
+                  disabled={disbursementLoading || filteredDisbursementItems.length === 0}
+                  className="flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-lg text-white shadow-sm transition cursor-pointer disabled:opacity-50"
+                  style={{ background: 'linear-gradient(135deg, #052B52, #039299)' }}
+                >
+                  <Icon e="📥" size={14} />
+                  <span>Download File Excel Setoran (.xlsx)</span>
+                  <span className="px-1.5 py-0.2 rounded bg-white/20 text-[11px] font-mono">
+                    {filteredDisbursementItems.length}
+                  </span>
+                </button>
+              </>
+            )}
           </div>
         }
       />
+
+      {/* Top Main Navigation Tabs */}
+      <div className="flex border-b border-gray-200 mb-6 space-x-2">
+        <button
+          onClick={() => setActiveMainTab('sync')}
+          className={`px-5 py-3 text-sm font-bold border-b-2 flex items-center gap-2 transition-colors cursor-pointer ${
+            activeMainTab === 'sync'
+              ? 'border-teal-600 text-teal-700 bg-teal-50/50 rounded-t-lg'
+              : 'border-transparent text-gray-500 hover:text-gray-800'
+          }`}
+        >
+          <span>🔄</span> 1. Sinkronisasi Presensi ke Odoo (hr.payslip.input)
+        </button>
+        <button
+          onClick={() => {
+            setActiveMainTab('disbursement')
+            if (!disbursementData.length) fetchDisbursementData(range.dateFrom, range.dateTo)
+          }}
+          className={`px-5 py-3 text-sm font-bold border-b-2 flex items-center gap-2 transition-colors cursor-pointer ${
+            activeMainTab === 'disbursement'
+              ? 'border-teal-600 text-teal-700 bg-teal-50/50 rounded-t-lg'
+              : 'border-transparent text-gray-500 hover:text-gray-800'
+          }`}
+        >
+          <span>🏦</span> 2. Setoran Transfer Bank (Dari Payslip Odoo)
+          {disbursementStats.totalEmployees > 0 && (
+            <span className="ml-1.5 px-2 py-0.5 rounded-full text-[10px] bg-teal-100 text-teal-800 font-mono font-bold">
+              {disbursementStats.totalEmployees}
+            </span>
+          )}
+        </button>
+      </div>
 
       {/* Alert Notification */}
       {actionMsg && (
@@ -432,13 +674,20 @@ export default function OdooPayrollSyncPage() {
             />
           </div>
           <button
-            onClick={() => fetchPreview(range.dateFrom, range.dateTo)}
-            className="self-end px-3 py-1 bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs rounded transition"
+            onClick={() => {
+              fetchPreview(range.dateFrom, range.dateTo)
+              fetchDisbursementData(range.dateFrom, range.dateTo)
+            }}
+            className="self-end px-3 py-1 bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs rounded transition cursor-pointer"
           >
             Terapkan
           </button>
         </div>
       </div>
+
+      {/* TAB 1: SINKRONISASI PRESENSI KE ITEMS PAYROLL ODOO */}
+      {activeMainTab === 'sync' && (
+        <>
 
       {/* Warning Banner: Pending Overtime Pre-check */}
       {pendingOtCount > 0 && (
@@ -936,6 +1185,291 @@ export default function OdooPayrollSyncPage() {
           </div>
         )}
       </div>
+        </>
+      )}
+
+      {/* TAB 2: SETORAN TRANSFER BANK DARI PAYSLIP ODOO (FORMAT BCA) */}
+      {activeMainTab === 'disbursement' && (
+        <div className="space-y-6">
+          {/* Top Banner Status & Statistics */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <StatCard
+              title="Total Karyawan"
+              value={`${disbursementStats.totalEmployees || 0} Orang`}
+              subtitle={disbursementSource === 'odoo_live' ? '🟢 Live dari Odoo ERP' : 'Data Terverifikasi'}
+              icon="👥"
+              tone="brand"
+            />
+            <StatCard
+              title="Total Dana Ditransfer"
+              value={`Rp ${(disbursementStats.totalAmount || 0).toLocaleString('id-ID')}`}
+              subtitle="Net Salary (Take Home Pay)"
+              icon="💰"
+              tone="purple"
+            />
+            <StatCard
+              title="Siap Transfer"
+              value={`${disbursementStats.readyCount || 0} Karyawan`}
+              subtitle="Rekening Lengkap & Valid"
+              icon="✅"
+              tone="green"
+            />
+            <StatCard
+              title="Perlu Dilengkapi"
+              value={`${disbursementStats.missingAccountCount || 0} Karyawan`}
+              subtitle="Belum Ada No. Rekening"
+              icon="⚠️"
+              tone={disbursementStats.missingAccountCount > 0 ? 'orange' : 'teal'}
+            />
+          </div>
+
+          {/* Batch Configuration & Filters Bar */}
+          <div className="bg-white rounded-xl border border-gray-200/80 p-5 shadow-xs">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-4 mb-4 border-b border-gray-100">
+              <div>
+                <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2">
+                  <span>🏢</span>
+                  <span>Pengaturan Batch Setoran Transfer Bank (KlikBCA Bisnis - KBB)</span>
+                </h3>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  File Excel 13 kolom yang dihasilkan siap di-upload ke internet banking BCA. Nominal diambil dari baris <strong className="text-teal-700">Net Salary</strong> Odoo.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs px-2.5 py-1 rounded-full font-mono font-semibold bg-teal-50 text-teal-700 border border-teal-200">
+                  Format: BCA Multi-Transfer (.xlsx)
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end mb-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">
+                  Berita Transfer (Remark) <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={disbursementRemark}
+                  onChange={(e) => setDisbursementRemark(e.target.value.toUpperCase())}
+                  placeholder="Contoh: GAJI OKTOBER 2026"
+                  className="w-full text-xs bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 font-mono uppercase text-gray-800 focus:bg-white focus:outline-teal-600 font-semibold"
+                />
+                <span className="text-[10px] text-gray-400 mt-0.5 block">Maksimal 18 karakter sesuai standar bank</span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">
+                  Prefix Transaction ID <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={disbursementPrefix}
+                  onChange={(e) => setDisbursementPrefix(e.target.value.toUpperCase())}
+                  placeholder="Contoh: OCT0814"
+                  className="w-full text-xs bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 font-mono uppercase text-gray-800 focus:bg-white focus:outline-teal-600 font-semibold"
+                />
+                <span className="text-[10px] text-gray-400 mt-0.5 block">Format: [BULAN][BATCH] (contoh: OCT0814)</span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Filter Bank Tujuan</label>
+                <select
+                  value={disbursementBankFilter}
+                  onChange={(e) => setDisbursementBankFilter(e.target.value)}
+                  className="w-full text-xs bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-gray-800 focus:bg-white focus:outline-teal-600"
+                >
+                  <option value="all">Semua Bank ({disbursementData.length})</option>
+                  <option value="BCA">Hanya Rekening BCA</option>
+                  <option value="non-bca">Transfer Antar Bank (Non-BCA)</option>
+                </select>
+                <span className="text-[10px] text-gray-400 mt-0.5 block">Filter sesama rekening BCA vs LLG/RTGS</span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Status Rekening</label>
+                <select
+                  value={disbursementStatusFilter}
+                  onChange={(e) => setDisbursementStatusFilter(e.target.value)}
+                  className="w-full text-xs bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-gray-800 focus:bg-white focus:outline-teal-600"
+                >
+                  <option value="all">Semua Status</option>
+                  <option value="ready">🟢 Siap Transfer (Rekening Ada)</option>
+                  <option value="missing">🟡 Belum Ada Rekening</option>
+                </select>
+                <span className="text-[10px] text-gray-400 mt-0.5 block">Kelengkapan nomor rekening</span>
+              </div>
+            </div>
+
+            {/* Action Bar & Search */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-gray-100">
+              <div className="w-full sm:w-80">
+                <input
+                  type="text"
+                  placeholder="Cari nama karyawan / NIK / No. Rekening..."
+                  value={disbursementSearch}
+                  onChange={(e) => setDisbursementSearch(e.target.value)}
+                  className="w-full text-xs bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-gray-800 focus:bg-white focus:outline-teal-600"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                <button
+                  onClick={() => fetchDisbursementData(range.dateFrom, range.dateTo)}
+                  disabled={disbursementLoading}
+                  className="px-3 py-2 text-xs font-semibold rounded-lg bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 transition shadow-xs flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Icon e="🔄" size={13} />
+                  <span>Refresh Odoo</span>
+                </button>
+
+                <button
+                  onClick={handleDownloadBcaExcel}
+                  disabled={disbursementLoading || filteredDisbursementItems.length === 0}
+                  className="px-4 py-2 text-xs font-bold rounded-lg text-white transition shadow-sm flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                  style={{ background: 'linear-gradient(135deg, #052B52, #039299)' }}
+                >
+                  <Icon e="📥" size={14} />
+                  <span>Download File Excel Setoran Bank (.xlsx)</span>
+                  <span className="px-1.5 py-0.2 rounded bg-white/20 text-[11px] font-mono">
+                    {filteredDisbursementItems.length}
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Interactive 13-Column Table */}
+          <div className="bg-white rounded-xl border border-gray-200/80 shadow-xs overflow-hidden mb-6">
+            <div className="px-5 py-4 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 bg-gray-50/50">
+              <div>
+                <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2">
+                  <span>📊</span>
+                  <span>Pratinjau Data 13 Kolom Sesuai Template Transfer Bank BCA</span>
+                </h3>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Kolom Amount ditarik dari hasil perhitungan Net Salary Odoo. Klik tombol pensil untuk melengkapi nomor rekening.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-500">
+                  Menampilkan <strong className="text-gray-900">{filteredDisbursementItems.length}</strong> karyawan
+                </span>
+              </div>
+            </div>
+
+            {disbursementLoading ? (
+              <div className="py-20 text-center text-gray-400 text-xs">
+                <div className="inline-block animate-spin text-3xl mb-2">⏳</div>
+                <p className="font-semibold text-gray-600">Menghubungkan ke Odoo dan menarik slip gaji...</p>
+                <p className="text-[11px] text-gray-400 mt-1">Mengambil baris Net Salary dari hr.payslip.line</p>
+              </div>
+            ) : filteredDisbursementItems.length === 0 ? (
+              <div className="py-16 text-center text-gray-400 text-xs">
+                <p className="text-sm font-semibold text-gray-600">Tidak ada data transfer yang cocok.</p>
+                <p className="mt-1">Coba sesuaikan kata kunci pencarian atau filter status rekening.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-900 text-white text-left font-mono text-[11px]">
+                      <th className="p-3 border-b border-slate-800 text-center w-12">No</th>
+                      <th className="p-3 border-b border-slate-800 whitespace-nowrap">Transaction ID</th>
+                      <th className="p-3 border-b border-slate-800 whitespace-nowrap">Transfer Type</th>
+                      <th className="p-3 border-b border-slate-800 whitespace-nowrap">Credited Account</th>
+                      <th className="p-3 border-b border-slate-800 whitespace-nowrap">Receiver Name</th>
+                      <th className="p-3 border-b border-slate-800 text-right whitespace-nowrap">Amount (Net Odoo)</th>
+                      <th className="p-3 border-b border-slate-800 whitespace-nowrap">NIP</th>
+                      <th className="p-3 border-b border-slate-800 whitespace-nowrap">Remark</th>
+                      <th className="p-3 border-b border-slate-800 whitespace-nowrap">Beneficiary Email</th>
+                      <th className="p-3 border-b border-slate-800 text-center w-16 whitespace-nowrap">Swift</th>
+                      <th className="p-3 border-b border-slate-800 text-center w-14 whitespace-nowrap">Cust Type</th>
+                      <th className="p-3 border-b border-slate-800 text-center w-14 whitespace-nowrap">Residence</th>
+                      <th className="p-3 border-b border-slate-800 text-center w-24">Aksi Rekening</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredDisbursementItems.map((item, idx) => {
+                      const seqStr = String(idx + 1).padStart(2, '0')
+                      const txId = `${disbursementPrefix || 'OCT0814'}${seqStr}`
+                      const hasAccount = item.bankAccountNumber && String(item.bankAccountNumber).trim().length >= 5
+                      const netVal = Number(item.netSalary) || 0
+
+                      return (
+                        <tr
+                          key={item.id || idx}
+                          className={`border-b border-gray-100 hover:bg-teal-50/40 transition ${
+                            !hasAccount ? 'bg-amber-50/50' : ''
+                          }`}
+                        >
+                          <td className="p-3 text-center font-mono text-gray-500 font-bold">{idx + 1}</td>
+                          <td className="p-3 font-mono font-bold text-slate-800 whitespace-nowrap">{txId}</td>
+                          <td className="p-3 whitespace-nowrap">
+                            <span className="px-2 py-0.5 rounded font-mono font-bold text-[10px] bg-blue-50 text-blue-700 border border-blue-200">
+                              {item.bankName || 'BCA'}
+                            </span>
+                          </td>
+                          <td className="p-3 font-mono font-bold whitespace-nowrap">
+                            {hasAccount ? (
+                              <span className="text-gray-900 tracking-wider">{item.bankAccountNumber}</span>
+                            ) : (
+                              <span className="text-amber-800 font-bold bg-amber-100 px-2 py-0.5 rounded text-[10px] border border-amber-300">
+                                ⚠️ Belum Diisi
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-3 font-bold text-gray-900 whitespace-nowrap">
+                            <div className="flex items-center gap-2">
+                              <span>{item.bankAccountHolder || item.name}</span>
+                              {item.odoo_id && (
+                                <span className="text-[9px] font-mono text-teal-700 bg-teal-50 px-1.5 py-0.2 rounded border border-teal-200">
+                                  Odoo #{item.odoo_id}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="p-3 text-right font-mono font-bold text-emerald-700 whitespace-nowrap text-sm">
+                            Rp {netVal.toLocaleString('id-ID')}
+                          </td>
+                          <td className="p-3 font-mono text-gray-600 whitespace-nowrap">{item.nik || '—'}</td>
+                          <td className="p-3 font-mono text-[11px] text-gray-700 whitespace-nowrap">
+                            {disbursementRemark || getDefaultRemark(range.dateTo)}
+                          </td>
+                          <td className="p-3 text-gray-500 whitespace-nowrap">{item.email || '—'}</td>
+                          <td className="p-3 text-center font-mono text-gray-400 whitespace-nowrap">
+                            {(item.bankName || 'BCA') === 'BCA' ? '—' : (item.swiftCode || '—')}
+                          </td>
+                          <td className="p-3 text-center font-mono font-bold text-gray-700">1</td>
+                          <td className="p-3 text-center font-mono font-bold text-gray-700">1</td>
+                          <td className="p-3 text-center whitespace-nowrap">
+                            <button
+                              onClick={() =>
+                                setBankEditModal({
+                                  open: true,
+                                  empId: item.id,
+                                  name: item.name,
+                                  bankName: item.bankName || 'BCA',
+                                  bankAccountNumber: item.bankAccountNumber || '',
+                                  bankAccountHolder: item.bankAccountHolder || item.name,
+                                })
+                              }
+                              className="px-2.5 py-1 text-[11px] font-bold rounded-md bg-white hover:bg-teal-50 hover:text-teal-700 border border-gray-300 transition cursor-pointer flex items-center gap-1 mx-auto shadow-2xs"
+                              title="Edit nomor rekening karyawan ini"
+                            >
+                              <Icon e="✏️" size={11} />
+                              <span>{hasAccount ? 'Edit' : 'Isi Rekening'}</span>
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Sync Result Details Modal */}
       {syncResult && (
@@ -1235,6 +1769,100 @@ export default function OdooPayrollSyncPage() {
                 )}
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Quick-Edit Modal Rekening Bank Karyawan */}
+      {bankEditModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-gray-200">
+            <div className="px-5 py-4 bg-gradient-to-r from-slate-900 to-teal-950 text-white flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-white">Kelola Rekening Bank Transfer</h3>
+                <p className="text-[11px] text-teal-300">{bankEditModal.name}</p>
+              </div>
+              <button
+                onClick={() => setBankEditModal(null)}
+                className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-gray-300 hover:text-white text-base font-bold transition cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveBankModal} className="p-5 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Nama Bank</label>
+                <select
+                  value={bankEditModal.bankName}
+                  onChange={(e) => setBankEditModal({ ...bankEditModal, bankName: e.target.value })}
+                  className="w-full text-xs bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-gray-800 focus:bg-white focus:outline-teal-600 font-semibold"
+                >
+                  <option value="BCA">BCA (Bank Central Asia)</option>
+                  <option value="MANDIRI">Bank Mandiri</option>
+                  <option value="BNI">BNI (Bank Negara Indonesia)</option>
+                  <option value="BRI">BRI (Bank Rakyat Indonesia)</option>
+                  <option value="PERMATA">Bank Permata</option>
+                  <option value="CIMB">CIMB Niaga</option>
+                  <option value="BSI">Bank Syariah Indonesia (BSI)</option>
+                  <option value="DANAMON">Bank Danamon</option>
+                  <option value="PANIN">Panin Bank</option>
+                  <option value="MAYBANK">Maybank Indonesia</option>
+                  <option value="LAINNYA">Bank Lainnya</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">
+                  Nomor Rekening <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="Contoh: 67543580"
+                  value={bankEditModal.bankAccountNumber}
+                  onChange={(e) =>
+                    setBankEditModal({
+                      ...bankEditModal,
+                      bankAccountNumber: e.target.value.replace(/[^0-9]/g, ''),
+                    })
+                  }
+                  required
+                  className="w-full text-xs bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 font-mono font-bold text-gray-900 focus:bg-white focus:outline-teal-600"
+                />
+                <span className="text-[10px] text-gray-400 mt-0.5 block">Hanya angka tanpa tanda hubung atau spasi</span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Nama Pemilik Rekening</label>
+                <input
+                  type="text"
+                  placeholder="Sesuai nama di buku tabungan"
+                  value={bankEditModal.bankAccountHolder}
+                  onChange={(e) =>
+                    setBankEditModal({ ...bankEditModal, bankAccountHolder: e.target.value.toUpperCase() })
+                  }
+                  className="w-full text-xs bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 uppercase font-semibold text-gray-800 focus:bg-white focus:outline-teal-600"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-gray-100 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setBankEditModal(null)}
+                  className="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 transition cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={bankSaving || !bankEditModal.bankAccountNumber}
+                  className="px-4 py-1.5 text-xs font-bold rounded-lg text-white transition shadow-xs cursor-pointer disabled:opacity-50"
+                  style={{ background: 'linear-gradient(135deg, #052B52, #039299)' }}
+                >
+                  {bankSaving ? 'Menyimpan...' : 'Simpan Rekening'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
