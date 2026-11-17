@@ -6,7 +6,7 @@ const EMP_INT = ['companyId', 'divisionId', 'businessUnitId', 'departmentId',
 const EMP_STR = ['nik', 'name', 'status', 'employmentType', 'role', 'joinDate', 'endDate',
   'gender', 'birthPlace', 'birthDate', 'nationality', 'religion', 'maritalStatus', 'ktp',
   'phone', 'email', 'personalEmail', 'address', 'city', 'province', 'country', 'location',
-  'odooWorkLocationId', 'workLocationCode',
+  'odooWorkLocationId', 'workLocationCode', 'fingerspotPin',
   'dept', 'position', 'jobPosition', 'jobTitle']
 const EMP_JSON = ['approvalMatrix']
 

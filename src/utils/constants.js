@@ -39,7 +39,7 @@ export const EMPTY_EMP = {
   nik:'', name:'', gender:'Male', birthPlace:'', birthDate:'', nationality:'Indonesian',
   religion:'Islam', maritalStatus:'Single', bloodType:'', taxStatus:'', ktp:'', npwp:'',
   bpjs:'', phone:'', email:'', personalEmail:'', address:'', city:'', country:'Indonesia',
-  location: 'Head Office', workLocationCode: 'ho',
+  location: 'Head Office', workLocationCode: 'ho', fingerspotPin: '',
   photo:null, status:'Active', employmentType:'Permanent',
   joinDate:'', endDate:'', role:'employee',
   companyId:'', divisionId:'', businessUnitId:'', departmentId:'', positionId:'',

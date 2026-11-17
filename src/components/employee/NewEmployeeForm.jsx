@@ -63,6 +63,13 @@ export default function NewEmployeeForm({ form, setForm, S }) {
           <Field label='Status'>
             <Select value={form.status} onChange={e => setForm(p => ({ ...p, status: e.target.value }))} options={['Active','Inactive']} />
           </Field>
+          <Field label={t('PIN Mesin Fingerspot', 'Fingerspot Machine PIN')}>
+            <Input
+              value={form.fingerspotPin || ''}
+              onChange={e => setForm(p => ({ ...p, fingerspotPin: e.target.value }))}
+              placeholder={t('Contoh: 300032', 'e.g. 300032')}
+            />
+          </Field>
         </div>
       </Section>
     </div>

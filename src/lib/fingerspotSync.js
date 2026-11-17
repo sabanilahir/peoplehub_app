@@ -393,17 +393,22 @@ export async function processFingerspotLogs(rawLogs = [], { sourceLabel = 'Mesin
       id: true,
       nik: true,
       name: true,
+      fingerspotPin: true,
       location: true,
       dept: true,
       workLocationCode: true,
     },
   })
 
+  const empByFingerspotPin = new Map()
   const empById = new Map()
   const empByNik = new Map()
   const empByName = new Map()
 
   employees.forEach((emp) => {
+    if (emp.fingerspotPin && String(emp.fingerspotPin).trim()) {
+      empByFingerspotPin.set(String(emp.fingerspotPin).trim(), emp)
+    }
     empById.set(String(emp.id), emp)
     if (emp.nik) empByNik.set(String(emp.nik).trim().toLowerCase(), emp)
     if (emp.name) empByName.set(String(emp.name).trim().toLowerCase(), emp)
@@ -480,8 +485,9 @@ export async function processFingerspotLogs(rawLogs = [], { sourceLabel = 'Mesin
     const checkInTime = earliestScan.time
     const checkOutTime = latestScan ? latestScan.time : null
 
-    // Pencocokan Employee
+    // Pencocokan Employee (4-Tier Matching: fingerspotPin -> ID -> NIK -> Name)
     const matchedEmp =
+      empByFingerspotPin.get(pin) ||
       empById.get(pin) ||
       empByNik.get(pin.toLowerCase()) ||
       empByName.get(pin.toLowerCase()) ||

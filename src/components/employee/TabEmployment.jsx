@@ -23,6 +23,7 @@ export default function TabEmployment({ emp, S, update, grade, flash, addHistory
       positionId: form.positionId, gradeId: form.gradeId, individualClassId: form.individualClassId,
       managerId: form.managerId, employmentType: form.employmentType,
       status: form.status, joinDate: form.joinDate, endDate: form.endDate,
+      fingerspotPin: form.fingerspotPin || '',
       currency: form.currency || '', basicSalary: form.basicSalary || '',
       salaryAdjustment: form.salaryAdjustment || '', promotionAllowance: form.promotionAllowance || '',
       meals: form.meals || '', communication: form.communication || '',
@@ -182,6 +183,17 @@ export default function TabEmployment({ emp, S, update, grade, flash, addHistory
               <span className='text-xs font-semibold bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg capitalize'>{emp.role || '—'}</span>
               <span className='ml-2 text-xs text-gray-400'>{t('Ubah via Sysadmin', 'Change via Sysadmin')}</span>
             </div>
+          </Field>
+          {/* PIN Mesin Fingerspot (opsional, untuk matching presensi multi-device) */}
+          <Field label={t('PIN Mesin Fingerspot', 'Fingerspot Machine PIN')}>
+            <Input
+              value={form.fingerspotPin || ''}
+              onChange={e => setForm(f => ({ ...f, fingerspotPin: e.target.value }))}
+              placeholder={t('Contoh: 300032', 'e.g. 300032')}
+            />
+            <p className='text-[11px] text-gray-400 mt-1'>
+              {t('PIN yang terdaftar di mesin absensi Fingerspot', 'Registered PIN on Fingerspot attendance machine')}
+            </p>
           </Field>
         </div>
       </Section>

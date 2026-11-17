@@ -178,6 +178,7 @@ model Employee {
   last_sync_at       DateTime? // Waktu sync terakhir
   odooWorkLocationId String?   // ID lokasi kerja di Odoo
   workLocationCode   String?   // Kode aturan jam kerja terpetakan ('ho', 'sales', 'gudang', 'livestream')
+  fingerspotPin      String?   // PIN yang didaftarkan di mesin Fingerspot (contoh: '300032')
 
   payroll     Payroll?
   assignments ScheduleAssignment[]
@@ -193,6 +194,7 @@ model Employee {
   @@index([approver2Id])
   @@index([departmentId])
   @@index([companyId])
+  @@index([fingerspotPin])
 }
 
 // --- ONBOARDING TEMPLATE ----------------------

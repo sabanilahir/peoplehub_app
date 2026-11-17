@@ -112,11 +112,23 @@ function WorkLocationSettingsContent() {
 
   // Geofencing Target Locations State
   const storeEmployees = useEmployeeStore((s) => s.employees)
+  const updateEmployee = useEmployeeStore((s) => s.updateEmployee)
   const [targets, setTargets] = useState([])
   const [loadingTargets, setLoadingTargets] = useState(false)
   const [targetSearch, setTargetSearch] = useState('')
   const [employees, setEmployees] = useState([])
   const [toastMsg, setToastMsg] = useState(null)
+
+  // Fingerspot PIN Employee Mapping State
+  const [pinSearch, setPinSearch] = useState('')
+  const [pinFilterStatus, setPinFilterStatus] = useState('all') // 'all' | 'mapped' | 'unmapped'
+  const [pinFilterLocation, setPinFilterLocation] = useState('all')
+  const [pinInputs, setPinInputs] = useState({})
+  const [savingPinId, setSavingPinId] = useState(null)
+  const [pinFeedback, setPinFeedback] = useState({})
+  const [importingPin, setImportingPin] = useState(false)
+  const [pinPage, setPinPage] = useState(1)
+  const pinFileInputRef = useRef(null)
 
   const showToast = (msg) => {
     setToastMsg(msg)
@@ -489,6 +501,108 @@ function WorkLocationSettingsContent() {
       alert('Terjadi kesalahan jaringan saat sinkronisasi')
     } finally {
       setSyncingFingerspot(false)
+    }
+  }
+
+  // Fingerspot PIN Employee Mapping Handlers
+  const handleSavePin = async (empId) => {
+    const currentEmp = (storeEmployees || []).find((e) => e.id === empId)
+    const pinVal = (
+      pinInputs[empId] !== undefined
+        ? pinInputs[empId]
+        : (currentEmp?.fingerspotPin || '')
+    ).trim()
+
+    try {
+      setSavingPinId(empId)
+      await updateEmployee(empId, { fingerspotPin: pinVal })
+      setPinFeedback((prev) => ({ ...prev, [empId]: 'saved' }))
+      showToast(`PIN Fingerspot untuk ${currentEmp?.name || 'karyawan'} berhasil disimpan!`)
+      setTimeout(() => {
+        setPinFeedback((prev) => {
+          const next = { ...prev }
+          delete next[empId]
+          return next
+        })
+      }, 2500)
+    } catch (err) {
+      console.error(err)
+      alert('Gagal menyimpan PIN: ' + err.message)
+    } finally {
+      setSavingPinId(null)
+    }
+  }
+
+  const handleExportPinMapping = () => {
+    const rows = (storeEmployees || []).map((emp) => ({
+      'ID Karyawan': emp.id,
+      'NIK': emp.nik || '',
+      'Nama Karyawan': emp.name || '',
+      'Departemen': emp.dept || '',
+      'Lokasi Kerja': emp.location || '',
+      'PIN Mesin Fingerspot': emp.fingerspotPin || '',
+      'Status Mapping': emp.fingerspotPin ? 'Terpetakan' : 'Belum Terpetakan',
+    }))
+    const ws = XLSX.utils.json_to_sheet(rows)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'PIN Fingerspot')
+    XLSX.writeFile(
+      wb,
+      `Template_PIN_Fingerspot_${new Date().toISOString().slice(0, 10)}.xlsx`
+    )
+  }
+
+  const handleImportPinMapping = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    try {
+      setImportingPin(true)
+      const data = await file.arrayBuffer()
+      const wb = XLSX.read(data, { type: 'array' })
+      const ws = wb.Sheets[wb.SheetNames[0]]
+      const json = XLSX.utils.sheet_to_json(ws, { defval: '' })
+
+      if (!json || json.length === 0) {
+        alert('File Excel/CSV kosong')
+        return
+      }
+
+      let updatedCount = 0
+      for (const row of json) {
+        const rawNik = String(row['NIK'] || row['nik'] || row['Nik'] || '').trim().toLowerCase()
+        const rawId = Number(row['ID Karyawan'] || row['ID'] || row['id'])
+        const rawName = String(row['Nama Karyawan'] || row['Nama'] || row['nama'] || '').trim().toLowerCase()
+        const pin = String(
+          row['PIN Mesin Fingerspot'] ||
+          row['PIN'] ||
+          row['pin'] ||
+          row['fingerspot_pin'] ||
+          row['fingerspotPin'] ||
+          ''
+        ).trim()
+
+        if (!pin) continue
+
+        const targetEmp = (storeEmployees || []).find(
+          (e) =>
+            (rawNik && String(e.nik || '').trim().toLowerCase() === rawNik) ||
+            (rawId && e.id === rawId) ||
+            (rawName && String(e.name || '').trim().toLowerCase() === rawName)
+        )
+
+        if (targetEmp) {
+          await updateEmployee(targetEmp.id, { fingerspotPin: pin })
+          updatedCount++
+        }
+      }
+
+      showToast(`✅ Berhasil mengimpor dan memetakan ${updatedCount} PIN Fingerspot karyawan!`)
+    } catch (err) {
+      console.error(err)
+      alert('Gagal memproses file import: ' + err.message)
+    } finally {
+      setImportingPin(false)
+      if (pinFileInputRef.current) pinFileInputRef.current.value = ''
     }
   }
 
@@ -2272,6 +2386,327 @@ function WorkLocationSettingsContent() {
               </div>
             </div>
           </div>
+
+          {/* CARD PEMETAAN PIN FINGERSPOT KE KARYAWAN */}
+          {(() => {
+            const allEmps = storeEmployees || []
+            const mappedCount = allEmps.filter((e) => Boolean(e.fingerspotPin && String(e.fingerspotPin).trim())).length
+            const unmappedCount = allEmps.length - mappedCount
+
+            const filteredEmps = allEmps.filter((emp) => {
+              // Status filter
+              const hasPin = Boolean(emp.fingerspotPin && String(emp.fingerspotPin).trim())
+              if (pinFilterStatus === 'mapped' && !hasPin) return false
+              if (pinFilterStatus === 'unmapped' && hasPin) return false
+
+              // Location filter
+              if (pinFilterLocation !== 'all') {
+                const locCode = String(emp.workLocationCode || '').toLowerCase()
+                const locName = String(emp.location || '').toLowerCase()
+                const deptName = String(emp.dept || '').toLowerCase()
+                if (pinFilterLocation === 'gudang') {
+                  if (!locCode.includes('gudang') && !locName.includes('gudang') && !deptName.includes('gudang') && !deptName.includes('fullfilment')) {
+                    return false
+                  }
+                } else if (pinFilterLocation === 'ho') {
+                  if (!locCode.includes('ho') && !locName.includes('head office') && !locName.includes('ho')) {
+                    return false
+                  }
+                }
+              }
+
+              // Search query
+              if (pinSearch.trim()) {
+                const q = pinSearch.toLowerCase()
+                const name = String(emp.name || '').toLowerCase()
+                const nik = String(emp.nik || '').toLowerCase()
+                const pin = String(emp.fingerspotPin || '').toLowerCase()
+                const currentInputPin = String(pinInputs[emp.id] || '').toLowerCase()
+                return name.includes(q) || nik.includes(q) || pin.includes(q) || currentInputPin.includes(q)
+              }
+              return true
+            })
+
+            const pageSize = 15
+            const totalPages = Math.ceil(filteredEmps.length / pageSize) || 1
+            const currentPage = Math.min(Math.max(pinPage, 1), totalPages)
+            const paginatedEmps = filteredEmps.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+
+            return (
+              <div className='rounded-2xl border border-gray-200 bg-white p-6 shadow-xs'>
+                {/* Hidden File Input for Excel/CSV Import */}
+                <input
+                  type='file'
+                  ref={pinFileInputRef}
+                  onChange={handleImportPinMapping}
+                  accept='.xlsx,.xls,.csv'
+                  className='hidden'
+                />
+
+                <div className='flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-gray-100 gap-3'>
+                  <div>
+                    <h3 className='font-bold text-gray-900 flex items-center gap-2'>
+                      <Fingerprint className='w-5 h-5 text-teal-600' />
+                      Pemetaan PIN Mesin Fingerspot ke Karyawan
+                    </h3>
+                    <p className='text-xs text-gray-500 mt-1'>
+                      Petakan nomor PIN yang terdaftar pada mesin absensi Fingerspot (contoh: <code>300032</code>) ke master karyawan PeopleHub.
+                    </p>
+                  </div>
+
+                  <div className='flex items-center gap-2 flex-wrap'>
+                    <button
+                      type='button'
+                      onClick={() => pinFileInputRef.current?.click()}
+                      disabled={importingPin}
+                      className='inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-teal-300 bg-teal-50 text-teal-800 text-xs font-semibold hover:bg-teal-100 transition shadow-2xs cursor-pointer disabled:opacity-50'
+                      title='Impor PIN massal dari file Excel / CSV'
+                    >
+                      <Upload className={`w-3.5 h-3.5 ${importingPin ? 'animate-spin' : ''}`} />
+                      {importingPin ? 'Mengimpor...' : 'Import Excel / CSV'}
+                    </button>
+
+                    <button
+                      type='button'
+                      onClick={handleExportPinMapping}
+                      className='inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-gray-200 bg-gray-50 text-gray-700 text-xs font-semibold hover:bg-gray-100 transition shadow-2xs cursor-pointer'
+                      title='Download template atau export mapping saat ini'
+                    >
+                      <Download className='w-3.5 h-3.5' />
+                      Template / Export Excel
+                    </button>
+                  </div>
+                </div>
+
+                {/* Filter & Summary Bar */}
+                <div className='mt-4 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs'>
+                  {/* Status Pills */}
+                  <div className='flex items-center gap-1.5 flex-wrap'>
+                    <button
+                      type='button'
+                      onClick={() => { setPinFilterStatus('all'); setPinPage(1) }}
+                      className={`px-3 py-1.5 rounded-lg font-medium transition cursor-pointer ${
+                        pinFilterStatus === 'all'
+                          ? 'bg-teal-700 text-white shadow-2xs font-bold'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                    >
+                      Semua Karyawan ({allEmps.length})
+                    </button>
+                    <button
+                      type='button'
+                      onClick={() => { setPinFilterStatus('mapped'); setPinPage(1) }}
+                      className={`px-3 py-1.5 rounded-lg font-medium transition cursor-pointer ${
+                        pinFilterStatus === 'mapped'
+                          ? 'bg-emerald-600 text-white shadow-2xs font-bold'
+                          : 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'
+                      }`}
+                    >
+                      ✅ Terpetakan ({mappedCount})
+                    </button>
+                    <button
+                      type='button'
+                      onClick={() => { setPinFilterStatus('unmapped'); setPinPage(1) }}
+                      className={`px-3 py-1.5 rounded-lg font-medium transition cursor-pointer ${
+                        pinFilterStatus === 'unmapped'
+                          ? 'bg-amber-600 text-white shadow-2xs font-bold'
+                          : 'bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100'
+                      }`}
+                    >
+                      ⚠️ Belum Diisi ({unmappedCount})
+                    </button>
+                  </div>
+
+                  {/* Filter Lokasi & Search Input */}
+                  <div className='flex items-center gap-2 flex-wrap sm:flex-nowrap'>
+                    <select
+                      value={pinFilterLocation}
+                      onChange={(e) => { setPinFilterLocation(e.target.value); setPinPage(1) }}
+                      className='rounded-xl border border-gray-300 px-3 py-1.5 text-xs bg-white text-gray-700 outline-none focus:border-teal-500'
+                    >
+                      <option value='all'>Semua Lokasi / Dept</option>
+                      <option value='gudang'>Khusus Gudang / Fullfilment</option>
+                      <option value='ho'>Head Office</option>
+                    </select>
+
+                    <div className='relative min-w-[200px]'>
+                      <Search className='w-3.5 h-3.5 text-gray-400 absolute left-3 top-2.5' />
+                      <input
+                        type='text'
+                        value={pinSearch}
+                        onChange={(e) => { setPinSearch(e.target.value); setPinPage(1) }}
+                        placeholder='Cari Nama, NIK, atau PIN...'
+                        className='w-full rounded-xl border border-gray-300 pl-8 pr-3 py-1.5 text-xs bg-white outline-none focus:border-teal-500'
+                      />
+                      {pinSearch && (
+                        <button
+                          type='button'
+                          onClick={() => { setPinSearch(''); setPinPage(1) }}
+                          className='absolute right-2 top-2 text-gray-400 hover:text-gray-600'
+                        >
+                          <X className='w-3.5 h-3.5' />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Table Employee PIN Mapping */}
+                <div className='mt-4 overflow-x-auto rounded-xl border border-gray-200'>
+                  <table className='w-full text-left text-xs'>
+                    <thead className='bg-gray-50/80 text-[11px] font-bold text-gray-600 uppercase border-b border-gray-200'>
+                      <tr>
+                        <th className='py-3 px-4 w-12 text-center'>#</th>
+                        <th className='py-3 px-4'>Karyawan</th>
+                        <th className='py-3 px-4'>Lokasi &amp; Dept</th>
+                        <th className='py-3 px-4 w-56'>PIN Mesin Fingerspot</th>
+                        <th className='py-3 px-4 w-36 text-center'>Status</th>
+                        <th className='py-3 px-4 w-28 text-center'>Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody className='divide-y divide-gray-100 bg-white'>
+                      {paginatedEmps.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className='py-8 text-center text-gray-400 italic'>
+                            Tidak ada karyawan yang sesuai filter atau pencarian.
+                          </td>
+                        </tr>
+                      ) : (
+                        paginatedEmps.map((emp, idx) => {
+                          const currentPin =
+                            pinInputs[emp.id] !== undefined
+                              ? pinInputs[emp.id]
+                              : (emp.fingerspotPin || '')
+                          const hasSavedPin = Boolean(emp.fingerspotPin && String(emp.fingerspotPin).trim())
+                          const isSaving = savingPinId === emp.id
+                          const isSuccess = pinFeedback[emp.id] === 'saved'
+                          const isDirty = pinInputs[emp.id] !== undefined && pinInputs[emp.id] !== (emp.fingerspotPin || '')
+
+                          return (
+                            <tr key={emp.id} className='hover:bg-teal-50/30 transition'>
+                              <td className='py-3 px-4 text-center font-mono text-gray-400 text-[11px]'>
+                                {(currentPage - 1) * pageSize + idx + 1}
+                              </td>
+                              <td className='py-3 px-4'>
+                                <div className='font-bold text-gray-900'>{emp.name}</div>
+                                <div className='font-mono text-[11px] text-gray-500'>
+                                  NIK: {emp.nik || '—'} · ID: {emp.id}
+                                </div>
+                              </td>
+                              <td className='py-3 px-4'>
+                                <span className='inline-flex items-center gap-1 font-medium text-gray-700'>
+                                  <MapPin className='w-3 h-3 text-gray-400' />
+                                  {emp.location || 'Head Office'}
+                                </span>
+                                <div className='text-[11px] text-gray-400'>
+                                  {emp.dept || '—'}
+                                </div>
+                              </td>
+                              <td className='py-3 px-4'>
+                                <div className='flex items-center gap-1.5'>
+                                  <input
+                                    type='text'
+                                    value={currentPin}
+                                    onChange={(e) =>
+                                      setPinInputs((prev) => ({
+                                        ...prev,
+                                        [emp.id]: e.target.value,
+                                      }))
+                                    }
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        e.preventDefault()
+                                        handleSavePin(emp.id)
+                                      }
+                                    }}
+                                    placeholder='Contoh: 300032'
+                                    className={`w-full rounded-lg border px-2.5 py-1.5 text-xs font-mono outline-none transition ${
+                                      isDirty
+                                        ? 'border-amber-400 bg-amber-50/40 text-amber-900 font-bold'
+                                        : 'border-gray-200 bg-white text-gray-800 focus:border-teal-500'
+                                    }`}
+                                  />
+                                </div>
+                              </td>
+                              <td className='py-3 px-4 text-center'>
+                                {hasSavedPin ? (
+                                  <span className='inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800'>
+                                    <CheckCircle2 className='w-3 h-3' />
+                                    Terpetakan
+                                  </span>
+                                ) : (
+                                  <span className='inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-800'>
+                                    <AlertCircle className='w-3 h-3' />
+                                    Belum Diisi
+                                  </span>
+                                )}
+                              </td>
+                              <td className='py-3 px-4 text-center'>
+                                <button
+                                  type='button'
+                                  onClick={() => handleSavePin(emp.id)}
+                                  disabled={isSaving}
+                                  className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer shadow-2xs ${
+                                    isSuccess
+                                      ? 'bg-emerald-600 text-white'
+                                      : isDirty
+                                      ? 'bg-amber-600 text-white hover:bg-amber-700'
+                                      : 'bg-teal-600 text-white hover:bg-teal-700'
+                                  } disabled:opacity-50`}
+                                >
+                                  {isSaving ? (
+                                    <Loader2 className='w-3 h-3 animate-spin' />
+                                  ) : isSuccess ? (
+                                    <>
+                                      <Check className='w-3 h-3' />
+                                      Tersimpan
+                                    </>
+                                  ) : (
+                                    'Simpan'
+                                  )}
+                                </button>
+                              </td>
+                            </tr>
+                          )
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Pagination Controls */}
+                {filteredEmps.length > pageSize && (
+                  <div className='mt-4 flex items-center justify-between text-xs text-gray-500 border-t border-gray-100 pt-3'>
+                    <div>
+                      Menampilkan {(currentPage - 1) * pageSize + 1} -{' '}
+                      {Math.min(currentPage * pageSize, filteredEmps.length)} dari {filteredEmps.length} karyawan
+                    </div>
+                    <div className='flex items-center gap-1'>
+                      <button
+                        type='button'
+                        onClick={() => setPinPage((p) => Math.max(p - 1, 1))}
+                        disabled={currentPage <= 1}
+                        className='px-2.5 py-1 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed'
+                      >
+                        Sebelumnya
+                      </button>
+                      <span className='px-2 font-medium text-gray-700'>
+                        {currentPage} / {totalPages}
+                      </span>
+                      <button
+                        type='button'
+                        onClick={() => setPinPage((p) => Math.min(p + 1, totalPages))}
+                        disabled={currentPage >= totalPages}
+                        className='px-2.5 py-1 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed'
+                      >
+                        Selanjutnya
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })()}
         </div>
       )}
 
