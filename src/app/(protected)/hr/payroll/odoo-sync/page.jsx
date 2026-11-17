@@ -103,7 +103,7 @@ export default function OdooPayrollSyncPage() {
   const [disbursementPrefix, setDisbursementPrefix] = useState('')
   const [disbursementSearch, setDisbursementSearch] = useState('')
   const [disbursementBankFilter, setDisbursementBankFilter] = useState('all') // 'all' | 'BCA' | 'non-bca'
-  const [disbursementStatusFilter, setDisbursementStatusFilter] = useState('all') // 'all' | 'ready' | 'missing'
+  const [disbursementAccountFilter, setDisbursementAccountFilter] = useState('all') // 'all' | 'filled' | 'empty' | 'odoo' | 'manual'
 
   // Bank Quick-Edit Modal State
   const [bankEditModal, setBankEditModal] = useState(null) // { open, empId, name, bankName, bankAccountNumber, bankAccountHolder }
@@ -114,6 +114,33 @@ export default function OdooPayrollSyncPage() {
     setActionMsg({ text, type })
     setTimeout(() => setActionMsg(null), 4000)
   }
+
+  // Hitung jumlah rekening per status (Terisi vs Belum Diisi vs Sumber)
+  const accountCounts = useMemo(() => {
+    let filled = 0
+    let empty = 0
+    let odoo = 0
+    let manual = 0
+
+    disbursementData.forEach((it) => {
+      const hasAcc = Boolean(it.bankAccountNumber && String(it.bankAccountNumber).trim().length >= 5)
+      if (hasAcc) {
+        filled++
+        if (it.bankSource === 'odoo_contact') odoo++
+        if (it.bankSource === 'manual_edit') manual++
+      } else {
+        empty++
+      }
+    })
+
+    return {
+      total: disbursementData.length,
+      filled,
+      empty,
+      odoo,
+      manual,
+    }
+  }, [disbursementData])
 
   // Fetch Bank Disbursement Data (Net Salary Odoo & Rekening)
   const fetchDisbursementData = async (from = range.dateFrom, to = range.dateTo) => {
@@ -164,14 +191,19 @@ export default function OdooPayrollSyncPage() {
       if (disbursementBankFilter === 'BCA' && !bName.includes('BCA')) return false
       if (disbursementBankFilter === 'non-bca' && bName.includes('BCA')) return false
 
-      // 3. Status Filter
-      const isReady = item.netSalary > 0 && item.bankAccountNumber && String(item.bankAccountNumber).trim().length >= 5
-      if (disbursementStatusFilter === 'ready' && !isReady) return false
-      if (disbursementStatusFilter === 'missing' && isReady) return false
+      // 3. Credited Account (Nomor Rekening) Filter: Terisi vs Belum Diisi vs Sumber
+      const hasValidAccount = Boolean(
+        item.bankAccountNumber && String(item.bankAccountNumber).trim().length >= 5
+      )
+
+      if (disbursementAccountFilter === 'filled' && !hasValidAccount) return false
+      if (disbursementAccountFilter === 'empty' && hasValidAccount) return false
+      if (disbursementAccountFilter === 'odoo' && (!hasValidAccount || item.bankSource !== 'odoo_contact')) return false
+      if (disbursementAccountFilter === 'manual' && (!hasValidAccount || item.bankSource !== 'manual_edit')) return false
 
       return true
     })
-  }, [disbursementData, disbursementSearch, disbursementBankFilter, disbursementStatusFilter])
+  }, [disbursementData, disbursementSearch, disbursementBankFilter, disbursementAccountFilter])
 
   // Handler Download File Excel Setoran Bank BCA (.xlsx)
   const handleDownloadBcaExcel = () => {
@@ -182,13 +214,27 @@ export default function OdooPayrollSyncPage() {
 
     const itemsToExport = filteredDisbursementItems.length > 0 ? filteredDisbursementItems : disbursementData
 
+    if (disbursementAccountFilter === 'empty') {
+      const confirmDownload = window.confirm(
+        `Perhatian: Anda sedang mengekspor ${itemsToExport.length} karyawan yang nomor rekeningnya belum diisi/kosong. File ini belum siap ditransfer ke bank. Tetap unduh?`
+      )
+      if (!confirmDownload) return
+    }
+
     const rows = buildBcaTransferRows(itemsToExport, {
       prefix: disbursementPrefix || `${getMonthCode(range.dateTo)}0814`,
       customRemark: disbursementRemark || getDefaultRemark(range.dateTo),
       dateRef: range.dateTo || range.dateFrom,
     })
 
-    const filename = `Setoran_BCA_${disbursementPrefix || 'PAYROLL'}_${range.dateTo || 'periode'}.xlsx`
+    const filterSuffix =
+      disbursementAccountFilter === 'filled'
+        ? '_SIAP_TRANSFER'
+        : disbursementAccountFilter === 'empty'
+        ? '_REKENING_KOSONG'
+        : ''
+
+    const filename = `Setoran_BCA_${disbursementPrefix || 'PAYROLL'}${filterSuffix}_${range.dateTo || 'periode'}.xlsx`
     exportBcaTransferExcel(rows, filename)
     flash(`File Excel (${itemsToExport.length} baris transfer) berhasil diunduh!`, 'success')
   }
@@ -1193,38 +1239,58 @@ export default function OdooPayrollSyncPage() {
         <div className="space-y-6">
           {/* Top Banner Status & Statistics */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <StatCard
-              title="Total Karyawan"
-              value={`${disbursementStats.totalEmployees || 0} Orang`}
-              subtitle={disbursementSource === 'odoo_live' ? '🟢 Live dari Odoo ERP' : 'Data Terverifikasi'}
-              icon="👥"
-              tone="brand"
-            />
-            <StatCard
-              title="Total Dana Ditransfer"
-              value={`Rp ${(disbursementStats.totalAmount || 0).toLocaleString('id-ID')}`}
-              subtitle="Net Salary (Take Home Pay)"
-              icon="💰"
-              tone="purple"
-            />
-            <StatCard
-              title="Siap Transfer"
-              value={`${disbursementStats.readyCount || 0} Karyawan`}
-              subtitle={
-                disbursementStats.odooContactCount
-                  ? `${disbursementStats.odooContactCount} dari Odoo Contact`
-                  : "Rekening Lengkap & Valid"
-              }
-              icon="✅"
-              tone="green"
-            />
-            <StatCard
-              title="Perlu Dilengkapi"
-              value={`${disbursementStats.missingAccountCount || 0} Karyawan`}
-              subtitle="Belum Ada No. Rekening"
-              icon="⚠️"
-              tone={disbursementStats.missingAccountCount > 0 ? 'orange' : 'teal'}
-            />
+            <div
+              onClick={() => setDisbursementAccountFilter('all')}
+              className="cursor-pointer transition-transform hover:scale-[1.01]"
+              title="Klik untuk menampilkan semua karyawan"
+            >
+              <StatCard
+                title="Total Karyawan"
+                value={`${disbursementStats.totalEmployees || 0} Orang`}
+                subtitle={disbursementSource === 'odoo_live' ? '🟢 Live dari Odoo ERP' : 'Data Terverifikasi'}
+                icon="👥"
+                tone="brand"
+              />
+            </div>
+            <div>
+              <StatCard
+                title="Total Dana Ditransfer"
+                value={`Rp ${(disbursementStats.totalAmount || 0).toLocaleString('id-ID')}`}
+                subtitle="Net Salary (Take Home Pay)"
+                icon="💰"
+                tone="purple"
+              />
+            </div>
+            <div
+              onClick={() => setDisbursementAccountFilter('filled')}
+              className="cursor-pointer transition-transform hover:scale-[1.01]"
+              title="Klik untuk menyaring hanya karyawan dengan nomor rekening terisi"
+            >
+              <StatCard
+                title="Siap Transfer"
+                value={`${disbursementStats.readyCount || 0} Karyawan`}
+                subtitle={
+                  disbursementStats.odooContactCount
+                    ? `${disbursementStats.odooContactCount} dari Odoo Contact`
+                    : "Rekening Lengkap & Valid"
+                }
+                icon="✅"
+                tone="green"
+              />
+            </div>
+            <div
+              onClick={() => setDisbursementAccountFilter('empty')}
+              className="cursor-pointer transition-transform hover:scale-[1.01]"
+              title="Klik untuk menyaring karyawan yang nomor rekeningnya belum diisi"
+            >
+              <StatCard
+                title="Perlu Dilengkapi"
+                value={`${disbursementStats.missingAccountCount || 0} Karyawan`}
+                subtitle="Belum Ada No. Rekening"
+                icon="⚠️"
+                tone={disbursementStats.missingAccountCount > 0 ? 'orange' : 'teal'}
+              />
+            </div>
           </div>
 
           {/* Batch Configuration & Filters Bar */}
@@ -1290,17 +1356,23 @@ export default function OdooPayrollSyncPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Status Rekening</label>
+                <label className="block text-xs font-bold text-gray-700 mb-1">
+                  Filter Credited Account (No. Rekening)
+                </label>
                 <select
-                  value={disbursementStatusFilter}
-                  onChange={(e) => setDisbursementStatusFilter(e.target.value)}
-                  className="w-full text-xs bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-gray-800 focus:bg-white focus:outline-teal-600"
+                  value={disbursementAccountFilter}
+                  onChange={(e) => setDisbursementAccountFilter(e.target.value)}
+                  className="w-full text-xs bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-gray-800 focus:bg-white focus:outline-teal-600 font-semibold"
                 >
-                  <option value="all">Semua Status</option>
-                  <option value="ready">🟢 Siap Transfer (Rekening Ada)</option>
-                  <option value="missing">🟡 Belum Ada Rekening</option>
+                  <option value="all">Semua Status Rekening ({accountCounts.total})</option>
+                  <option value="filled">🟢 Rekening Terisi / Ada ({accountCounts.filled})</option>
+                  <option value="empty">🟡 Rekening Belum Diisi / Kosong ({accountCounts.empty})</option>
+                  <option value="odoo">✓ Dari Odoo Contact ({accountCounts.odoo})</option>
+                  {accountCounts.manual > 0 && (
+                    <option value="manual">✏️ Diedit Manual ({accountCounts.manual})</option>
+                  )}
                 </select>
-                <span className="text-[10px] text-gray-400 mt-0.5 block">Kelengkapan nomor rekening</span>
+                <span className="text-[10px] text-gray-400 mt-0.5 block">Saring rekening terisi vs belum diisi</span>
               </div>
             </div>
 
@@ -1340,6 +1412,96 @@ export default function OdooPayrollSyncPage() {
                 </button>
               </div>
             </div>
+
+            {/* Quick Filter Pills Row */}
+            <div className="flex flex-wrap items-center gap-2 pt-3 mt-3 border-t border-gray-100">
+              <span className="text-[11px] font-bold text-gray-500 mr-1 flex items-center gap-1">
+                <Icon e="🔍" size={12} />
+                <span>Filter Cepat Rekening:</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setDisbursementAccountFilter('all')}
+                className={`px-3 py-1 rounded-full text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
+                  disbursementAccountFilter === 'all'
+                    ? 'bg-slate-900 text-white shadow-xs'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                <span>Semua</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                  disbursementAccountFilter === 'all' ? 'bg-white/20' : 'bg-gray-200 text-gray-700'
+                }`}>
+                  {accountCounts.total}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setDisbursementAccountFilter('filled')}
+                className={`px-3 py-1 rounded-full text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
+                  disbursementAccountFilter === 'filled'
+                    ? 'bg-emerald-700 text-white shadow-xs'
+                    : 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'
+                }`}
+              >
+                <span>🟢 Terisi / Siap Transfer</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                  disbursementAccountFilter === 'filled' ? 'bg-white/20' : 'bg-emerald-100 text-emerald-800'
+                }`}>
+                  {accountCounts.filled}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setDisbursementAccountFilter('empty')}
+                className={`px-3 py-1 rounded-full text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
+                  disbursementAccountFilter === 'empty'
+                    ? 'bg-amber-600 text-white shadow-xs'
+                    : 'bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100'
+                }`}
+              >
+                <span>🟡 Belum Diisi / Kosong</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                  disbursementAccountFilter === 'empty' ? 'bg-white/20' : 'bg-amber-200/80 text-amber-900 font-bold'
+                }`}>
+                  {accountCounts.empty}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setDisbursementAccountFilter('odoo')}
+                className={`px-3 py-1 rounded-full text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
+                  disbursementAccountFilter === 'odoo'
+                    ? 'bg-teal-700 text-white shadow-xs'
+                    : 'bg-teal-50 text-teal-800 border border-teal-200 hover:bg-teal-100'
+                }`}
+              >
+                <span>✓ Dari Odoo Contact</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                  disbursementAccountFilter === 'odoo' ? 'bg-white/20' : 'bg-teal-100 text-teal-800'
+                }`}>
+                  {accountCounts.odoo}
+                </span>
+              </button>
+              {accountCounts.manual > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setDisbursementAccountFilter('manual')}
+                  className={`px-3 py-1 rounded-full text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
+                    disbursementAccountFilter === 'manual'
+                      ? 'bg-blue-700 text-white shadow-xs'
+                      : 'bg-blue-50 text-blue-800 border border-blue-200 hover:bg-blue-100'
+                  }`}
+                >
+                  <span>✏️ Diedit Manual</span>
+                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                    disbursementAccountFilter === 'manual' ? 'bg-white/20' : 'bg-blue-100 text-blue-800'
+                  }`}>
+                    {accountCounts.manual}
+                  </span>
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Interactive 13-Column Table */}
@@ -1355,6 +1517,28 @@ export default function OdooPayrollSyncPage() {
                 </p>
               </div>
               <div className="flex items-center gap-2">
+                {disbursementAccountFilter !== 'all' && (
+                  <span className="text-[11px] px-2 py-0.5 rounded-full font-semibold bg-teal-100 text-teal-800 flex items-center gap-1 shadow-2xs">
+                    <span>Filter:</span>
+                    <strong>
+                      {disbursementAccountFilter === 'filled'
+                        ? '🟢 Rekening Terisi'
+                        : disbursementAccountFilter === 'empty'
+                        ? '🟡 Belum Diisi'
+                        : disbursementAccountFilter === 'odoo'
+                        ? '✓ Dari Odoo'
+                        : '✏️ Manual'}
+                    </strong>
+                    <button
+                      type="button"
+                      onClick={() => setDisbursementAccountFilter('all')}
+                      className="ml-1 text-teal-900 hover:text-black font-bold cursor-pointer"
+                      title="Reset filter rekening"
+                    >
+                      ×
+                    </button>
+                  </span>
+                )}
                 <span className="text-xs text-gray-500">
                   Menampilkan <strong className="text-gray-900">{filteredDisbursementItems.length}</strong> karyawan
                 </span>
