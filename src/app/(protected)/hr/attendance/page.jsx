@@ -61,6 +61,44 @@ const OFFICIAL_DEPARTMENTS = [
 ]
 
 /**
+ * Mendeteksi sumber pencatatan presensi:
+ * - 'fingerspot' : Dari mesin Fingerspot (API Cloud atau Upload Excel)
+ * - 'mobile'     : Dari aplikasi mobile / live GPS
+ * - 'manual'     : Dibuat manual oleh HR / Admin
+ */
+function getRecordSource(rec) {
+  if (!rec) return 'manual'
+  const inLoc = (rec.checkInLocation || '').toLowerCase()
+  const outLoc = (rec.checkOutLocation || '').toLowerCase()
+  const note = (rec.note || '').toLowerCase()
+
+  if (
+    inLoc.includes('fingerspot') ||
+    outLoc.includes('fingerspot') ||
+    note.includes('fingerspot') ||
+    inLoc.includes('mesin') ||
+    outLoc.includes('mesin') ||
+    inLoc.includes('excel') ||
+    outLoc.includes('excel') ||
+    note.includes('excel')
+  ) {
+    return 'fingerspot'
+  }
+  if (
+    rec.checkInLat != null ||
+    rec.checkOutLat != null ||
+    inLoc.includes('gps') ||
+    inLoc.includes('mobile') ||
+    outLoc.includes('gps') ||
+    outLoc.includes('mobile') ||
+    rec.isWithinRadius != null
+  ) {
+    return 'mobile'
+  }
+  return 'manual'
+}
+
+/**
  * Menghitung rentang tanggal cut-off presensi (26 bulan lalu s/d 25 bulan berjalan)
  */
 function calculateCutoffRange(dateRef) {
@@ -218,6 +256,7 @@ export default function HRAttendancePage() {
   const [selectedLocation, setSelectedLocation] = useState('all')
   const [selectedDept, setSelectedDept] = useState('all')
   const [selectedStatus, setSelectedStatus] = useState('all')
+  const [selectedSource, setSelectedSource] = useState('all') // 'all' | 'fingerspot' | 'mobile' | 'manual'
   const [search, setSearch] = useState('')
 
   // ── Pagination States ──────────────────────────────────────────────────
@@ -226,6 +265,9 @@ export default function HRAttendancePage() {
 
   const [dailyPage, setDailyPage] = useState(1)
   const [dailyPageSize, setDailyPageSize] = useState(25)
+
+  const [fingerspotPage, setFingerspotPage] = useState(1)
+  const [fingerspotPageSize, setFingerspotPageSize] = useState(25)
 
   const [modalPage, setModalPage] = useState(1)
   const modalPageSize = 15
@@ -237,7 +279,8 @@ export default function HRAttendancePage() {
   useEffect(() => {
     setSummaryPage(1)
     setDailyPage(1)
-  }, [search, selectedLocation, selectedDept, selectedStatus, dateFrom, dateTo, isFilterApplied])
+    setFingerspotPage(1)
+  }, [search, selectedLocation, selectedDept, selectedStatus, selectedSource, dateFrom, dateTo, isFilterApplied])
 
   // Reset modal page saat karyawan detail dibuka
   useEffect(() => {
@@ -315,6 +358,10 @@ export default function HRAttendancePage() {
           type: 'success',
           text: `✅ ${data.message}`,
         })
+        setDateFrom(start)
+        setDateTo(end)
+        setIsFilterApplied(true)
+        setSelectedSource('fingerspot')
         fetchFilteredRecords(start, end)
       } else {
         setSyncResultMsg({
@@ -438,6 +485,8 @@ export default function HRAttendancePage() {
           type: 'success',
           text: `✅ Berhasil memproses ${data.savedCount} presensi gudang dari file "${uploadFile?.name}".`,
         })
+        setIsFilterApplied(true)
+        setSelectedSource('fingerspot')
         fetchFilteredRecords(dateFrom, dateTo)
       } else {
         setUploadResult({
@@ -628,6 +677,7 @@ export default function HRAttendancePage() {
     setSelectedLocation('all')
     setSelectedDept('all')
     setSelectedStatus('all')
+    setSelectedSource('all')
     setSearch('')
     setDbRecords([])
   }
@@ -735,7 +785,13 @@ export default function HRAttendancePage() {
       // 4. Status Filter
       if (selectedStatus !== 'all' && rec.status !== selectedStatus) return false
 
-      // 5. Search Filter
+      // 5. Source Filter
+      if (selectedSource !== 'all') {
+        const src = getRecordSource(rec)
+        if (src !== selectedSource) return false
+      }
+
+      // 6. Search Filter
       if (search) {
         const q = search.toLowerCase()
         const matchName = rec.employeeName?.toLowerCase().includes(q)
@@ -745,7 +801,7 @@ export default function HRAttendancePage() {
 
       return true
     })
-  }, [combinedRecords, isFilterApplied, dateFrom, dateTo, selectedLocation, selectedDept, selectedStatus, search])
+  }, [combinedRecords, isFilterApplied, dateFrom, dateTo, selectedLocation, selectedDept, selectedStatus, selectedSource, search])
 
   // Agregasi Ringkasan Per Karyawan (employeeSummaries)
   const employeeSummaries = useMemo(() => {
@@ -791,6 +847,11 @@ export default function HRAttendancePage() {
     combinedRecords.forEach((rec) => {
       if (dateFrom && rec.date < dateFrom) return
       if (dateTo && rec.date > dateTo) return
+
+      if (selectedSource !== 'all') {
+        const src = getRecordSource(rec)
+        if (src !== selectedSource) return
+      }
 
       let summary = map.get(Number(rec.empId))
       if (!summary) {
@@ -866,7 +927,7 @@ export default function HRAttendancePage() {
     }
 
     return list.sort((a, b) => a.employeeName.localeCompare(b.employeeName))
-  }, [combinedRecords, employees, isFilterApplied, dateFrom, dateTo, selectedLocation, selectedDept, selectedStatus, search])
+  }, [combinedRecords, employees, isFilterApplied, dateFrom, dateTo, selectedLocation, selectedDept, selectedStatus, selectedSource, search])
 
   // Metrik Stat Cards
   const summary = useMemo(() => {
@@ -944,6 +1005,93 @@ export default function HRAttendancePage() {
     return modalRecords.slice(start, start + modalPageSize)
   }, [modalRecords, modalPage, modalPageSize])
 
+  // ── Data & Memo Khusus Tab Fingerspot ────────────────────────────────────
+  const fingerspotRecords = useMemo(() => {
+    return combinedRecords.filter((rec) => {
+      const isFspot = getRecordSource(rec) === 'fingerspot'
+      if (!isFspot) return false
+
+      if (dateFrom && rec.date < dateFrom) return false
+      if (dateTo && rec.date > dateTo) return false
+      if (selectedLocation !== 'all' && rec.locationCode !== selectedLocation) return false
+      if (selectedDept !== 'all' && rec.dept !== selectedDept) return false
+      if (selectedStatus !== 'all' && rec.status !== selectedStatus) return false
+      if (search) {
+        const q = search.toLowerCase()
+        const matchName = rec.employeeName?.toLowerCase().includes(q)
+        const matchNik = rec.nik?.toLowerCase().includes(q)
+        if (!matchName && !matchNik) return false
+      }
+      return true
+    })
+  }, [combinedRecords, dateFrom, dateTo, selectedLocation, selectedDept, selectedStatus, search])
+
+  const allFingerspotCount = useMemo(() => {
+    return combinedRecords.filter((rec) => getRecordSource(rec) === 'fingerspot').length
+  }, [combinedRecords])
+
+  const fingerspotTotalPages = useMemo(() => {
+    return Math.ceil(fingerspotRecords.length / fingerspotPageSize) || 1
+  }, [fingerspotRecords.length, fingerspotPageSize])
+
+  const pagedFingerspotRecords = useMemo(() => {
+    const start = (fingerspotPage - 1) * fingerspotPageSize
+    return fingerspotRecords.slice(start, start + fingerspotPageSize)
+  }, [fingerspotRecords, fingerspotPage, fingerspotPageSize])
+
+  const fingerspotTotalPenalty = useMemo(() => {
+    return fingerspotRecords.reduce((acc, r) => acc + (Number(r.penaltyAmount) || 0), 0)
+  }, [fingerspotRecords])
+
+  const handleViewFingerspotShortcut = () => {
+    setActiveTab('fingerspot')
+    setIsFilterApplied(true)
+    setSelectedSource('fingerspot')
+    if (dbRecords.length === 0) {
+      const today = todayStr()
+      setDateFrom('2026-11-16')
+      setDateTo(today)
+      fetchFilteredRecords('2026-11-16', today)
+    }
+  }
+
+  const handleExportFingerspotExcel = () => {
+    const headers = [
+      'ID Karyawan',
+      'NIK',
+      'Nama Karyawan',
+      'Departemen',
+      'Lokasi Kerja',
+      'Tanggal Presensi',
+      'Jam Masuk',
+      'Mesin Masuk',
+      'Jam Pulang',
+      'Mesin Pulang',
+      'Status',
+      'Keterlambatan (Menit)',
+      'Denda (Rp)',
+      'Catatan / Log Mesin',
+    ]
+    const rows = fingerspotRecords.map((r) => [
+      r.empId,
+      r.nik,
+      r.employeeName,
+      r.dept,
+      r.locationLabel,
+      r.date,
+      r.checkIn || '-',
+      r.checkInLocation || 'Mesin Fingerspot',
+      r.checkOut || '-',
+      r.checkOutLocation || 'Mesin Fingerspot',
+      r.status,
+      r.lateMinutes || 0,
+      r.penaltyAmount || 0,
+      r.note || '-',
+    ])
+    const filename = `Data_Presensi_Fingerspot_${dateFrom || 'all'}_sd_${dateTo || 'all'}_${new Date().toISOString().slice(0, 10)}`
+    exportCsv(filename, headers, rows)
+  }
+
   // Export CSV
   const handleExportCsv = () => {
     const periodLabel = dateFrom && dateTo ? `${dateFrom}_sd_${dateTo}` : dateFilterMode
@@ -987,6 +1135,7 @@ export default function HRAttendancePage() {
         'Nama Karyawan',
         'Departemen',
         'Lokasi Kerja',
+        'Sumber Presensi',
         'Tanggal',
         'Check In',
         'Check Out',
@@ -999,23 +1148,28 @@ export default function HRAttendancePage() {
         'Mock/Fake GPS',
         'Catatan / Alasan',
       ]
-      const rows = filteredRecords.map((r) => [
-        r.nik,
-        r.employeeName,
-        r.dept,
-        r.locationLabel,
-        r.date,
-        r.checkIn || '-',
-        r.checkOut || '-',
-        r.status,
-        r.lateMinutes || 0,
-        r.penaltyAmount || 0,
-        r.checkInLocation || '-',
-        r.checkInDistance != null ? Math.round(r.checkInDistance) : '-',
-        r.isWithinRadius === true ? 'Dalam Radius (<=300m)' : r.isWithinRadius === false ? 'Luar Radius (>300m)' : '-',
-        r.isMockGps ? `Ya (${r.mockGpsReason || 'Detected'})` : 'Tidak',
-        r.note || '-',
-      ])
+      const rows = filteredRecords.map((r) => {
+        const src = getRecordSource(r)
+        const srcLabel = src === 'fingerspot' ? 'Mesin Fingerspot' : src === 'mobile' ? 'Mobile GPS' : 'Manual'
+        return [
+          r.nik,
+          r.employeeName,
+          r.dept,
+          r.locationLabel,
+          srcLabel,
+          r.date,
+          r.checkIn || '-',
+          r.checkOut || '-',
+          r.status,
+          r.lateMinutes || 0,
+          r.penaltyAmount || 0,
+          r.checkInLocation || '-',
+          r.checkInDistance != null ? Math.round(r.checkInDistance) : '-',
+          r.isWithinRadius === true ? 'Dalam Radius (<=300m)' : r.isWithinRadius === false ? 'Luar Radius (>300m)' : '-',
+          r.isMockGps ? `Ya (${r.mockGpsReason || 'Detected'})` : 'Tidak',
+          r.note || '-',
+        ]
+      })
       const filename = `Log_Presensi_Harian_${periodLabel}_${new Date().toISOString().slice(0, 10)}`
       exportCsv(filename, headers, rows)
     }
@@ -1302,7 +1456,20 @@ export default function HRAttendancePage() {
               title="Unggah file export Excel (.xlsx, .xls) atau CSV dari mesin Fingerspot Gudang"
             >
               <Icon e="📤" size={14} />
-              <span>Upload Excel Fingerspot</span>
+              <span>Upload Excel</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleViewFingerspotShortcut}
+              className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-lg transition shadow-sm cursor-pointer ${
+                activeTab === 'fingerspot'
+                  ? 'bg-emerald-700 text-white ring-2 ring-emerald-300'
+                  : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+              }`}
+              title="Buka langsung daftar hasil import & sinkronisasi mesin Fingerspot"
+            >
+              <Icon e="📟" size={14} />
+              <span>Hasil Fingerspot {allFingerspotCount > 0 ? `(${allFingerspotCount})` : ''}</span>
             </button>
             <button
               onClick={() => setAddModalOpen(true)}
@@ -1463,7 +1630,7 @@ export default function HRAttendancePage() {
         </div>
 
         {/* Filter Dropdowns */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {/* Lokasi Kerja */}
           <div>
             <label className="block text-[11px] font-semibold text-gray-500 mb-1">Lokasi Kerja</label>
@@ -1542,6 +1709,40 @@ export default function HRAttendancePage() {
               <option value="Leave">Cuti / Izin (Leave)</option>
             </select>
           </div>
+
+          {/* Sumber Presensi (BARU) */}
+          <div>
+            <label className="block text-[11px] font-semibold text-gray-500 mb-1 flex items-center justify-between">
+              <span>Sumber Presensi</span>
+              {selectedSource === 'fingerspot' && (
+                <span className="text-[10px] text-teal-700 font-bold bg-teal-50 px-1.5 rounded">Fingerspot Aktif</span>
+              )}
+            </label>
+            <select
+              value={selectedSource}
+              onChange={(e) => {
+                const val = e.target.value
+                setSelectedSource(val)
+                if (val !== 'all' && !isFilterApplied) {
+                  const co = calculateCutoffRange()
+                  setDateFilterMode('cutoff')
+                  setDateFrom(co.dateFrom)
+                  setDateTo(co.dateTo)
+                  fetchFilteredRecords(co.dateFrom, co.dateTo)
+                }
+              }}
+              className={`w-full text-xs rounded-lg px-2.5 py-1.5 font-semibold transition outline-none ${
+                selectedSource === 'fingerspot'
+                  ? 'bg-teal-50 border-teal-300 text-teal-900 border'
+                  : 'bg-gray-50 border border-gray-200 text-gray-700 focus:bg-white focus:outline-teal-600'
+              }`}
+            >
+              <option value="all">Semua Sumber</option>
+              <option value="fingerspot">📟 Mesin Fingerspot (API / Excel)</option>
+              <option value="mobile">📱 Mobile GPS (Live Tap)</option>
+              <option value="manual">✏️ Input Manual HR</option>
+            </select>
+          </div>
         </div>
       </div>
 
@@ -1570,13 +1771,31 @@ export default function HRAttendancePage() {
             <Icon e="📋" size={14} />
             <span>Log Presensi Harian ({filteredRecords.length})</span>
           </button>
+          <button
+            onClick={() => {
+              setActiveTab('fingerspot')
+              if (!isFilterApplied && dbRecords.length === 0) {
+                handleViewFingerspotShortcut()
+              }
+            }}
+            className={`flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-lg transition ${
+              activeTab === 'fingerspot'
+                ? 'bg-teal-700 text-white shadow-sm'
+                : 'text-teal-800 hover:text-teal-950 hover:bg-teal-50/50'
+            }`}
+          >
+            <Icon e="📟" size={14} />
+            <span>Hasil Mesin Fingerspot ({fingerspotRecords.length})</span>
+          </button>
         </div>
 
         <div className="text-xs text-gray-500 font-medium">
           {activeTab === 'summary' ? (
             <span>Menampilkan rekapitulasi kehadiran per karyawan selama periode terpilih</span>
-          ) : (
+          ) : activeTab === 'daily' ? (
             <span>Menampilkan riwayat check-in/out harian seluruh karyawan</span>
+          ) : (
+            <span>Menampilkan hasil sinkronisasi dan import mesin biometrik Fingerspot Gudang</span>
           )}
         </div>
       </div>
@@ -1588,7 +1807,7 @@ export default function HRAttendancePage() {
             <div className="w-6 h-6 border-2 border-teal-600 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
             Memuat data presensi dari database...
           </div>
-        ) : !isFilterApplied ? (
+        ) : !isFilterApplied && activeTab !== 'fingerspot' ? (
           /* DEFAULT KOSONG: PANDUAN PILIH FILTER */
           <div className="py-16 px-4 text-center">
             <div className="w-14 h-14 bg-teal-50 text-teal-700 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-2xs border border-teal-100">
@@ -1758,7 +1977,7 @@ export default function HRAttendancePage() {
               />
             </div>
           )
-        ) : (
+        ) : activeTab === 'daily' ? (
           /* TAB 2: LOG PRESENSI HARIAN */
           filteredRecords.length === 0 ? (
             <EmptyState
@@ -1816,13 +2035,37 @@ export default function HRAttendancePage() {
                       {/* Jam Masuk */}
                       <Td>
                         <div className="flex flex-col gap-0.5">
-                          <span
-                            className={`text-xs font-mono font-semibold ${
-                              isLate ? 'text-amber-600' : r.checkIn ? 'text-emerald-700' : 'text-gray-400'
-                            }`}
-                          >
-                            {r.checkIn || '—'}
-                          </span>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span
+                              className={`text-xs font-mono font-semibold ${
+                                isLate ? 'text-amber-600' : r.checkIn ? 'text-emerald-700' : 'text-gray-400'
+                              }`}
+                            >
+                              {r.checkIn || '—'}
+                            </span>
+                            {(() => {
+                              const src = getRecordSource(r)
+                              if (src === 'fingerspot') {
+                                return (
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-teal-100 text-teal-800 border border-teal-200" title="Presensi dari Mesin Fingerspot">
+                                    <Icon e="📟" size={10} /> Fingerspot
+                                  </span>
+                                )
+                              }
+                              if (src === 'mobile') {
+                                return (
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-medium bg-blue-50 text-blue-800 border border-blue-200" title="Presensi Mobile GPS">
+                                    <Icon e="📱" size={10} /> Mobile
+                                  </span>
+                                )
+                              }
+                              return (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-medium bg-gray-100 text-gray-700">
+                                  <Icon e="✏️" size={10} /> Manual
+                                </span>
+                              )
+                            })()}
+                          </div>
                           {r.checkInLocation && (
                             <span className="text-[10px] text-gray-500 font-medium truncate max-w-[150px]" title={r.checkInLocation}>
                               📍 {r.checkInLocation}
@@ -1930,6 +2173,208 @@ export default function HRAttendancePage() {
               />
             </div>
           )
+        ) : (
+          /* TAB 3: HASIL MESIN FINGERSPOT */
+          <div className="p-4 sm:p-6 space-y-4">
+            {/* Header Ringkasan & Action Bar */}
+            <div className="p-4 bg-teal-50/70 border border-teal-200/80 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-xl bg-teal-600 text-white flex items-center justify-center text-lg flex-shrink-0 shadow-sm">
+                  📟
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-teal-950 flex items-center gap-2">
+                    Hasil Sinkronisasi &amp; Import Mesin Biometrik Fingerspot
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-teal-200/80 text-teal-900 font-bold">
+                      {fingerspotRecords.length} Data Terdeteksi
+                    </span>
+                  </h3>
+                  <p className="text-xs text-teal-800/80 mt-0.5">
+                    Data presensi otomatis hasil scan mesin Fingerspot Cloud (Gudang &amp; Multi-Device) dengan kalkulasi denda keterlambatan otomatis.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap self-end md:self-auto">
+                <button
+                  type="button"
+                  onClick={handleExportFingerspotExcel}
+                  disabled={fingerspotRecords.length === 0}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white border border-teal-300 text-teal-900 text-xs font-semibold hover:bg-teal-100 transition shadow-2xs cursor-pointer disabled:opacity-40"
+                  title="Unduh data presensi Fingerspot ke CSV / Excel"
+                >
+                  <Icon e="📥" size={13} />
+                  <span>Export Excel Fingerspot</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSyncModalOpen(true)
+                    setSyncResultMsg(null)
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-teal-600 text-white text-xs font-semibold hover:bg-teal-700 transition shadow-2xs cursor-pointer"
+                  title="Tarik log scan terbaru dari seluruh mesin"
+                >
+                  <Icon e="⚡" size={13} />
+                  <span>Tarik Data Terbaru</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Sub-Stat Cards Fingerspot */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+              <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl">
+                <div className="text-gray-400 font-medium">Total Presensi Fingerspot</div>
+                <div className="text-base font-bold text-gray-900 mt-0.5">{fingerspotRecords.length} presensi</div>
+              </div>
+              <div className="p-3 bg-emerald-50/80 border border-emerald-200 rounded-xl">
+                <div className="text-emerald-700 font-medium">Hadir Tepat Waktu</div>
+                <div className="text-base font-bold text-emerald-800 mt-0.5">
+                  {fingerspotRecords.filter(r => r.status === 'Present').length} presensi
+                </div>
+              </div>
+              <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-xl">
+                <div className="text-amber-700 font-medium">Terlambat (Late)</div>
+                <div className="text-base font-bold text-amber-800 mt-0.5">
+                  {fingerspotRecords.filter(r => r.status === 'Late').length} presensi
+                </div>
+              </div>
+              <div className="p-3 bg-rose-50/80 border border-rose-200 rounded-xl">
+                <div className="text-rose-700 font-medium">Total Denda Terhitung</div>
+                <div className="text-base font-bold text-rose-700 mt-0.5">
+                  Rp {fingerspotTotalPenalty.toLocaleString('id-ID')}
+                </div>
+              </div>
+            </div>
+
+            {/* Table Fingerspot */}
+            {fingerspotRecords.length === 0 ? (
+              <EmptyState
+                title="Tidak Ada Data Presensi Fingerspot"
+                description="Belum ada data scan mesin Fingerspot untuk kriteria atau rentang tanggal ini. Silakan klik tombol 'Tarik Data Terbaru' atau ubah tanggal."
+              />
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+                <DataTable
+                  headers={[
+                    'Karyawan',
+                    'Departemen',
+                    'Tanggal',
+                    'Scan Masuk',
+                    'Scan Pulang',
+                    'Status',
+                    'Keterlambatan',
+                    'Denda',
+                    'Catatan / Log Mesin',
+                  ]}
+                >
+                  {pagedFingerspotRecords.map((r, idx) => {
+                    const isLate = r.status === 'Late'
+                    const hasDenda = Number(r.penaltyAmount) > 0
+                    return (
+                      <Tr key={`fspot-rec-${r.id || r.empId}-${r.date}-${idx}`}>
+                        {/* Karyawan */}
+                        <Td>
+                          <div className="flex items-center gap-2.5">
+                            <EmployeeAvatar name={r.employeeName} photo={r.photo} />
+                            <div>
+                              <p className="text-xs font-semibold text-gray-900 leading-tight">{r.employeeName}</p>
+                              <p className="text-[10px] text-gray-400 font-mono mt-0.5">
+                                NIK: {r.nik} · ID: {r.empId}
+                              </p>
+                            </div>
+                          </div>
+                        </Td>
+
+                        {/* Dept & Lokasi */}
+                        <Td>
+                          <div className="flex flex-col gap-1 items-start">
+                            <span className="text-xs text-gray-800 font-medium">{r.dept}</span>
+                            <span className="text-[10px] px-2 py-0.5 rounded-full border font-medium bg-amber-50 text-amber-700 border-amber-200">
+                              {r.locationLabel || 'Gudang'}
+                            </span>
+                          </div>
+                        </Td>
+
+                        {/* Tanggal */}
+                        <Td>
+                          <span className="text-xs font-semibold text-gray-800">{r.date}</span>
+                        </Td>
+
+                        {/* Scan Masuk */}
+                        <Td>
+                          <div className="flex flex-col gap-0.5">
+                            <span className={`text-xs font-mono font-bold ${isLate ? 'text-amber-600' : 'text-emerald-700'}`}>
+                              {r.checkIn || '—'}
+                            </span>
+                            <span className="text-[10px] text-gray-500 font-medium truncate max-w-[170px]" title={r.checkInLocation}>
+                              📍 {r.checkInLocation || 'Mesin Fingerspot'}
+                            </span>
+                          </div>
+                        </Td>
+
+                        {/* Scan Pulang */}
+                        <Td>
+                          <div className="flex flex-col gap-0.5">
+                            <span className="text-xs font-mono font-semibold text-gray-700">
+                              {r.checkOut || '—'}
+                            </span>
+                            <span className="text-[10px] text-gray-400 font-medium truncate max-w-[170px]" title={r.checkOutLocation}>
+                              📍 {r.checkOutLocation || r.checkInLocation || 'Mesin Fingerspot'}
+                            </span>
+                          </div>
+                        </Td>
+
+                        {/* Status */}
+                        <Td>
+                          <StatusBadge tone={STATUS_TONES[r.status] || 'default'}>{r.status}</StatusBadge>
+                        </Td>
+
+                        {/* Keterlambatan */}
+                        <Td>
+                          {r.lateMinutes > 0 ? (
+                            <span className="text-xs font-bold text-amber-700">
+                              {r.lateMinutes} mnt
+                            </span>
+                          ) : (
+                            <span className="text-xs text-emerald-700 font-medium">Tepat Waktu</span>
+                          )}
+                        </Td>
+
+                        {/* Denda */}
+                        <Td>
+                          {hasDenda ? (
+                            <span className="text-xs font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
+                              Rp {Number(r.penaltyAmount).toLocaleString('id-ID')}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-gray-400">Rp 0</span>
+                          )}
+                        </Td>
+
+                        {/* Catatan / Log Mesin */}
+                        <Td>
+                          <span className="text-[11px] text-gray-600 max-w-[200px] truncate block" title={r.note}>
+                            {r.note || 'Sync Mesin Fingerspot'}
+                          </span>
+                        </Td>
+                      </Tr>
+                    )
+                  })}
+                </DataTable>
+                <PaginationFooter
+                  page={fingerspotPage}
+                  pageSize={fingerspotPageSize}
+                  totalItems={fingerspotRecords.length}
+                  totalPages={fingerspotTotalPages}
+                  onPageChange={setFingerspotPage}
+                  onPageSizeChange={setFingerspotPageSize}
+                  itemLabel="data presensi Fingerspot"
+                />
+              </div>
+            )}
+          </div>
         )}
       </div>
 
