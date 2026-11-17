@@ -195,7 +195,8 @@ export async function GET(request) {
       "birthday", "sex", "marital",
       "identification_id", "country_id",
       "additional_note", "category_ids",
-      "user_id", "address_id"
+      "user_id", "address_id",
+      "work_contact_id", "bank_account_ids"
     ]
 
     const employeesResponse = await fetch(jsonRpcUrl, {
@@ -506,6 +507,93 @@ export async function GET(request) {
           }
         }
       }
+    }
+
+    // -- Step 5.5: Sync Bank Accounts from res.partner.bank to AppState ---------
+    try {
+      const bankResponse = await fetch(jsonRpcUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          method: "call",
+          params: {
+            service: "object",
+            method: "execute_kw",
+            args: [
+              odooDb, uid, odooApiKey, "res.partner.bank", "search_read",
+              [[]],
+              { fields: ["id", "acc_number", "bank_id", "partner_id", "acc_holder_name"], limit: 1000 }
+            ]
+          },
+          id: 55
+        })
+      })
+
+      if (bankResponse.ok) {
+        const bankData = await bankResponse.json()
+        const banks = bankData.result || []
+        const bankById = new Map()
+        const bankByPartnerId = new Map()
+        const bankByPartnerName = new Map()
+
+        banks.forEach(b => {
+          bankById.set(b.id, b)
+          if (b.partner_id && Array.isArray(b.partner_id)) {
+            bankByPartnerId.set(b.partner_id[0], b)
+            if (b.partner_id[1]) {
+              bankByPartnerName.set(b.partner_id[1].trim().toLowerCase(), b)
+            }
+          }
+        })
+
+        const existingBankRow = await prisma.appState.findUnique({
+          where: { key: 'hcm-employee-bank-accounts-v1' }
+        }).catch(() => null)
+        const bankState = existingBankRow?.value ? JSON.parse(existingBankRow.value) : {}
+
+        for (const emp of odooEmployees) {
+          const dbId = odooEmpMap[String(emp.id)]
+          if (!dbId) continue
+
+          // Jangan timpa jika user sudah mengubah manual via Quick-Edit di PeopleHub
+          if (bankState[String(dbId)]?.source === 'manual_edit') continue
+
+          let b = null
+          if (emp.bank_account_ids && emp.bank_account_ids.length > 0) {
+            b = bankById.get(emp.bank_account_ids[0])
+          }
+          if (!b && emp.work_contact_id && Array.isArray(emp.work_contact_id)) {
+            b = bankByPartnerId.get(emp.work_contact_id[0])
+          }
+          if (!b && emp.name) {
+            b = bankByPartnerName.get(emp.name.trim().toLowerCase())
+          }
+
+          if (b) {
+            const rawBankName = Array.isArray(b.bank_id) ? b.bank_id[1] : (b.bank_id || 'BCA')
+            const bankName = String(rawBankName || '').toUpperCase().includes('BCA') ? 'BCA' : String(rawBankName || 'BCA')
+            const cleanAcc = String(b.acc_number || '').replace(/[^0-9]/g, '')
+            const holder = b.acc_holder_name || (Array.isArray(b.partner_id) ? b.partner_id[1] : emp.name)
+
+            bankState[String(dbId)] = {
+              bankName,
+              bankAccountNumber: cleanAcc,
+              bankAccountHolder: holder,
+              source: 'odoo_contact',
+              updatedAt: new Date().toISOString()
+            }
+          }
+        }
+
+        await prisma.appState.upsert({
+          where: { key: 'hcm-employee-bank-accounts-v1' },
+          create: { key: 'hcm-employee-bank-accounts-v1', value: JSON.stringify(bankState) },
+          update: { value: JSON.stringify(bankState) }
+        }).catch(() => {})
+      }
+    } catch (bankErr) {
+      console.warn('[Odoo Sync] Error syncing contact bank accounts:', bankErr.message)
     }
 
     // Update lastSyncAt in OdooSettings

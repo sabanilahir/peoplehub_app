@@ -1210,7 +1210,11 @@ export default function OdooPayrollSyncPage() {
             <StatCard
               title="Siap Transfer"
               value={`${disbursementStats.readyCount || 0} Karyawan`}
-              subtitle="Rekening Lengkap & Valid"
+              subtitle={
+                disbursementStats.odooContactCount
+                  ? `${disbursementStats.odooContactCount} dari Odoo Contact`
+                  : "Rekening Lengkap & Valid"
+              }
               icon="✅"
               tone="green"
             />
@@ -1347,7 +1351,7 @@ export default function OdooPayrollSyncPage() {
                   <span>Pratinjau Data 13 Kolom Sesuai Template Transfer Bank BCA</span>
                 </h3>
                 <p className="text-xs text-gray-400 mt-0.5">
-                  Kolom Amount ditarik dari hasil perhitungan Net Salary Odoo. Klik tombol pensil untuk melengkapi nomor rekening.
+                  Kolom Amount ditarik dari hasil perhitungan Net Salary Odoo. Nomor rekening disinkronkan otomatis dari Contact Karyawan Odoo (<code className="text-teal-700 font-mono">res.partner.bank</code>). Klik tombol pensil jika ada penyesuaian khusus.
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -1411,7 +1415,25 @@ export default function OdooPayrollSyncPage() {
                           </td>
                           <td className="p-3 font-mono font-bold whitespace-nowrap">
                             {hasAccount ? (
-                              <span className="text-gray-900 tracking-wider">{item.bankAccountNumber}</span>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-gray-900 tracking-wider">{item.bankAccountNumber}</span>
+                                {item.bankSource === 'odoo_contact' && (
+                                  <span
+                                    className="text-[9px] font-sans font-semibold px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                    title="Disinkronkan otomatis dari Odoo Contact (res.partner.bank)"
+                                  >
+                                    ✓ Odoo
+                                  </span>
+                                )}
+                                {item.bankSource === 'manual_edit' && (
+                                  <span
+                                    className="text-[9px] font-sans font-semibold px-1.5 py-0.2 rounded bg-amber-50 text-amber-700 border border-amber-200"
+                                    title="Disesuaikan manual di PeopleHub"
+                                  >
+                                    ✏️ Manual
+                                  </span>
+                                )}
+                              </div>
                             ) : (
                               <span className="text-amber-800 font-bold bg-amber-100 px-2 py-0.5 rounded text-[10px] border border-amber-300">
                                 ⚠️ Belum Diisi
