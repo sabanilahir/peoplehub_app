@@ -3,7 +3,7 @@ import { prisma } from './prisma.js'
 import { calculateAttendancePenalty } from './attendanceCalculator.js'
 
 /**
- * Mengambil atau membuat pengaturan default Fingerspot
+ * Mengambil atau membuat pengaturan default global Fingerspot
  */
 export async function getFingerspotSettings() {
   let settings = await prisma.fingerspotSettings.findFirst()
@@ -11,8 +11,8 @@ export async function getFingerspotSettings() {
     settings = await prisma.fingerspotSettings.create({
       data: {
         apiUrl: 'https://developer.fingerspot.io/api',
-        apiToken: '',
-        cloudId: '',
+        apiToken: 'VI0IOGL703ZGROFY',
+        cloudId: 'C263889803072930',
         deviceSn: 'FSPOT-GUDANG-01',
         deviceName: 'Mesin Fingerspot Gudang',
         syncEnabled: true,
@@ -29,7 +29,7 @@ export async function getFingerspotSettings() {
 }
 
 /**
- * Memperbarui pengaturan Fingerspot
+ * Memperbarui pengaturan global Fingerspot
  */
 export async function updateFingerspotSettings(data) {
   const current = await getFingerspotSettings()
@@ -44,19 +44,116 @@ export async function updateFingerspotSettings(data) {
 }
 
 /**
- * Memanggil API Fingerspot.iO Cloud untuk mengambil log scan presensi
+ * Mengambil daftar seluruh perangkat Fingerspot
+ * Jika belum ada data, otomatis inisialisasi device pertama dari kredensial default
  */
-export async function fetchFingerspotAttLog({ startDate, endDate, settings, forceMock = false }) {
+export async function getFingerspotDevices() {
+  let devices = await prisma.fingerspotDevice.findMany({
+    orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+  })
+
+  // Auto-seed device pertama jika tabel masih kosong
+  if (devices.length === 0) {
+    const defaultDevice = await prisma.fingerspotDevice.create({
+      data: {
+        deviceName: 'Mesin Fingerspot Gudang',
+        deviceSn: 'FSPOT-GUDANG-01',
+        cloudId: 'C263889803072930',
+        apiToken: 'VI0IOGL703ZGROFY',
+        apiUrl: 'https://developer.fingerspot.io/api',
+        locationLabel: 'Gudang',
+        isActive: true,
+        sortOrder: 1,
+        lastSyncStatus: 'STANDBY',
+        lastSyncMsg: 'Perangkat siap digunakan',
+      },
+    })
+    devices = [defaultDevice]
+  }
+
+  return devices
+}
+
+/**
+ * Mengambil perangkat berdasarkan ID
+ */
+export async function getFingerspotDeviceById(id) {
+  return prisma.fingerspotDevice.findUnique({
+    where: { id },
+  })
+}
+
+/**
+ * Membuat perangkat Fingerspot baru
+ */
+export async function createFingerspotDevice(data) {
+  return prisma.fingerspotDevice.create({
+    data: {
+      deviceName: data.deviceName?.trim() || 'Mesin Fingerspot',
+      deviceSn: data.deviceSn?.trim() || '',
+      cloudId: data.cloudId?.trim() || '',
+      apiToken: data.apiToken?.trim() || '',
+      apiUrl: data.apiUrl?.trim() || 'https://developer.fingerspot.io/api',
+      locationLabel: data.locationLabel?.trim() || '',
+      isActive: data.isActive !== undefined ? Boolean(data.isActive) : true,
+      sortOrder: Number(data.sortOrder) || 0,
+      lastSyncStatus: 'STANDBY',
+      lastSyncMsg: 'Baru ditambahkan',
+    },
+  })
+}
+
+/**
+ * Memperbarui data perangkat Fingerspot
+ */
+export async function updateFingerspotDevice(id, data) {
+  return prisma.fingerspotDevice.update({
+    where: { id },
+    data: {
+      ...data,
+      updatedAt: new Date(),
+    },
+  })
+}
+
+/**
+ * Menghapus perangkat Fingerspot
+ */
+export async function deleteFingerspotDevice(id) {
+  return prisma.fingerspotDevice.delete({
+    where: { id },
+  })
+}
+
+/**
+ * Memanggil API Fingerspot.iO Cloud untuk mengambil log scan presensi dari 1 perangkat spesifik
+ */
+export async function fetchFingerspotAttLog({
+  startDate,
+  endDate,
+  device = null,
+  settings = null,
+  forceMock = false,
+}) {
   const cfg = settings || (await getFingerspotSettings())
   const isSimulation = Boolean(forceMock || cfg.simulationMode)
 
+  const activeApiUrl = (device?.apiUrl || cfg.apiUrl || 'https://developer.fingerspot.io/api').replace(/\/+$/, '')
+  const activeApiToken = (device?.apiToken || cfg.apiToken || '').trim()
+  const activeCloudId = (device?.cloudId || cfg.cloudId || '').trim()
+  const activeDeviceSn = (device?.deviceSn || cfg.deviceSn || '').trim()
+  const activeDeviceName = (device?.deviceName || cfg.deviceName || 'Mesin Fingerspot').trim()
+  const activeLocation = (device?.locationLabel || 'Gudang').trim()
+
   // 1. Jika belum ada kredensial dan simulasi tidak aktif -> Mode Standby (Siaga)
-  if (!cfg.apiToken || !cfg.cloudId) {
+  if (!activeApiToken || !activeCloudId) {
     if (!isSimulation) {
       return {
         success: true,
         isStandby: true,
-        message: 'Fingerspot dalam mode siaga: Menunggu pengisian Cloud ID dan API Token di Pengaturan Lokasi Kerja.',
+        deviceId: device?.id || null,
+        deviceName: activeDeviceName,
+        message: `Perangkat "${activeDeviceName}" dalam mode siaga: Cloud ID atau API Token belum diisi.`,
         data: [],
       }
     }
@@ -64,23 +161,21 @@ export async function fetchFingerspotAttLog({ startDate, endDate, settings, forc
 
   // 2. Jika mode simulasi aktif (atau dipaksa via parameter)
   if (isSimulation) {
-    // Generator simulasi scan karyawan gudang riil PeopleHub
     const targetDate = startDate || new Date().toISOString().split('T')[0]
-    const gudangEmps = await prisma.employee.findMany({
+    const emps = await prisma.employee.findMany({
       where: {
         OR: [
-          { location: { contains: 'gudang', mode: 'insensitive' } },
+          { location: { contains: activeLocation || 'gudang', mode: 'insensitive' } },
           { dept: { contains: 'fullfilment', mode: 'insensitive' } },
           { dept: { contains: 'supplychain', mode: 'insensitive' } },
         ],
       },
       select: { id: true, nik: true, name: true, location: true, dept: true },
-      take: 25,
+      take: 20,
     })
 
     const mockLogs = []
-    gudangEmps.forEach((emp, idx) => {
-      // Variasi waktu kedatangan karyawan gudang: sebagian tepat waktu (07:50 - 08:00), sebagian telat tipis, sebagian telat >20 min
+    emps.forEach((emp, idx) => {
       let inH = 8
       let inM = (idx * 3) % 25 // 08:00 s/d 08:24
       if (idx === 3) {
@@ -99,10 +194,13 @@ export async function fetchFingerspotAttLog({ startDate, endDate, settings, forc
         scan_date: `${targetDate} ${inTimeStr}`,
         status_scan: 1,
         verify: 1,
-        sn: cfg.deviceSn || 'FSPOT-GUDANG-01',
+        sn: activeDeviceSn || 'FSPOT-01',
+        deviceName: activeDeviceName,
+        deviceId: device?.id || null,
+        locationLabel: activeLocation,
       })
 
-      // Log Check-Out (jika sudah sore atau tanggal lampau)
+      // Log Check-Out (jika sore / tanggal lampau)
       const now = new Date()
       const isPastOrEvening = targetDate < now.toISOString().split('T')[0] || now.getHours() >= 17
       if (isPastOrEvening) {
@@ -111,7 +209,10 @@ export async function fetchFingerspotAttLog({ startDate, endDate, settings, forc
           scan_date: `${targetDate} ${outTimeStr}`,
           status_scan: 2,
           verify: 1,
-          sn: cfg.deviceSn || 'FSPOT-GUDANG-01',
+          sn: activeDeviceSn || 'FSPOT-01',
+          deviceName: activeDeviceName,
+          deviceId: device?.id || null,
+          locationLabel: activeLocation,
         })
       }
     })
@@ -119,27 +220,29 @@ export async function fetchFingerspotAttLog({ startDate, endDate, settings, forc
     return {
       success: true,
       isMock: true,
-      message: `[Mode Simulasi] ${mockLogs.length} scan log dihasilkan untuk ${gudangEmps.length} staf gudang`,
+      deviceId: device?.id || null,
+      deviceName: activeDeviceName,
+      message: `[Simulasi ${activeDeviceName}] ${mockLogs.length} scan log dihasilkan untuk ${emps.length} karyawan`,
       data: mockLogs,
     }
   }
 
-  // Panggilan Riil ke Fingerspot.iO Cloud API
+  // 3. Panggilan Riil ke Fingerspot.iO Cloud API
   try {
-    const endpoint = `${cfg.apiUrl.replace(/\/+$/, '')}/get_attlog`
+    const endpoint = `${activeApiUrl}/get_attlog`
     const payload = {
-      cloud_id: cfg.cloudId,
+      cloud_id: activeCloudId,
       start_date: startDate,
       end_date: endDate || startDate,
     }
-    if (cfg.deviceSn) {
-      payload.device_sn = cfg.deviceSn
+    if (activeDeviceSn) {
+      payload.device_sn = activeDeviceSn
     }
 
     const res = await fetch(endpoint, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${cfg.apiToken}`,
+        Authorization: `Bearer ${activeApiToken}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(payload),
@@ -149,7 +252,9 @@ export async function fetchFingerspotAttLog({ startDate, endDate, settings, forc
       const errText = await res.text()
       return {
         success: false,
-        error: `Gagal memanggil API Fingerspot (HTTP ${res.status}): ${errText}`,
+        deviceId: device?.id || null,
+        deviceName: activeDeviceName,
+        error: `Gagal memanggil API Fingerspot ${activeDeviceName} (HTTP ${res.status}): ${errText}`,
         data: [],
       }
     }
@@ -157,27 +262,120 @@ export async function fetchFingerspotAttLog({ startDate, endDate, settings, forc
     const result = await res.json()
     const rawData = Array.isArray(result) ? result : result.data || []
 
+    // Pasang metadata perangkat ke setiap log
+    const enrichedLogs = rawData.map((item) => ({
+      ...item,
+      sn: item.sn || item.device_sn || activeDeviceSn,
+      deviceName: activeDeviceName,
+      deviceId: device?.id || null,
+      locationLabel: activeLocation,
+    }))
+
     return {
       success: true,
       isMock: false,
-      message: result.message || `Berhasil mengambil ${rawData.length} scan log dari Fingerspot.iO`,
-      data: rawData,
+      deviceId: device?.id || null,
+      deviceName: activeDeviceName,
+      message: result.message || `Berhasil mengambil ${enrichedLogs.length} scan log dari ${activeDeviceName}`,
+      data: enrichedLogs,
     }
   } catch (err) {
-    console.error('Error fetching Fingerspot attlog:', err)
+    console.error(`Error fetching Fingerspot attlog for ${activeDeviceName}:`, err)
     return {
       success: false,
-      error: `Kesalahan jaringan saat memanggil Fingerspot.iO: ${err.message}`,
+      deviceId: device?.id || null,
+      deviceName: activeDeviceName,
+      error: `Kesalahan jaringan saat memanggil ${activeDeviceName}: ${err.message}`,
       data: [],
     }
   }
 }
 
 /**
- * Memproses dan mengagregasi log scan mentah menjadi presensi harian gudang,
- * melakukan pencocokan karyawan, menghitung denda/keterlambatan, dan menyimpan ke DB.
+ * Menjalankan penarikan log dari SEMUA perangkat aktif secara paralel/sekuensial
+ * dan memperbarui status sinkronisasi masing-masing perangkat.
  */
-export async function processFingerspotLogs(rawLogs = [], { sourceLabel = 'Mesin Fingerspot Gudang (API)' } = {}) {
+export async function fetchAllDeviceAttLogs({ startDate, endDate, forceMock = false }) {
+  const settings = await getFingerspotSettings()
+  const devices = await getFingerspotDevices()
+  const activeDevices = devices.filter((d) => d.isActive)
+
+  if (activeDevices.length === 0) {
+    return {
+      success: true,
+      isStandby: true,
+      message: 'Tidak ada perangkat Fingerspot aktif untuk disinkronkan.',
+      allLogs: [],
+      deviceResults: [],
+      totalFetched: 0,
+    }
+  }
+
+  const allLogs = []
+  const deviceResults = []
+
+  for (const device of activeDevices) {
+    const fetchRes = await fetchFingerspotAttLog({
+      startDate,
+      endDate,
+      device,
+      settings,
+      forceMock,
+    })
+
+    const syncStatus = fetchRes.isStandby
+      ? 'STANDBY'
+      : fetchRes.success
+      ? (fetchRes.data?.length > 0 ? 'SUCCESS' : 'NO_DATA')
+      : 'ERROR'
+
+    const syncCount = fetchRes.data?.length || 0
+    const syncMsg = fetchRes.error || fetchRes.message || 'Selesai'
+
+    // Update status di tabel FingerspotDevice
+    try {
+      await updateFingerspotDevice(device.id, {
+        lastSyncAt: new Date(),
+        lastSyncStatus: syncStatus,
+        lastSyncCount: syncCount,
+        lastSyncMsg: syncMsg,
+      })
+    } catch (dbErr) {
+      console.error(`Failed to update device status for ${device.deviceName}:`, dbErr)
+    }
+
+    deviceResults.push({
+      deviceId: device.id,
+      deviceName: device.deviceName,
+      cloudId: device.cloudId,
+      status: syncStatus,
+      count: syncCount,
+      message: syncMsg,
+      isMock: Boolean(fetchRes.isMock),
+      error: fetchRes.error || null,
+    })
+
+    if (fetchRes.success && Array.isArray(fetchRes.data)) {
+      allLogs.push(...fetchRes.data)
+    }
+  }
+
+  return {
+    success: true,
+    isMock: Boolean(forceMock || settings.simulationMode),
+    allLogs,
+    deviceResults,
+    totalFetched: allLogs.length,
+    message: `Selesai menarik data dari ${activeDevices.length} perangkat. Total ${allLogs.length} scan log terkumpul.`,
+  }
+}
+
+/**
+ * Memproses dan mengagregasi log scan mentah menjadi presensi harian karyawan,
+ * melakukan resolusi konflik antar multi-device (check-in terpagi, check-out terlambat),
+ * menghitung denda/keterlambatan, dan menyimpan ke DB Attendance.
+ */
+export async function processFingerspotLogs(rawLogs = [], { sourceLabel = 'Mesin Fingerspot (API)' } = {}) {
   if (!Array.isArray(rawLogs) || rawLogs.length === 0) {
     return {
       success: true,
@@ -212,7 +410,7 @@ export async function processFingerspotLogs(rawLogs = [], { sourceLabel = 'Mesin
   })
 
   // 2. Kelompokkan multi-scan per (PIN, Tanggal)
-  // key: "PIN___YYYY-MM-DD" -> array of HH:MM
+  // Menyimpan array item: { time, deviceName, deviceSn, locationLabel }
   const scanGroups = new Map()
 
   rawLogs.forEach((item) => {
@@ -221,7 +419,6 @@ export async function processFingerspotLogs(rawLogs = [], { sourceLabel = 'Mesin
 
     if (!rawPin || !rawDateStr) return
 
-    // Ekstrak Tanggal dan Jam
     let datePart = ''
     let timePart = ''
 
@@ -237,7 +434,6 @@ export async function processFingerspotLogs(rawLogs = [], { sourceLabel = 'Mesin
       datePart = rawDateStr.slice(0, 10)
     }
 
-    // Normalisasi format tanggal DD/MM/YYYY ke YYYY-MM-DD jika diperlukan
     if (datePart.includes('/')) {
       const segs = datePart.split('/')
       if (segs[0].length === 2 && segs[2]?.length === 4) {
@@ -252,11 +448,16 @@ export async function processFingerspotLogs(rawLogs = [], { sourceLabel = 'Mesin
       scanGroups.set(groupKey, {
         pin: rawPin,
         date: datePart,
-        times: [],
-        deviceSn: item.sn || item.device_sn || null,
+        scans: [],
       })
     }
-    scanGroups.get(groupKey).times.push(timePart)
+
+    scanGroups.get(groupKey).scans.push({
+      time: timePart,
+      deviceName: item.deviceName || 'Fingerspot',
+      deviceSn: item.sn || item.device_sn || '',
+      locationLabel: item.locationLabel || item.location || '',
+    })
   })
 
   let savedCount = 0
@@ -266,12 +467,18 @@ export async function processFingerspotLogs(rawLogs = [], { sourceLabel = 'Mesin
 
   // 3. Proses tiap kelompok presensi harian
   for (const [key, group] of scanGroups.entries()) {
-    const { pin, date, times, deviceSn } = group
+    const { pin, date, scans } = group
 
-    // Urutkan waktu scan harian
-    times.sort()
-    const checkInTime = times[0] // Scan paling awal = Masuk
-    const checkOutTime = times.length > 1 && times[times.length - 1] !== checkInTime ? times[times.length - 1] : null
+    // Urutkan waktu scan harian dari yang paling pagi ke paling malam
+    scans.sort((a, b) => a.time.localeCompare(b.time))
+
+    const earliestScan = scans[0] // Check-in = scan paling awal
+    const latestScan = scans.length > 1 && scans[scans.length - 1].time !== earliestScan.time
+      ? scans[scans.length - 1]
+      : null
+
+    const checkInTime = earliestScan.time
+    const checkOutTime = latestScan ? latestScan.time : null
 
     // Pencocokan Employee
     const matchedEmp =
@@ -288,11 +495,11 @@ export async function processFingerspotLogs(rawLogs = [], { sourceLabel = 'Mesin
 
     matchedCount++
 
-    // 4. Hitung keterlambatan & denda dengan aturan jam kerja Gudang
+    // 4. Hitung keterlambatan & denda
     const penaltyCalc = await calculateAttendancePenalty({
       clockInTime: checkInTime,
       date,
-      locationCode: 'gudang',
+      locationCode: matchedEmp.workLocationCode || 'gudang',
       locationName: matchedEmp.location || 'Gudang',
       deptName: matchedEmp.dept || 'Fullfilment',
     })
@@ -300,8 +507,27 @@ export async function processFingerspotLogs(rawLogs = [], { sourceLabel = 'Mesin
     const finalStatus = penaltyCalc.status || 'Present'
     const finalLateMin = penaltyCalc.lateMinutes || 0
     const finalPenalty = penaltyCalc.penaltyAmount || 0
-    let finalNote = penaltyCalc.penaltyLabel ? `${penaltyCalc.penaltyLabel} | Fingerspot` : 'Sync Otomatis Fingerspot.iO'
-    if (deviceSn) finalNote += ` (${deviceSn})`
+
+    // Keterangan lokasi check-in & check-out berdasarkan perangkat
+    const inLocLabel = earliestScan.deviceName
+      ? `${earliestScan.deviceName}${earliestScan.locationLabel ? ` (${earliestScan.locationLabel})` : ''}`
+      : sourceLabel
+
+    const outLocLabel = latestScan?.deviceName
+      ? `${latestScan.deviceName}${latestScan.locationLabel ? ` (${latestScan.locationLabel})` : ''}`
+      : checkOutTime ? inLocLabel : null
+
+    // Catatan rinci (termasuk conflict resolution antar mesin)
+    let finalNote = penaltyCalc.penaltyLabel
+      ? `${penaltyCalc.penaltyLabel} | Fingerspot`
+      : 'Sync Otomatis Fingerspot'
+
+    if (earliestScan.deviceName) {
+      finalNote += ` [Masuk: ${earliestScan.deviceName} (${checkInTime})]`
+    }
+    if (latestScan && latestScan.deviceName) {
+      finalNote += ` [Pulang: ${latestScan.deviceName} (${checkOutTime})]`
+    }
 
     // 5. Upsert ke database Attendance
     try {
@@ -320,8 +546,8 @@ export async function processFingerspotLogs(rawLogs = [], { sourceLabel = 'Mesin
           status: finalStatus,
           lateMinutes: finalLateMin,
           penaltyAmount: finalPenalty,
-          checkInLocation: sourceLabel,
-          checkOutLocation: checkOutTime ? sourceLabel : null,
+          checkInLocation: inLocLabel,
+          checkOutLocation: outLocLabel,
           isWithinRadius: true,
           note: finalNote,
         },
@@ -331,8 +557,8 @@ export async function processFingerspotLogs(rawLogs = [], { sourceLabel = 'Mesin
           status: finalStatus,
           lateMinutes: finalLateMin,
           penaltyAmount: finalPenalty,
-          checkInLocation: sourceLabel,
-          checkOutLocation: checkOutTime ? sourceLabel : undefined,
+          checkInLocation: inLocLabel,
+          checkOutLocation: outLocLabel || undefined,
           note: finalNote,
         },
       })
@@ -351,9 +577,8 @@ export async function processFingerspotLogs(rawLogs = [], { sourceLabel = 'Mesin
     savedCount,
     skippedCount,
     errors,
-    message: `Berhasil memproses ${savedCount} presensi karyawan gudang dari ${rawLogs.length} scan log Fingerspot.`,
+    message: `Berhasil memproses ${savedCount} presensi karyawan dari ${rawLogs.length} scan log Fingerspot (${scanGroups.size} entri harian).`,
   }
 }
 
 export { normalizeFingerspotRows } from './fingerspotExcelParser.js'
-

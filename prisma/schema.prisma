@@ -653,7 +653,7 @@ model WorkLocationTarget {
   @@index([active])
 }
 
-// --- FINGERSPOT BIOMETRIC INTEGRATION (GUDANG) ---
+// --- FINGERSPOT BIOMETRIC INTEGRATION (GUDANG & MULTI-DEVICE) ---
 model FingerspotSettings {
   id               String    @id @default(cuid())
   apiUrl           String    @default("https://developer.fingerspot.io/api")
@@ -671,6 +671,24 @@ model FingerspotSettings {
   lastSyncCount    Int       @default(0)
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
+}
+
+model FingerspotDevice {
+  id             String    @id @default(cuid())
+  deviceName     String    // Label bebas, misal "Mesin Gudang Lt.1"
+  deviceSn       String    @default("") // Serial number opsional
+  cloudId        String    // Cloud ID dari portal Fingerspot
+  apiToken       String    // Bearer Token untuk device ini
+  apiUrl         String    @default("https://developer.fingerspot.io/api")
+  locationLabel  String    @default("") // Lokasi kerja terkait, misal "Gudang", "Kantor Pusat"
+  isActive       Boolean   @default(true)
+  sortOrder      Int       @default(0)
+  lastSyncAt     DateTime?
+  lastSyncStatus String?   // "SUCCESS" | "ERROR" | "NO_DATA" | "STANDBY"
+  lastSyncCount  Int       @default(0)
+  lastSyncMsg    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 }
 
 // --- COMPANY ASSET MANAGEMENT (PENCATATAN ASET KARYAWAN) ---

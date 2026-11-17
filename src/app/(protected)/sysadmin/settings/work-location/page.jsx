@@ -88,6 +88,28 @@ function WorkLocationSettingsContent() {
   const [copiedCron, setCopiedCron] = useState(false)
   const [copiedCronParam, setCopiedCronParam] = useState(false)
 
+  // Fingerspot Multi-Device Management State
+  const [devices, setDevices] = useState([])
+  const [loadingDevices, setLoadingDevices] = useState(false)
+  const [showDeviceModal, setShowDeviceModal] = useState(false)
+  const [editingDevice, setEditingDevice] = useState(null)
+  const [deviceForm, setDeviceForm] = useState({
+    deviceName: '',
+    deviceSn: '',
+    cloudId: '',
+    apiToken: '',
+    apiUrl: 'https://developer.fingerspot.io/api',
+    locationLabel: 'Gudang',
+    isActive: true,
+    sortOrder: 1,
+  })
+  const [savingDevice, setSavingDevice] = useState(false)
+  const [testingDeviceId, setTestingDeviceId] = useState(null)
+  const [deviceTestResults, setDeviceTestResults] = useState({})
+  const [modalTesting, setModalTesting] = useState(false)
+  const [modalTestResult, setModalTestResult] = useState(null)
+  const [showDeviceToken, setShowDeviceToken] = useState(false)
+
   // Geofencing Target Locations State
   const storeEmployees = useEmployeeStore((s) => s.employees)
   const [targets, setTargets] = useState([])
@@ -277,6 +299,171 @@ function WorkLocationSettingsContent() {
     }
   }
 
+  // Fingerspot Devices Handlers
+  const fetchFingerspotDevices = async () => {
+    try {
+      setLoadingDevices(true)
+      const res = await fetch('/api/attendance/fingerspot/devices')
+      const data = await res.json()
+      if (data.success && Array.isArray(data.data)) {
+        setDevices(data.data)
+      }
+    } catch (err) {
+      console.error('Error fetching fingerspot devices:', err)
+    } finally {
+      setLoadingDevices(false)
+    }
+  }
+
+  const handleOpenAddDevice = () => {
+    setEditingDevice(null)
+    setDeviceForm({
+      deviceName: '',
+      deviceSn: '',
+      cloudId: '',
+      apiToken: '',
+      apiUrl: 'https://developer.fingerspot.io/api',
+      locationLabel: 'Gudang',
+      isActive: true,
+      sortOrder: (devices.length || 0) + 1,
+    })
+    setModalTestResult(null)
+    setShowDeviceModal(true)
+  }
+
+  const handleOpenEditDevice = (dev) => {
+    setEditingDevice(dev)
+    setDeviceForm({
+      deviceName: dev.deviceName || '',
+      deviceSn: dev.deviceSn || '',
+      cloudId: dev.cloudId || '',
+      apiToken: dev.apiToken || '',
+      apiUrl: dev.apiUrl || 'https://developer.fingerspot.io/api',
+      locationLabel: dev.locationLabel || 'Gudang',
+      isActive: dev.isActive !== undefined ? dev.isActive : true,
+      sortOrder: dev.sortOrder || 1,
+    })
+    setModalTestResult(null)
+    setShowDeviceModal(true)
+  }
+
+  const handleSaveDevice = async (e) => {
+    if (e) e.preventDefault()
+    if (!deviceForm.cloudId || !deviceForm.apiToken) {
+      alert('Cloud ID dan API Token (Bearer) wajib diisi.')
+      return
+    }
+
+    try {
+      setSavingDevice(true)
+      const isEdit = Boolean(editingDevice?.id)
+      const url = '/api/attendance/fingerspot/devices'
+      const method = isEdit ? 'PUT' : 'POST'
+      const payload = isEdit ? { id: editingDevice.id, ...deviceForm } : deviceForm
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const data = await res.json()
+      if (data.success) {
+        showToast(`✅ ${data.message}`)
+        setShowDeviceModal(false)
+        await fetchFingerspotDevices()
+      } else {
+        alert(data.error || 'Gagal menyimpan data perangkat')
+      }
+    } catch (err) {
+      console.error(err)
+      alert('Terjadi kesalahan jaringan saat menyimpan perangkat')
+    } finally {
+      setSavingDevice(false)
+    }
+  }
+
+  const handleDeleteDevice = async (id, name) => {
+    if (!confirm(`Apakah Anda yakin ingin menghapus perangkat "${name}"?`)) return
+    try {
+      const res = await fetch(`/api/attendance/fingerspot/devices?id=${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      })
+      const data = await res.json()
+      if (data.success) {
+        showToast(`✅ ${data.message}`)
+        await fetchFingerspotDevices()
+      } else {
+        alert(data.error || 'Gagal menghapus perangkat')
+      }
+    } catch (err) {
+      console.error(err)
+      alert('Terjadi kesalahan jaringan saat menghapus perangkat')
+    }
+  }
+
+  const handleToggleDeviceActive = async (id, currentStatus) => {
+    try {
+      const res = await fetch('/api/attendance/fingerspot/devices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'toggle', id, isActive: !currentStatus }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        showToast(data.message)
+        await fetchFingerspotDevices()
+      } else {
+        alert(data.error || 'Gagal mengubah status perangkat')
+      }
+    } catch (err) {
+      console.error(err)
+      alert('Terjadi kesalahan jaringan saat mengubah status perangkat')
+    }
+  }
+
+  const handleTestSingleDevice = async (dev) => {
+    try {
+      setTestingDeviceId(dev.id)
+      setDeviceTestResults((prev) => ({ ...prev, [dev.id]: null }))
+      const res = await fetch('/api/attendance/fingerspot/devices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'test', ...dev }),
+      })
+      const data = await res.json()
+      setDeviceTestResults((prev) => ({ ...prev, [dev.id]: data }))
+    } catch (err) {
+      setDeviceTestResults((prev) => ({
+        ...prev,
+        [dev.id]: { success: false, error: `Kesalahan jaringan: ${err.message}` },
+      }))
+    } finally {
+      setTestingDeviceId(null)
+    }
+  }
+
+  const handleTestModalDevice = async () => {
+    if (!deviceForm.cloudId || !deviceForm.apiToken) {
+      alert('Cloud ID dan API Token harus diisi terlebih dahulu untuk diuji.')
+      return
+    }
+    try {
+      setModalTesting(true)
+      setModalTestResult(null)
+      const res = await fetch('/api/attendance/fingerspot/devices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'test', ...deviceForm }),
+      })
+      const data = await res.json()
+      setModalTestResult(data)
+    } catch (err) {
+      setModalTestResult({ success: false, error: `Kesalahan jaringan: ${err.message}` })
+    } finally {
+      setModalTesting(false)
+    }
+  }
+
   const handleSyncFingerspotNow = async () => {
     try {
       setSyncingFingerspot(true)
@@ -287,13 +474,13 @@ function WorkLocationSettingsContent() {
         body: JSON.stringify({
           startDate: today,
           endDate: today,
-          forceMock: !fingerspotSettings.apiToken,
+          forceMock: false,
         }),
       })
       const data = await res.json()
       if (data.success) {
         showToast(`✅ ${data.message}`)
-        await fetchFingerspotSettings()
+        await Promise.all([fetchFingerspotSettings(), fetchFingerspotDevices()])
       } else {
         alert(data.error || 'Gagal sinkronisasi data Fingerspot')
       }
@@ -308,6 +495,7 @@ function WorkLocationSettingsContent() {
   useEffect(() => {
     if (activeTab === 'fingerspot') {
       fetchFingerspotSettings()
+      fetchFingerspotDevices()
     }
   }, [activeTab])
 
@@ -1573,7 +1761,7 @@ function WorkLocationSettingsContent() {
         </div>
       )}
 
-      {/* ── TAB 3: MESIN FINGERSPOT (GUDANG) ── */}
+      {/* ── TAB 3: MESIN FINGERSPOT (MULTI-DEVICE & GUDANG) ── */}
       {activeTab === 'fingerspot' && (
         <div className='space-y-6'>
           {/* Top Fingerspot StatCards */}
@@ -1586,10 +1774,10 @@ function WorkLocationSettingsContent() {
               tone={fingerspotSettings.syncEnabled ? 'green' : 'amber'}
             />
             <StatCard
-              icon='🏢'
-              label='Mesin Absensi Gudang'
-              value={fingerspotSettings.deviceSn || 'FSPOT-GUDANG-01'}
-              hint={fingerspotSettings.deviceName || 'Lokasi Gudang'}
+              icon='📡'
+              label='Perangkat Mesin'
+              value={`${devices.length} Perangkat`}
+              hint={`${devices.filter((d) => d.isActive).length} Mesin Aktif Sinkronisasi`}
               tone='brand'
             />
             <StatCard
@@ -1624,142 +1812,270 @@ function WorkLocationSettingsContent() {
               icon='👥'
               label='Presensi Terproses'
               value={`${fingerspotSettings.lastSyncCount || 0} Data`}
-              hint='Karyawan Gudang / Shift'
+              hint='Agregat Seluruh Mesin'
               tone='brand'
             />
           </div>
 
-          {/* Configuration Form Card */}
+          {/* MAIN CARD: MANAJEMEN MULTI-DEVICE FINGERSPOT */}
           <div className='rounded-2xl border border-gray-200 bg-white p-6 shadow-xs'>
             <div className='flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-gray-100 gap-3'>
               <div>
                 <h3 className='font-bold text-gray-900 flex items-center gap-2'>
                   <Fingerprint className='w-5 h-5 text-teal-600' />
-                  Konfigurasi API Fingerspot.iO (Lokasi Gudang)
+                  Daftar Perangkat Mesin Fingerspot Cloud
                 </h3>
                 <p className='text-xs text-gray-500 mt-1'>
-                  Pengaturan koneksi API untuk penarikan log absensi biometrik secara otomatis dan terjadwal ke PeopleHub.
+                  Kelola hingga 5 perangkat mesin biometrik Fingerspot. Sistem akan menarik dan menggabungkan log scan dari seluruh mesin aktif secara simultan.
                 </p>
               </div>
 
-              <div className='flex items-center gap-2'>
+              <div className='flex items-center gap-2 flex-wrap'>
                 <button
                   type='button'
-                  onClick={handleTestFingerspotConnection}
-                  disabled={testingConnection}
-                  className='inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-gray-300 bg-white text-xs font-semibold text-gray-700 hover:bg-gray-50 transition shadow-2xs cursor-pointer disabled:opacity-50'
+                  onClick={handleOpenAddDevice}
+                  className='inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-teal-600 text-white text-xs font-semibold hover:bg-teal-700 transition shadow-2xs cursor-pointer'
                 >
-                  {testingConnection ? (
-                    <>
-                      <Loader2 className='w-3.5 h-3.5 animate-spin' />
-                      Menguji...
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle2 className='w-3.5 h-3.5 text-teal-600' />
-                      Uji Koneksi API
-                    </>
-                  )}
+                  <Plus className='w-3.5 h-3.5' />
+                  Tambah Perangkat
                 </button>
 
                 <button
                   type='button'
                   onClick={handleSyncFingerspotNow}
                   disabled={syncingFingerspot}
-                  className='inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-teal-600 text-white text-xs font-semibold hover:bg-teal-700 transition shadow-2xs cursor-pointer disabled:opacity-50'
+                  className='inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border border-teal-300 bg-teal-50 text-teal-800 text-xs font-semibold hover:bg-teal-100 transition shadow-2xs cursor-pointer disabled:opacity-50'
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${syncingFingerspot ? 'animate-spin' : ''}`} />
-                  {syncingFingerspot ? 'Menarik Data...' : 'Sync Hari Ini Sekarang'}
+                  {syncingFingerspot ? 'Menarik Seluruh Mesin...' : 'Sync Semua Mesin Sekarang'}
                 </button>
 
                 <Link
                   href="/hr/attendance"
-                  className='inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border border-teal-200 bg-teal-50 text-teal-800 text-xs font-semibold hover:bg-teal-100 transition shadow-2xs cursor-pointer'
+                  className='inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border border-gray-200 bg-gray-50 text-gray-700 text-xs font-semibold hover:bg-gray-100 transition shadow-2xs cursor-pointer'
                   title="Buka menu Upload Excel Fingerspot di modul Attendance"
                 >
                   <Upload className='w-3.5 h-3.5' />
-                  Upload Excel Fingerspot
+                  Upload Excel
                 </Link>
               </div>
             </div>
 
-            {/* Test Connection Banner */}
-            {testResult && (
-              <div
-                className={`mt-4 p-3.5 rounded-xl border text-xs flex items-center justify-between ${
-                  testResult.success
-                    ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                    : 'bg-rose-50 border-rose-200 text-rose-800'
-                }`}
-              >
-                <div className='flex items-center gap-2'>
-                  {testResult.success ? (
-                    <CheckCircle2 className='w-4 h-4 text-emerald-600 flex-shrink-0' />
+            {/* Device Listing Table */}
+            <div className='mt-5 overflow-x-auto rounded-xl border border-gray-200'>
+              <table className='w-full text-left text-xs'>
+                <thead className='bg-gray-50 text-gray-700 border-b border-gray-200 font-semibold'>
+                  <tr>
+                    <th className='py-3 px-3.5 text-center w-12'>No</th>
+                    <th className='py-3 px-3.5'>Nama Mesin &amp; SN</th>
+                    <th className='py-3 px-3.5'>Cloud ID &amp; Lokasi</th>
+                    <th className='py-3 px-3.5'>API Token (Bearer)</th>
+                    <th className='py-3 px-3.5 text-center'>Status Aktif</th>
+                    <th className='py-3 px-3.5'>Status Sync Terakhir</th>
+                    <th className='py-3 px-3.5 text-right'>Aksi</th>
+                  </tr>
+                </thead>
+                <tbody className='divide-y divide-gray-100'>
+                  {loadingDevices ? (
+                    <tr>
+                      <td colSpan={7} className='py-8 text-center text-gray-400'>
+                        <Loader2 className='w-5 h-5 animate-spin mx-auto mb-2 text-teal-600' />
+                        Memuat daftar perangkat Fingerspot...
+                      </td>
+                    </tr>
+                  ) : devices.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className='py-8 text-center text-gray-500'>
+                        <p className='font-medium'>Belum ada perangkat Fingerspot terdaftar.</p>
+                        <p className='text-[11px] text-gray-400 mt-1'>
+                          Klik tombol &quot;+ Tambah Perangkat&quot; untuk menambahkan perangkat pertama Anda.
+                        </p>
+                      </td>
+                    </tr>
                   ) : (
-                    <AlertTriangle className='w-4 h-4 text-rose-600 flex-shrink-0' />
+                    devices.map((dev, idx) => {
+                      const testRes = deviceTestResults[dev.id]
+                      const isTestingThis = testingDeviceId === dev.id
+                      const maskedToken = dev.apiToken
+                        ? `${dev.apiToken.slice(0, 4)}••••••••${dev.apiToken.slice(-4)}`
+                        : 'Belum diisi'
+
+                      return (
+                        <tr key={dev.id} className='hover:bg-gray-50/80 transition-colors'>
+                          <td className='py-3 px-3.5 text-center font-bold text-gray-400'>{idx + 1}</td>
+                          <td className='py-3 px-3.5'>
+                            <div className='font-bold text-gray-900'>{dev.deviceName}</div>
+                            <div className='flex items-center gap-1.5 mt-0.5'>
+                              {dev.deviceSn ? (
+                                <span className='font-mono text-[10px] text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded'>
+                                  SN: {dev.deviceSn}
+                                </span>
+                              ) : (
+                                <span className='text-[10px] text-gray-400 italic'>SN tidak ditentukan</span>
+                              )}
+                            </div>
+                          </td>
+                          <td className='py-3 px-3.5'>
+                            <div className='font-mono font-semibold text-teal-800 bg-teal-50 px-2 py-0.5 rounded w-fit border border-teal-200/60'>
+                              {dev.cloudId || '—'}
+                            </div>
+                            <div className='text-[11px] text-gray-500 mt-1 flex items-center gap-1'>
+                              <MapPin className='w-3 h-3 text-gray-400' />
+                              <span>{dev.locationLabel || 'Lokasi Umum'}</span>
+                            </div>
+                          </td>
+                          <td className='py-3 px-3.5'>
+                            <div className='font-mono text-gray-600 text-[11px] bg-gray-50 px-2 py-1 rounded border border-gray-200 w-fit'>
+                              {maskedToken}
+                            </div>
+                            <div className='text-[10px] text-gray-400 mt-0.5 truncate max-w-[200px]'>
+                              {dev.apiUrl}
+                            </div>
+                          </td>
+                          <td className='py-3 px-3.5 text-center'>
+                            <label className='relative inline-flex items-center cursor-pointer'>
+                              <input
+                                type='checkbox'
+                                checked={dev.isActive}
+                                onChange={() => handleToggleDeviceActive(dev.id, dev.isActive)}
+                                className='sr-only peer'
+                              />
+                              <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-teal-600"></div>
+                            </label>
+                            <div className='text-[10px] font-semibold mt-0.5 text-gray-500'>
+                              {dev.isActive ? (
+                                <span className='text-emerald-600'>Aktif</span>
+                              ) : (
+                                <span className='text-gray-400'>Nonaktif</span>
+                              )}
+                            </div>
+                          </td>
+                          <td className='py-3 px-3.5'>
+                            <div className='flex items-center gap-1.5'>
+                              {dev.lastSyncStatus === 'SUCCESS' ? (
+                                <span className='inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200'>
+                                  <CheckCircle2 className='w-3 h-3' /> SUCCESS
+                                </span>
+                              ) : dev.lastSyncStatus === 'NO_DATA' ? (
+                                <span className='inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200'>
+                                  <Info className='w-3 h-3' /> NO DATA
+                                </span>
+                              ) : dev.lastSyncStatus === 'ERROR' ? (
+                                <span className='inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200'>
+                                  <AlertTriangle className='w-3 h-3' /> ERROR
+                                </span>
+                              ) : (
+                                <span className='inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 text-gray-700'>
+                                  STANDBY
+                                </span>
+                              )}
+                              <span className='font-bold text-gray-700 text-[11px]'>
+                                {dev.lastSyncCount || 0} log
+                              </span>
+                            </div>
+                            <div className='text-[10px] text-gray-500 mt-1'>
+                              {dev.lastSyncAt
+                                ? new Date(dev.lastSyncAt).toLocaleString('id-ID', {
+                                    day: '2-digit',
+                                    month: 'short',
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                  })
+                                : 'Belum sync'}
+                            </div>
+                            {dev.lastSyncMsg && dev.lastSyncStatus === 'ERROR' && (
+                              <div className='text-[10px] text-rose-600 line-clamp-1 mt-0.5' title={dev.lastSyncMsg}>
+                                {dev.lastSyncMsg}
+                              </div>
+                            )}
+
+                            {/* Alert test result for this device */}
+                            {testRes && (
+                              <div
+                                className={`mt-1.5 p-1.5 rounded text-[10px] flex items-center justify-between ${
+                                  testRes.success
+                                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                                    : 'bg-rose-50 text-rose-800 border border-rose-200'
+                                }`}
+                              >
+                                <span>{testRes.message || testRes.error}</span>
+                                <button
+                                  type='button'
+                                  onClick={() =>
+                                    setDeviceTestResults((prev) => ({ ...prev, [dev.id]: null }))
+                                  }
+                                  className='underline ml-2 cursor-pointer font-bold'
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            )}
+                          </td>
+                          <td className='py-3 px-3.5 text-right'>
+                            <div className='flex items-center justify-end gap-1.5'>
+                              <button
+                                type='button'
+                                onClick={() => handleTestSingleDevice(dev)}
+                                disabled={isTestingThis}
+                                className='p-1.5 rounded-lg border border-gray-200 hover:bg-teal-50 hover:text-teal-700 text-gray-600 transition cursor-pointer disabled:opacity-50'
+                                title='Uji Koneksi Perangkat'
+                              >
+                                {isTestingThis ? (
+                                  <Loader2 className='w-3.5 h-3.5 animate-spin text-teal-600' />
+                                ) : (
+                                  <CheckCircle2 className='w-3.5 h-3.5 text-teal-600' />
+                                )}
+                              </button>
+
+                              <button
+                                type='button'
+                                onClick={() => handleOpenEditDevice(dev)}
+                                className='p-1.5 rounded-lg border border-gray-200 hover:bg-blue-50 hover:text-blue-700 text-gray-600 transition cursor-pointer'
+                                title='Edit Perangkat'
+                              >
+                                <Edit2 className='w-3.5 h-3.5 text-blue-600' />
+                              </button>
+
+                              <button
+                                type='button'
+                                onClick={() => handleDeleteDevice(dev.id, dev.deviceName)}
+                                className='p-1.5 rounded-lg border border-gray-200 hover:bg-rose-50 hover:text-rose-700 text-gray-600 transition cursor-pointer'
+                                title='Hapus Perangkat'
+                              >
+                                <Trash2 className='w-3.5 h-3.5 text-rose-600' />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })
                   )}
-                  <span>{testResult.message || testResult.error}</span>
-                </div>
-                <button
-                  type='button'
-                  onClick={() => setTestResult(null)}
-                  className='text-xs underline font-bold ml-3 cursor-pointer'
-                >
-                  Tutup
-                </button>
-              </div>
-            )}
+                </tbody>
+              </table>
+            </div>
+          </div>
 
-            {/* Standby / Simulation Mode Status Banner */}
-            {(!fingerspotSettings.cloudId || !fingerspotSettings.apiToken) && (
-              <div
-                className={`mt-4 p-4 rounded-xl border text-xs flex items-start gap-3 transition-colors ${
-                  fingerspotSettings.simulationMode
-                    ? 'bg-amber-50/90 border-amber-200 text-amber-900'
-                    : 'bg-blue-50/90 border-blue-200 text-blue-900'
-                }`}
-              >
-                <Info
-                  className={`w-5 h-5 flex-shrink-0 mt-0.5 ${
-                    fingerspotSettings.simulationMode ? 'text-amber-600' : 'text-blue-600'
-                  }`}
-                />
-                <div className='flex-1 leading-relaxed'>
-                  <div className='font-bold text-xs sm:text-sm flex items-center gap-2'>
-                    <span>
-                      {fingerspotSettings.simulationMode
-                        ? '🟡 Kredensial Fingerspot Belum Diisi — Mode Simulasi Aktif'
-                        : '🔵 Kredensial Fingerspot Belum Diisi — Mode Siaga (Standby) Aktif'}
-                    </span>
-                    <span
-                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                        fingerspotSettings.simulationMode
-                          ? 'bg-amber-200/80 text-amber-800'
-                          : 'bg-blue-200/80 text-blue-800'
-                      }`}
-                    >
-                      {fingerspotSettings.simulationMode ? 'Testing Sandbox' : 'Standby'}
-                    </span>
-                  </div>
-                  <p className='mt-1 text-[11px] text-gray-700'>
-                    {fingerspotSettings.simulationMode
-                      ? 'Cloud ID dan API Bearer belum diterima dari Fingerspot. Dengan Mode Simulasi ini, tombol "Sync Sekarang" dan cron scheduler akan otomatis menghasilkan data presensi realistis dari staf gudang nyata (Achmad Rizali, Agung Hakiki, dsb.) untuk memverifikasi alur presensi, potongan denda, dan laporan kehadiran.'
-                      : 'Sistem dalam mode siaga aman. Eksekusi crontab otomatis akan merespons HTTP 200 (STANDBY) tanpa melempar pesan error dan tanpa menyimpan data tiruan, sampai Cloud ID dan API Token dimasukkan.'}
-                  </p>
-                </div>
-              </div>
-            )}
+          {/* CARD PENGATURAN GLOBAL & OTOMASI CRON */}
+          <div className='rounded-2xl border border-gray-200 bg-white p-6 shadow-xs'>
+            <div className='pb-4 border-b border-gray-100'>
+              <h3 className='font-bold text-gray-900 flex items-center gap-2'>
+                <Clock className='w-5 h-5 text-blue-600' />
+                Pengaturan Global &amp; Otomasi Sinkronisasi
+              </h3>
+              <p className='text-xs text-gray-500 mt-1'>
+                Pengaturan jadwal penarikan otomatis (interval crontab), mode pengujian data simulasi, dan otorisasi sistem.
+              </p>
+            </div>
 
-            {/* Form */}
-            <form onSubmit={handleSaveFingerspotSettings} className='mt-6 space-y-5 text-xs'>
+            <form onSubmit={handleSaveFingerspotSettings} className='mt-5 space-y-4 text-xs'>
               {/* Toggle Sync Enabled */}
               <div className='flex items-center justify-between p-3.5 bg-gray-50 rounded-xl border border-gray-200'>
                 <div>
                   <div className='font-bold text-gray-800 text-sm'>
-                    Aktifkan Penarikan Data Otomatis (Sync API)
+                    Aktifkan Penarikan Data Otomatis (Global Sync)
                   </div>
                   <div className='text-gray-500 text-[11px] mt-0.5'>
-                    Bila aktif, sistem mengizinkan sinkronisasi data presensi mesin Fingerspot ke PeopleHub.
+                    Bila aktif, sistem mengizinkan cron scheduler untuk menarik data seluruh perangkat aktif secara otomatis.
                   </div>
                 </div>
                 <label className='relative inline-flex items-center cursor-pointer'>
@@ -1779,19 +2095,19 @@ function WorkLocationSettingsContent() {
               <div className='flex items-center justify-between p-3.5 bg-amber-50/60 rounded-xl border border-amber-200/80'>
                 <div>
                   <div className='font-bold text-amber-950 text-sm flex items-center gap-2'>
-                    <span>Mode Simulasi / Testing Data Gudang</span>
+                    <span>Mode Simulasi / Testing Sandbox</span>
                     <span className='px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-200 text-amber-900 border border-amber-300'>
                       Sandbox
                     </span>
                   </div>
                   <div className='text-gray-600 text-[11px] mt-0.5 max-w-2xl'>
-                    Aktifkan jika belum memiliki Bearer Token dan Cloud ID dari Fingerspot. Sistem akan men-generate dan memproses data presensi karyawan gudang nyata untuk simulasi jam masuk, pulang, dan denda.
+                    Aktifkan jika perangkat fisik sedang offline atau untuk simulasi pengujian. Sistem akan mengenerate scan data presensi karyawan gudang nyata untuk memverifikasi alur denda dan rekonsiliasi.
                   </div>
                 </div>
                 <label className='relative inline-flex items-center cursor-pointer'>
                   <input
                     type='checkbox'
-                    checked={fingerspotSettings.simulationMode ?? true}
+                    checked={fingerspotSettings.simulationMode ?? false}
                     onChange={(e) =>
                       setFingerspotSettings({
                         ...fingerspotSettings,
@@ -1806,92 +2122,21 @@ function WorkLocationSettingsContent() {
 
               <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
                 <div>
-                  <label className='font-bold text-gray-700 block mb-1'>Nama Mesin / Label Lokasi:</label>
+                  <label className='font-bold text-gray-700 block mb-1'>Interval Penarikan Otomatis (Menit):</label>
                   <input
-                    type='text'
-                    value={fingerspotSettings.deviceName}
+                    type='number'
+                    min='5'
+                    max='180'
+                    value={fingerspotSettings.autoSyncInterval || 30}
                     onChange={(e) =>
-                      setFingerspotSettings({ ...fingerspotSettings, deviceName: e.target.value })
+                      setFingerspotSettings({ ...fingerspotSettings, autoSyncInterval: Number(e.target.value) })
                     }
-                    placeholder='Contoh: Mesin Fingerspot Gudang Cakung'
+                    placeholder='30'
                     className='w-full rounded-xl border border-gray-300 p-2.5 text-xs bg-white'
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className='font-bold text-gray-700 block mb-1'>Serial Number (SN) Mesin Gudang:</label>
-                  <input
-                    type='text'
-                    value={fingerspotSettings.deviceSn}
-                    onChange={(e) =>
-                      setFingerspotSettings({ ...fingerspotSettings, deviceSn: e.target.value })
-                    }
-                    placeholder='Contoh: FSPOT-GUDANG-01'
-                    className='w-full rounded-xl border border-gray-300 p-2.5 text-xs font-mono bg-white'
-                    required
                   />
                   <p className='text-[10px] text-gray-400 mt-1'>
-                    Dapat dilihat pada label stiker belakang mesin Fingerspot.
+                    Rekomendasi: 30 menit sekali saat jam operasional.
                   </p>
-                </div>
-              </div>
-
-              <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
-                <div>
-                  <label className='font-bold text-gray-700 block mb-1'>Cloud ID (Fingerspot.iO):</label>
-                  <input
-                    type='text'
-                    value={fingerspotSettings.cloudId}
-                    onChange={(e) =>
-                      setFingerspotSettings({ ...fingerspotSettings, cloudId: e.target.value })
-                    }
-                    placeholder='Contoh: C268494883'
-                    className='w-full rounded-xl border border-gray-300 p-2.5 text-xs font-mono bg-white'
-                  />
-                  <p className='text-[10px] text-gray-400 mt-1'>
-                    Diperoleh dari dashboard Fingerspot.iO akun perusahaan.
-                  </p>
-                </div>
-
-                <div>
-                  <label className='font-bold text-gray-700 block mb-1'>API Token / Bearer Key:</label>
-                  <div className='relative'>
-                    <input
-                      type={showToken ? 'text' : 'password'}
-                      value={fingerspotSettings.apiToken}
-                      onChange={(e) =>
-                        setFingerspotSettings({ ...fingerspotSettings, apiToken: e.target.value })
-                      }
-                      placeholder='Masukkan API Token dari Fingerspot.iO'
-                      className='w-full rounded-xl border border-gray-300 p-2.5 pr-10 text-xs font-mono bg-white'
-                    />
-                    <button
-                      type='button'
-                      onClick={() => setShowToken(!showToken)}
-                      className='absolute right-3 top-2.5 text-gray-400 hover:text-gray-600 cursor-pointer'
-                    >
-                      {showToken ? <EyeOff className='w-4 h-4' /> : <Eye className='w-4 h-4' />}
-                    </button>
-                  </div>
-                  <p className='text-[10px] text-gray-400 mt-1'>
-                    Kunci otentikasi API yang digenerate dari menu API Fingerspot.
-                  </p>
-                </div>
-              </div>
-
-              <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
-                <div>
-                  <label className='font-bold text-gray-700 block mb-1'>Base API URL:</label>
-                  <input
-                    type='text'
-                    value={fingerspotSettings.apiUrl}
-                    onChange={(e) =>
-                      setFingerspotSettings({ ...fingerspotSettings, apiUrl: e.target.value })
-                    }
-                    placeholder='https://developer.fingerspot.io/api'
-                    className='w-full rounded-xl border border-gray-300 p-2.5 text-xs font-mono bg-white'
-                  />
                 </div>
 
                 <div>
@@ -1911,7 +2156,6 @@ function WorkLocationSettingsContent() {
                 </div>
               </div>
 
-              {/* Submit Buttons */}
               <div className='flex items-center justify-end gap-3 pt-3 border-t border-gray-100'>
                 <button
                   type='submit'
@@ -1926,7 +2170,7 @@ function WorkLocationSettingsContent() {
                   ) : (
                     <>
                       <Check className='w-4 h-4' />
-                      Simpan Pengaturan Fingerspot
+                      Simpan Pengaturan Global
                     </>
                   )}
                 </button>
@@ -1945,7 +2189,7 @@ function WorkLocationSettingsContent() {
                   Panduan Pemasangan Penarikan Terjadwal Otomatis (Crontab VPS)
                 </h4>
                 <p className='text-xs text-blue-800 mt-1 leading-relaxed'>
-                  Agar PeopleHub secara otomatis menarik presensi karyawan gudang setiap 30 menit (tanpa harus klik tombol manual), pasang baris crontab berikut pada server Rocky Linux 9 Anda. Mendukung otorisasi via Header Bearer maupun Parameter URL (?key=...):
+                  Agar PeopleHub secara otomatis menarik presensi dari seluruh mesin Fingerspot aktif setiap 30 menit (tanpa harus klik tombol manual), pasang baris crontab berikut pada server Rocky Linux 9 Anda. Mendukung otorisasi via Header Bearer maupun Parameter URL (?key=...):
                 </p>
 
                 {/* Option 1: URL Parameter */}
@@ -2914,6 +3158,254 @@ function WorkLocationSettingsContent() {
                 )}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal Dialog: Tambah / Edit Perangkat Fingerspot ── */}
+      {showDeviceModal && (
+        <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs overflow-y-auto'>
+          <div className='w-full max-w-xl rounded-3xl bg-white p-6 shadow-2xl max-h-[90vh] overflow-y-auto my-8'>
+            <div className='flex items-center justify-between border-b border-gray-100 pb-4'>
+              <div>
+                <h3 className='text-lg font-bold text-gray-900 flex items-center gap-2'>
+                  <Fingerprint className='w-5 h-5 text-teal-600' />
+                  {editingDevice ? 'Edit Perangkat Fingerspot' : 'Tambah Perangkat Fingerspot'}
+                </h3>
+                <p className='text-xs text-gray-500 mt-0.5'>
+                  Konfigurasi kredensial Cloud ID dan API Bearer token mesin presensi Fingerspot.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowDeviceModal(false)}
+                className='rounded-xl p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition cursor-pointer'
+              >
+                <X className='w-5 h-5' />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveDevice} className='mt-5 space-y-4 text-xs'>
+              {/* Device Name & Location */}
+              <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
+                <div>
+                  <label className='block font-bold text-gray-700 mb-1'>
+                    Nama Perangkat / Label Mesin: <span className='text-rose-500'>*</span>
+                  </label>
+                  <input
+                    type='text'
+                    value={deviceForm.deviceName}
+                    onChange={(e) => setDeviceForm({ ...deviceForm, deviceName: e.target.value })}
+                    placeholder='Contoh: Mesin Gudang Lt.1'
+                    className='w-full rounded-xl border border-gray-300 p-2.5 text-xs bg-white'
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className='block font-bold text-gray-700 mb-1'>
+                    Lokasi Kerja Terkait:
+                  </label>
+                  <input
+                    type='text'
+                    value={deviceForm.locationLabel}
+                    onChange={(e) => setDeviceForm({ ...deviceForm, locationLabel: e.target.value })}
+                    placeholder='Contoh: Gudang, Head Office, Cabang'
+                    className='w-full rounded-xl border border-gray-300 p-2.5 text-xs bg-white'
+                  />
+                  <p className='text-[10px] text-gray-400 mt-1'>
+                    Digunakan untuk mencocokkan jam kerja lokasi dan label log presensi.
+                  </p>
+                </div>
+              </div>
+
+              {/* Cloud ID & Serial Number */}
+              <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
+                <div>
+                  <label className='block font-bold text-gray-700 mb-1'>
+                    Cloud ID (Fingerspot.iO): <span className='text-rose-500'>*</span>
+                  </label>
+                  <input
+                    type='text'
+                    value={deviceForm.cloudId}
+                    onChange={(e) => setDeviceForm({ ...deviceForm, cloudId: e.target.value })}
+                    placeholder='Contoh: C263889803072930'
+                    className='w-full rounded-xl border border-gray-300 p-2.5 text-xs font-mono bg-white'
+                    required
+                  />
+                  <p className='text-[10px] text-gray-400 mt-1'>
+                    Cloud ID mesin dari dashboard Fingerspot.iO.
+                  </p>
+                </div>
+
+                <div>
+                  <label className='block font-bold text-gray-700 mb-1'>
+                    Serial Number (SN) Opsional:
+                  </label>
+                  <input
+                    type='text'
+                    value={deviceForm.deviceSn}
+                    onChange={(e) => setDeviceForm({ ...deviceForm, deviceSn: e.target.value })}
+                    placeholder='Contoh: FSPOT-GUDANG-01'
+                    className='w-full rounded-xl border border-gray-300 p-2.5 text-xs font-mono bg-white'
+                  />
+                  <p className='text-[10px] text-gray-400 mt-1'>
+                    Nomor seri pada stiker belakang mesin fisik (opsional).
+                  </p>
+                </div>
+              </div>
+
+              {/* Bearer Token */}
+              <div>
+                <label className='block font-bold text-gray-700 mb-1'>
+                  API Bearer Token: <span className='text-rose-500'>*</span>
+                </label>
+                <div className='relative'>
+                  <input
+                    type={showDeviceToken ? 'text' : 'password'}
+                    value={deviceForm.apiToken}
+                    onChange={(e) => setDeviceForm({ ...deviceForm, apiToken: e.target.value })}
+                    placeholder='Contoh: VI0IOGL703ZGROFY'
+                    className='w-full rounded-xl border border-gray-300 p-2.5 pr-10 text-xs font-mono bg-white'
+                    required
+                  />
+                  <button
+                    type='button'
+                    onClick={() => setShowDeviceToken(!showDeviceToken)}
+                    className='absolute right-3 top-2.5 text-gray-400 hover:text-gray-600 cursor-pointer'
+                  >
+                    {showDeviceToken ? <EyeOff className='w-4 h-4' /> : <Eye className='w-4 h-4' />}
+                  </button>
+                </div>
+                <p className='text-[10px] text-gray-400 mt-1'>
+                  Kunci otentikasi Bearer Token API dari portal Fingerspot.
+                </p>
+              </div>
+
+              {/* API URL & Sort Order */}
+              <div className='grid grid-cols-1 md:grid-cols-3 gap-4'>
+                <div className='md:col-span-2'>
+                  <label className='block font-bold text-gray-700 mb-1'>
+                    Base API URL:
+                  </label>
+                  <input
+                    type='text'
+                    value={deviceForm.apiUrl}
+                    onChange={(e) => setDeviceForm({ ...deviceForm, apiUrl: e.target.value })}
+                    placeholder='https://developer.fingerspot.io/api'
+                    className='w-full rounded-xl border border-gray-300 p-2.5 text-xs font-mono bg-white'
+                  />
+                </div>
+
+                <div>
+                  <label className='block font-bold text-gray-700 mb-1'>
+                    Urutan Tampil:
+                  </label>
+                  <input
+                    type='number'
+                    min='1'
+                    max='99'
+                    value={deviceForm.sortOrder}
+                    onChange={(e) => setDeviceForm({ ...deviceForm, sortOrder: Number(e.target.value) })}
+                    className='w-full rounded-xl border border-gray-300 p-2.5 text-xs bg-white'
+                  />
+                </div>
+              </div>
+
+              {/* Toggle isActive */}
+              <div className='flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-200'>
+                <div>
+                  <div className='font-bold text-gray-800'>Status Aktif Sinkronisasi</div>
+                  <div className='text-[11px] text-gray-500'>
+                    Perangkat aktif akan otomatis ditarik log presensinya oleh crontab / sync manual.
+                  </div>
+                </div>
+                <label className='relative inline-flex items-center cursor-pointer'>
+                  <input
+                    type='checkbox'
+                    checked={deviceForm.isActive}
+                    onChange={(e) => setDeviceForm({ ...deviceForm, isActive: e.target.checked })}
+                    className='sr-only peer'
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-teal-600"></div>
+                </label>
+              </div>
+
+              {/* Modal Test Result Banner */}
+              {modalTestResult && (
+                <div
+                  className={`p-3 rounded-xl border text-xs flex items-center justify-between ${
+                    modalTestResult.success
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                      : 'bg-rose-50 border-rose-200 text-rose-800'
+                  }`}
+                >
+                  <div className='flex items-center gap-2'>
+                    {modalTestResult.success ? (
+                      <CheckCircle2 className='w-4 h-4 text-emerald-600 flex-shrink-0' />
+                    ) : (
+                      <AlertTriangle className='w-4 h-4 text-rose-600 flex-shrink-0' />
+                    )}
+                    <span>{modalTestResult.message || modalTestResult.error}</span>
+                  </div>
+                  <button
+                    type='button'
+                    onClick={() => setModalTestResult(null)}
+                    className='underline font-bold ml-2 cursor-pointer'
+                  >
+                    Tutup
+                  </button>
+                </div>
+              )}
+
+              {/* Modal Actions */}
+              <div className='flex items-center justify-between pt-3 border-t border-gray-100'>
+                <button
+                  type='button'
+                  onClick={handleTestModalDevice}
+                  disabled={modalTesting || !deviceForm.cloudId || !deviceForm.apiToken}
+                  className='inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 text-xs font-semibold transition cursor-pointer disabled:opacity-50'
+                >
+                  {modalTesting ? (
+                    <>
+                      <Loader2 className='w-3.5 h-3.5 animate-spin text-teal-600' />
+                      Menguji...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className='w-3.5 h-3.5 text-teal-600' />
+                      Uji Koneksi
+                    </>
+                  )}
+                </button>
+
+                <div className='flex items-center gap-2'>
+                  <button
+                    type='button'
+                    onClick={() => setShowDeviceModal(false)}
+                    className='px-4 py-2 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 font-semibold transition cursor-pointer'
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type='submit'
+                    disabled={savingDevice}
+                    className='inline-flex items-center gap-1.5 px-5 py-2 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl transition shadow-2xs cursor-pointer disabled:opacity-50'
+                  >
+                    {savingDevice ? (
+                      <>
+                        <Loader2 className='w-3.5 h-3.5 animate-spin' />
+                        Menyimpan...
+                      </>
+                    ) : (
+                      <>
+                        <Check className='w-4 h-4' />
+                        {editingDevice ? 'Simpan Perubahan' : 'Tambahkan Perangkat'}
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </form>
           </div>
         </div>
       )}

@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import {
   getFingerspotSettings,
   updateFingerspotSettings,
-  fetchFingerspotAttLog,
+  fetchAllDeviceAttLogs,
   processFingerspotLogs,
 } from '@/lib/fingerspotSync'
 
@@ -34,7 +34,7 @@ async function verifyCronAuth(req, settings) {
 }
 
 /**
- * Handler penarikan terjadwal (Cron Execution)
+ * Handler penarikan terjadwal (Cron Execution) untuk SEMUA perangkat aktif
  */
 async function handleScheduledSync(req) {
   try {
@@ -68,15 +68,14 @@ async function handleScheduledSync(req) {
     yesterday.setDate(yesterday.getDate() - 1)
     const yesterdayStr = yesterday.toISOString().split('T')[0]
 
-    // 4. Tarik data dari API Fingerspot
-    const fetchResult = await fetchFingerspotAttLog({
+    // 4. Tarik data dari seluruh perangkat Fingerspot yang aktif
+    const fetchResult = await fetchAllDeviceAttLogs({
       startDate: yesterdayStr,
       endDate: todayStr,
-      settings,
       forceMock: isMock,
     })
 
-    // Standby Mode (jika token belum diisi dan simulasi tidak aktif)
+    // Standby Mode (jika belum ada perangkat aktif/kredensial)
     if (fetchResult.isStandby) {
       await updateFingerspotSettings({
         lastSyncAt: new Date(),
@@ -90,55 +89,43 @@ async function handleScheduledSync(req) {
         status: 'STANDBY',
         cronExecutedAt: new Date().toISOString(),
         message: fetchResult.message,
-        hint: 'Cloud ID dan API Token belum diisi. Sistem tetap berjalan aman tanpa error.',
+        deviceResults: fetchResult.deviceResults,
       })
     }
 
-    if (!fetchResult.success && (!fetchResult.data || fetchResult.data.length === 0)) {
-      await updateFingerspotSettings({
-        lastSyncAt: new Date(),
-        lastSyncStatus: 'ERROR',
-        lastSyncMessage: `[Cron] ${fetchResult.error || 'Gagal menarik data dari Fingerspot.iO'}`,
-      })
-
-      return NextResponse.json(
-        {
-          success: false,
-          error: fetchResult.error,
-        },
-        { status: 500 }
-      )
-    }
-
-    const rawLogs = fetchResult.data || []
+    const rawLogs = fetchResult.allLogs || []
 
     if (rawLogs.length === 0) {
+      const emptyMsg = `[Cron] Tidak ada scan log baru pada ${yesterdayStr} s/d ${todayStr} dari ${fetchResult.deviceResults.length} perangkat.`
       await updateFingerspotSettings({
         lastSyncAt: new Date(),
         lastSyncStatus: 'NO_DATA',
-        lastSyncMessage: `[Cron] Tidak ada scan log baru pada ${yesterdayStr} s/d ${todayStr}`,
+        lastSyncMessage: emptyMsg,
         lastSyncCount: 0,
       })
 
       return NextResponse.json({
         success: true,
+        status: 'NO_DATA',
         totalFetched: 0,
         savedCount: 0,
-        message: `Cron selesai: Tidak ada log scan baru pada periode ${yesterdayStr} s/d ${todayStr}`,
+        message: emptyMsg,
+        deviceResults: fetchResult.deviceResults,
       })
     }
 
     // 5. Proses log dan simpan ke database Attendance
     const processResult = await processFingerspotLogs(rawLogs, {
-      sourceLabel: 'Mesin Fingerspot Gudang (API)',
+      sourceLabel: 'Mesin Fingerspot Cloud (Multi-Device)',
     })
 
-    // 6. Update status berhasil
+    // 6. Update status agregat berhasil
     const statusNote = fetchResult.isMock ? '[Simulasi] ' : ''
+    const finishMsg = `[Cron] ${statusNote}Berhasil memproses ${processResult.savedCount} presensi (${yesterdayStr} s/d ${todayStr}) dari ${fetchResult.deviceResults.length} perangkat.`
     await updateFingerspotSettings({
       lastSyncAt: new Date(),
       lastSyncStatus: 'SUCCESS',
-      lastSyncMessage: `[Cron] ${statusNote}Berhasil memproses ${processResult.savedCount} presensi gudang (${yesterdayStr} s/d ${todayStr})`,
+      lastSyncMessage: finishMsg,
       lastSyncCount: processResult.savedCount,
     })
 
@@ -152,6 +139,7 @@ async function handleScheduledSync(req) {
       matchedCount: processResult.matchedCount,
       skippedCount: processResult.skippedCount,
       errors: processResult.errors,
+      deviceResults: fetchResult.deviceResults,
       message: `${statusNote}${processResult.message}`,
     })
   } catch (error) {
