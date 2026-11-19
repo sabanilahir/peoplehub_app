@@ -60,6 +60,7 @@ export const DEFAULT_PERMISSIONS = [
   { id: 317, key: 'hr_asset', label: 'Manajemen Aset Perusahaan', group: 'hr' },
   { id: 319, key: 'hr_personnel_action', label: 'Personnel Action', group: 'hr' },
   { id: 320, key: 'hr_offboarding', label: 'Offboarding & Exit Clearance', group: 'hr' },
+  { id: 321, key: 'hr_announcement', label: 'Pengumuman Dashboard', group: 'hr' },
 
   // ==================== 4. MSS ====================
   { id: 401, key: 'mss_attendance', label: 'Team Attendance', group: 'mss' },
@@ -80,6 +81,7 @@ export const DEFAULT_PERMISSIONS = [
   { id: 509, key: 'system_workflow_entry', label: 'Workflow Engine', group: 'sysadmin' },
   { id: 516, key: 'system_work_location', label: 'Aturan Jam Kerja & Lokasi', group: 'sysadmin' },
   { id: 518, key: 'system_notification', label: 'Pengaturan Email & Notifikasi', group: 'sysadmin' },
+  { id: 519, key: 'system_announcement', label: 'Pengumuman Dashboard', group: 'sysadmin' },
 
   // ==================== 6. Workflow Engine ====================
   { id: 511, key: 'workflow_engine_main', label: 'Workflow Menu', group: 'sysadmin-workflow' },
@@ -144,6 +146,8 @@ const PERM_ALIASES = {
   sysadmin_workflow_analytics: 'workflow_engine_analytics',
   sysadmin_workflow_settings: 'workflow_engine_settings',
   sysadmin_workflow_userlists: 'workflow_engine_userlists',
+  sysadmin_announcement: 'system_announcement',
+  hr_announcement: 'hr_announcement',
   workflow_userlists: 'workflow_engine_userlists',
   user_workflow_tasks: 'workflow_tasks',
   user_workflow_my: 'workflow_my_requests',

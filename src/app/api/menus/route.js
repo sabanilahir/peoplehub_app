@@ -587,6 +587,83 @@ export async function GET() {
       })
     }
 
+    // Auto-seed / Auto-heal jika menu Pengumuman Dashboard belum ada di tabel MenuItem
+    const hasHrAnnouncement = menus.some((m) => m.key === 'hr-announcement')
+    const hasSysAnnouncement = menus.some((m) => m.key === 'sysadmin-announcement')
+
+    if ((!hasHrAnnouncement || !hasSysAnnouncement) && menus.length > 0) {
+      const hrParent = menus.find((m) => m.key === 'hr')
+      const sysParent = menus.find((m) => m.key === 'sysadmin')
+
+      if (!hasHrAnnouncement && hrParent) {
+        try {
+          await prisma.menuItem.upsert({
+            where: { key: 'hr-announcement' },
+            create: {
+              id: 321,
+              key: 'hr-announcement',
+              label: 'Pengumuman Dashboard',
+              icon: 'bell',
+              href: '/hr/settings/announcement',
+              parentId: hrParent.id,
+              roles: JSON.stringify(['superadmin', 'admin', 'hr', 'hr_manager', 'hr_officer']),
+              departments: JSON.stringify(['*']),
+              order: 19,
+              active: true,
+            },
+            update: {
+              label: 'Pengumuman Dashboard',
+              icon: 'bell',
+              href: '/hr/settings/announcement',
+              parentId: hrParent.id,
+              roles: JSON.stringify(['superadmin', 'admin', 'hr', 'hr_manager', 'hr_officer']),
+              departments: JSON.stringify(['*']),
+              order: 19,
+              active: true,
+            },
+          })
+        } catch (e) {
+          console.error('[Menu Auto-seed hr-announcement Error]:', e)
+        }
+      }
+
+      if (!hasSysAnnouncement && sysParent) {
+        try {
+          await prisma.menuItem.upsert({
+            where: { key: 'sysadmin-announcement' },
+            create: {
+              id: 519,
+              key: 'sysadmin-announcement',
+              label: 'Pengumuman Dashboard',
+              icon: 'bell',
+              href: '/hr/settings/announcement',
+              parentId: sysParent.id,
+              roles: JSON.stringify(['superadmin', 'hr_manager', 'hr']),
+              departments: JSON.stringify(['*']),
+              order: 12,
+              active: true,
+            },
+            update: {
+              label: 'Pengumuman Dashboard',
+              icon: 'bell',
+              href: '/hr/settings/announcement',
+              parentId: sysParent.id,
+              roles: JSON.stringify(['superadmin', 'hr_manager', 'hr']),
+              departments: JSON.stringify(['*']),
+              order: 12,
+              active: true,
+            },
+          })
+        } catch (e) {
+          console.error('[Menu Auto-seed sysadmin-announcement Error]:', e)
+        }
+      }
+
+      menus = await prisma.menuItem.findMany({
+        orderBy: { order: 'asc' },
+      })
+    }
+
     return Response.json(menus)
   } catch {
     return dbDown()

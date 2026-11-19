@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useMenuStore, ICON_MAP } from '@/store/menuStore'
 import { usePermissionStore } from '@/store/permissionStore'
-import { X, Plus, Edit2, Trash2, Save, Search, RotateCcw, Home, User, Users, Settings, BookOpen, Briefcase, Clock, Calendar, DollarSign, TrendingUp, Star, Award, Clipboard, UserCheck, Building2, Target, AlertCircle, CheckCircle, Trophy, Shield, Key, FileText, Bell, Link, Mail, Phone, MapPin, UsersRound, BookMarked, GraduationCap, AwardIcon, FolderKanban, Kanban, MessageSquare, Send, PieChart, BarChart3, LineChart, Activity, Heart, PlusCircle, MinusCircle, Edit, Eye, EyeOff, Lock, Unlock, Database, Server, Wifi, WifiOff, Globe, Monitor, Smartphone, Tablet, Printer, Download, Upload, Share2, Copy, Trash, Archive, Inbox, SendHorizontal, Clock4, CalendarClock, CalendarDays, CalendarCheck, UserPlus, UserMinus, UserX, Users2, Building, BuildingIcon, Landmark, Receipt, CreditCard, Wallet, ShoppingCart, Package, Box, ArchiveIcon, FolderOpen, Folder, File, FileCheck, FileX, FilePlus, FileEdit, Image, Video, Music, Mic, Camera, VideoIcon, GitBranch, Palette, ListChecks, CheckSquare } from 'lucide-react'
+import { X, Plus, Edit2, Trash2, Save, Search, RotateCcw, Home, User, Users, Settings, BookOpen, Briefcase, Clock, Calendar, DollarSign, TrendingUp, Star, Award, Clipboard, UserCheck, Building2, Target, AlertCircle, CheckCircle, Trophy, Shield, Key, FileText, Bell, Link, Mail, Phone, MapPin, UsersRound, BookMarked, GraduationCap, AwardIcon, FolderKanban, Kanban, MessageSquare, Send, PieChart, BarChart3, LineChart, Activity, Heart, PlusCircle, MinusCircle, Edit, Eye, EyeOff, Lock, Unlock, Database, Server, Wifi, WifiOff, Globe, Monitor, Smartphone, Tablet, Printer, Download, Upload, Share2, Copy, Trash, Archive, Inbox, SendHorizontal, Clock4, CalendarClock, CalendarDays, CalendarCheck, UserPlus, UserMinus, UserX, Users2, Building, BuildingIcon, Landmark, Receipt, CreditCard, Wallet, ShoppingCart, Package, Box, ArchiveIcon, FolderOpen, Folder, File, FileCheck, FileX, FilePlus, FileEdit, Image, Video, Music, Mic, Camera, VideoIcon, GitBranch, Palette, ListChecks, CheckSquare, Megaphone } from 'lucide-react'
 
 const ICON_OPTIONS = [
   { key: 'home', label: 'Home', icon: Home },
@@ -93,6 +93,7 @@ const ICON_OPTIONS = [
   { key: 'tasks', label: 'Tasks', icon: ListChecks },
   { key: 'checklist', label: 'Checklist', icon: CheckSquare },
   { key: 'palette', label: 'Palette', icon: Palette },
+  { key: 'megaphone', label: 'Megaphone / Announcement', icon: Megaphone },
 ]
 
 const MODULE_OPTIONS = [

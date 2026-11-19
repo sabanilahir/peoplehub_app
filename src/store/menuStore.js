@@ -92,12 +92,15 @@ import {
   ListChecks,
   Palette,
   Calculator,
+  Megaphone,
 } from "lucide-react"
 
 const rawIconMap = {
   home: Home,
   user: User,
   users: Users,
+  megaphone: Megaphone,
+  announcement: Megaphone,
   users2: Users2,
   usersRound: UsersRound,
   settings: Settings,
@@ -266,6 +269,7 @@ export const DEFAULT_MENUS = [
   { id: 316, key: "hr-asset", permissionKey: "hr_asset", label: "Manajemen Aset", icon: "package", href: "/hr/asset", parentId: 30, roles: '["hr","hr_officer","hr_manager","superadmin"]', departments: '["*"]', order: 16, active: true },
   { id: 319, key: "hr-personnel-action", permissionKey: "hr_personnel_action", label: "Personnel Action", icon: "clipboard", href: "/hr/employee/personnel-action", parentId: 30, roles: '["hr","hr_officer","hr_manager","superadmin"]', departments: '["*"]', order: 17, active: true },
   { id: 320, key: "hr-offboarding", permissionKey: "hr_offboarding", label: "Offboarding", icon: "userMinus", href: "/hr/employee/personnel-action/offboarding-overview", parentId: 30, roles: '["hr","hr_officer","hr_manager","superadmin"]', departments: '["*"]', order: 18, active: true },
+  { id: 321, key: "hr-announcement", permissionKey: "hr_announcement", label: "Pengumuman Dashboard", icon: "bell", href: "/hr/settings/announcement", parentId: 30, roles: '["hr","hr_officer","hr_manager","superadmin"]', departments: '["*"]', order: 19, active: true },
 
   { id: 40, key: "mss", label: "MSS", icon: "briefcase", roles: '["manager","hr_manager","superadmin"]', order: 5, active: true },
   { id: 401, key: "mss-attendance", permissionKey: "mss_attendance", label: "Team Attendance", icon: "calendar", href: "/mss/team-attendance", parentId: 40, roles: '["manager","hr_manager","superadmin"]', order: 1, active: true },
@@ -286,6 +290,7 @@ export const DEFAULT_MENUS = [
   { id: 509, key: "sysadmin-workflow-entry", permissionKey: "system_workflow_entry", label: "Workflow Engine", icon: "gitbranch", href: "/sysadmin/workflow", parentId: 50, roles: '["superadmin","sysadmin"]', order: 9, active: true },
   { id: 516, key: "sysadmin-work-location", permissionKey: "system_work_location", label: "Aturan Jam Kerja & Lokasi", icon: "clock", href: "/sysadmin/settings/work-location", parentId: 50, roles: '["superadmin","hr_manager","hr"]', order: 10, active: true },
   { id: 518, key: "sysadmin-notification", permissionKey: "system_notification", label: "Email & Notifikasi", icon: "mail", href: "/sysadmin/settings/notification-setup", parentId: 50, roles: '["superadmin","hr_manager","hr"]', departments: '["*"]', order: 11, active: true },
+  { id: 519, key: "sysadmin-announcement", permissionKey: "system_announcement", label: "Pengumuman Dashboard", icon: "bell", href: "/hr/settings/announcement", parentId: 50, roles: '["superadmin","hr_manager","hr"]', departments: '["*"]', order: 12, active: true },
 
   // Workflow Management (Flowable + BPMN.js)
   { id: 510, key: "sysadmin-workflow", label: "Workflow Engine", icon: "gitbranch", roles: '["superadmin","sysadmin","hr_manager","hr","hr_officer"]', order: 9, active: true },
