@@ -16,7 +16,14 @@ import { offboardingActionItems } from '@/lib/offboarding'
 import { useHomePreferencesStore, CHART_TYPE_DEFAULT } from '@/store/homePreferencesStore'
 import { ALL_SHORTCUTS, SICONS } from '@/lib/dashboardShortcuts'
 import { accessibleDashboards } from '@/lib/homeDashboards'
-import { useAnnouncementStore, CATEGORY_TONE, isLive } from '@/store/announcementStore'
+import {
+  useAnnouncementStore,
+  CATEGORY_TONE,
+  PRIORITY_CONFIG,
+  isLive,
+  isLiveForUser,
+  interpolateAnnouncement,
+} from '@/store/announcementStore'
 import { useShiftStore } from '@/store/shiftStore'
 import { useAttendanceStore, todayStr } from '@/store/attendanceStore'
 import { shiftFor, gradeTime, toMinutes, TONE_CLASS } from '@/lib/workSchedule'
@@ -256,8 +263,8 @@ function LeaveBalanceWidget({ leaves, leaveTypes, userId, t }) {
   )
 }
 
-/* ── Announcement widget ───────────────────────────────────────────────────── */
-function AnnouncementWidget({ announcements, t }) {
+/* ── Announcement widget (Parameterized) ─────────────────────────────────── */
+function AnnouncementWidget({ announcements, t, currentUserId, onAcknowledge }) {
   return (
     <div className='bg-white rounded-2xl shadow-sm ring-1 ring-gray-100 overflow-hidden'>
       <div className='flex items-center gap-2 px-4 py-3 border-b border-gray-100 text-gray-700 font-semibold text-sm'>
@@ -277,19 +284,69 @@ function AnnouncementWidget({ announcements, t }) {
           {t('Belum ada pengumuman', 'No announcements')}
         </p>
       ) : (
-        <div className='divide-y divide-gray-50 max-h-72 overflow-y-auto'>
-          {announcements.map(a => (
-            <div key={a.id} className='px-4 py-3'>
-              <div className='flex items-start gap-2'>
-                {a.pinned && <span className='text-xs leading-5' title={t('Disematkan', 'Pinned')}>📌</span>}
-                <p className='flex-1 text-sm font-semibold text-gray-800 leading-snug'>{a.title}</p>
-                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${CATEGORY_TONE[a.category] || CATEGORY_TONE.Umum}`}>
-                  {a.category}
-                </span>
+        <div className='divide-y divide-gray-50 max-h-80 overflow-y-auto'>
+          {announcements.map(a => {
+            const isAcked = (a.acknowledgedBy || []).includes(currentUserId)
+            const prio = PRIORITY_CONFIG[a.priority] || PRIORITY_CONFIG.normal
+            const isUrgent = a.priority === 'urgent'
+            const isImportant = a.priority === 'important'
+
+            return (
+              <div
+                key={a.id}
+                className={`px-4 py-3 transition-colors ${
+                  isUrgent ? 'bg-rose-50/25 border-l-4 border-rose-400' : isImportant ? 'bg-amber-50/20 border-l-4 border-amber-400' : ''
+                }`}
+              >
+                <div className='flex items-start gap-2'>
+                  {a.pinned && <span className='text-xs leading-5' title={t('Disematkan', 'Pinned')}>📌</span>}
+                  <div className='flex-1 min-w-0'>
+                    <div className='flex items-center gap-1.5 flex-wrap'>
+                      <p className='text-sm font-semibold text-gray-800 leading-snug'>
+                        {a.interpolatedTitle || a.title}
+                      </p>
+                      {a.priority && a.priority !== 'normal' && (
+                        <span className={`rounded px-1.5 py-0.2 text-[9px] font-bold border ${prio.badgeClass}`}>
+                          {prio.label}
+                        </span>
+                      )}
+                    </div>
+                    {(a.interpolatedBody || a.body) && (
+                      <p className='mt-1 text-xs text-gray-600 leading-relaxed whitespace-pre-line'>
+                        {a.interpolatedBody || a.body}
+                      </p>
+                    )}
+                  </div>
+                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${CATEGORY_TONE[a.category] || CATEGORY_TONE.Umum}`}>
+                    {a.category}
+                  </span>
+                </div>
+
+                {/* Konfirmasi Baca jika requireAck */}
+                {a.requireAck && currentUserId && (
+                  <div className='mt-2.5 pt-2 border-t border-gray-100 flex items-center justify-between'>
+                    <span className='text-[11px] text-gray-400'>
+                      {isAcked ? '✓ Anda telah membaca pengumuman ini' : 'Pengumuman ini memerlukan konfirmasi baca'}
+                    </span>
+                    {isAcked ? (
+                      <span className='inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full'>
+                        ✓ Sudah Dibaca
+                      </span>
+                    ) : (
+                      <button
+                        type='button'
+                        onClick={() => onAcknowledge && onAcknowledge(a.id, currentUserId)}
+                        className='text-[11px] font-bold text-white px-3 py-1 rounded-lg shadow-xs hover:opacity-95 transition-opacity cursor-pointer'
+                        style={{ background: 'linear-gradient(135deg,#052B52,#039299)' }}
+                      >
+                        ✓ Saya Mengerti
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
-              {a.body && <p className='mt-1 text-xs text-gray-500 leading-relaxed'>{a.body}</p>}
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>
@@ -601,7 +658,7 @@ export default function DashboardPage() {
   const { departments, companies } = useStructureStore()
   // Select the stable array and filter in the render body — a selector that
   // filters would hand React a new array every call.
-  const { announcements } = useAnnouncementStore()
+  const { announcements, acknowledgeAnnouncement } = useAnnouncementStore()
   const { assignments, schedules, patterns, shifts } = useShiftStore()
   const { records: attendance, clockIn, clockOut } = useAttendanceStore()
   const { onboardings } = useOnboardingStore()
@@ -1144,14 +1201,57 @@ export default function DashboardPage() {
   // Bar unless the user picked otherwise for that specific chart.
   const chartType = (key) => prefs.chartType[key] || CHART_TYPE_DEFAULT
 
-  const liveAnnouncements = announcements
-    .filter(a => isLive(a))
-    .sort((a, b) => (b.pinned - a.pinned) || String(b.createdAt).localeCompare(String(a.createdAt)))
+  const empProfile = employees.find(e => e.id === currentUser?.employeeId || e.id === currentUser?.id)
+  const userContext = useMemo(() => {
+    return {
+      user: currentUser,
+      name: currentUser?.name || empProfile?.name || 'Karyawan',
+      dept: currentUser?.dept || empProfile?.dept || 'Umum',
+      location: empProfile?.workLocationCode || 'ho',
+      locationName: empProfile?.location || 'Kantor',
+      role: currentUser?.role || 'employee',
+    }
+  }, [currentUser, empProfile])
+
+  const liveAnnouncements = useMemo(() => {
+    return announcements
+      .filter(a => isLiveForUser(a, userContext))
+      .map(a => ({
+        ...a,
+        interpolatedTitle: interpolateAnnouncement(a.title, userContext),
+        interpolatedBody: interpolateAnnouncement(a.body, userContext),
+      }))
+      .sort((a, b) => {
+        const pWeight = { urgent: 3, important: 2, normal: 1 }
+        const pDiff = (pWeight[b.priority] || 1) - (pWeight[a.priority] || 1)
+        if (pDiff !== 0) return pDiff
+        return (b.pinned - a.pinned) || String(b.createdAt).localeCompare(String(a.createdAt))
+      })
+  }, [announcements, userContext])
+
+  const bannerAnnouncements = useMemo(() => {
+    return liveAnnouncements.filter(a => a.displayMode === 'banner' || a.priority === 'urgent')
+  }, [liveAnnouncements])
+
+  const unacknowledgedModal = useMemo(() => {
+    if (!currentUser?.id) return null
+    return liveAnnouncements.find(a =>
+      a.displayMode === 'modal' &&
+      a.requireAck &&
+      !((a.acknowledgedBy || []).includes(currentUser.id))
+    ) || null
+  }, [liveAnnouncements, currentUser])
 
   // Mandatory section — no show/hide pref, only an order. Skipped entirely
   // when nothing is live, so an empty box never sits on the page.
   const announcementBlock = liveAnnouncements.length > 0 && (
-    <AnnouncementWidget key='announcement' announcements={liveAnnouncements} t={t} />
+    <AnnouncementWidget
+      key='announcement'
+      announcements={liveAnnouncements}
+      t={t}
+      currentUserId={uid}
+      onAcknowledge={acknowledgeAnnouncement}
+    />
   )
 
   const attDate = todayStr()
@@ -1346,6 +1446,42 @@ export default function DashboardPage() {
         )}
       </div>
 
+      {/* ── Top Banner Alerts for urgent/banner announcements ── */}
+      {bannerAnnouncements.length > 0 && (
+        <div className='space-y-2'>
+          {bannerAnnouncements.map((b) => (
+            <div
+              key={`banner-${b.id}`}
+              className={`flex items-center justify-between gap-3 px-4 py-3 rounded-2xl shadow-sm border ${
+                b.priority === 'urgent'
+                  ? 'bg-rose-50 border-rose-200 text-rose-900'
+                  : 'bg-amber-50 border-amber-200 text-amber-900'
+              }`}
+            >
+              <div className='flex items-center gap-2.5 flex-1 min-w-0'>
+                <span className='text-base'>{b.priority === 'urgent' ? '🚨' : '⚠️'}</span>
+                <span className={`font-bold text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full ${
+                  b.priority === 'urgent' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'
+                }`}>
+                  {b.priority === 'urgent' ? 'PENGUMUMAN DARURAT' : 'PENGUMUMAN PENTING'}
+                </span>
+                <span className='text-xs font-bold truncate'>{b.interpolatedTitle}</span>
+                <span className='text-xs opacity-85 hidden md:inline truncate'>— {b.interpolatedBody}</span>
+              </div>
+              {b.requireAck && uid && !(b.acknowledgedBy || []).includes(uid) && (
+                <button
+                  type='button'
+                  onClick={() => acknowledgeAnnouncement(b.id, uid)}
+                  className='shrink-0 text-xs font-bold px-3 py-1 bg-white hover:bg-gray-50 rounded-xl shadow-xs border border-gray-200 text-gray-800 transition-colors cursor-pointer'
+                >
+                  ✓ Saya Mengerti
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
       {mainSections.map(s => s.node)}
 
       {/* ── Modal Peringatan & Form Alasan Mode B (Presensi Luar Radius) ── */}
@@ -1465,6 +1601,36 @@ export default function DashboardPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal Pop-up Wajib Baca (Jika ada modal unacknowledged) ── */}
+      {unacknowledgedModal && (
+        <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs'>
+          <div className='max-w-md w-full bg-white rounded-3xl p-6 shadow-2xl border border-gray-100 text-center animate-in fade-in zoom-in-95 duration-150'>
+            <div className='w-14 h-14 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center mx-auto mb-4 text-2xl'>
+              📢
+            </div>
+            <span className='text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200'>
+              {unacknowledgedModal.category} • Wajib Dibaca
+            </span>
+            <h3 className='text-lg font-bold text-gray-900 mt-2.5'>
+              {unacknowledgedModal.interpolatedTitle}
+            </h3>
+            <p className='text-xs text-gray-600 mt-2.5 leading-relaxed bg-gray-50 p-3 rounded-xl border border-gray-100 text-left whitespace-pre-line'>
+              {unacknowledgedModal.interpolatedBody}
+            </p>
+            <div className='mt-6'>
+              <button
+                type='button'
+                onClick={() => acknowledgeAnnouncement(unacknowledgedModal.id, uid)}
+                className='w-full py-2.5 px-4 rounded-xl text-xs font-bold text-white shadow-md hover:opacity-95 transition-opacity cursor-pointer'
+                style={{ background: 'linear-gradient(135deg, #052B52, #039299)' }}
+              >
+                ✓ Saya Mengerti & Telah Membaca
+              </button>
+            </div>
           </div>
         </div>
       )}
