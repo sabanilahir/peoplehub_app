@@ -220,6 +220,7 @@ export async function GET(req) {
             basicSalary: basic,
             transportAllowance: transport,
             kpiAllowance: kpi,
+            items: breakdown.items,
             fullDayRate: Math.round(rawSalary / workingDays),
             halfDayRate: Math.round((rawSalary / workingDays) / 2),
             deduction: Math.round(((rawSalary / workingDays) / 2) * days),
@@ -251,6 +252,7 @@ export async function GET(req) {
               basicSalary: basic,
               transportAllowance: transport,
               kpiAllowance: kpi,
+              items: breakdown.items,
               transportPerDay: Math.round(sickDeductibleBase / workingDays),
               deduction: Math.round((sickDeductibleBase / workingDays) * days),
               attachment: lv.attachment,
@@ -324,6 +326,9 @@ export async function GET(req) {
         basicSalary: basic,
         transportAllowance: transport,
         kpiAllowance: kpi,
+        items: breakdown.items,
+        components: breakdown.components,
+        sickDeductibleTotal: breakdown.sickDeductibleTotal,
         workingDays,
         overtimeEntries: empOvertimes,
         halfDayCount,
@@ -346,6 +351,8 @@ export async function GET(req) {
         workLocationCode: emp.workLocationCode || 'ho',
         joinDate: emp.joinDate,
         endDate: emp.endDate,
+        items: breakdown.items,
+        components: breakdown.components,
         ...full,
       })
     }
@@ -378,6 +385,8 @@ export async function GET(req) {
       stats,
       employees: calculatedRows,
       allEmployees,
+      config: salaryConfig,
+      components: salaryConfig.components || [],
       tables: {
         rekapPayroll: calculatedRows,
         overtimes: allOvertimeRecords,

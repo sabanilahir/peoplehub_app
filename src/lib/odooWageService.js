@@ -4,10 +4,43 @@ import { prisma } from './prisma.js'
 export const RULE_POOL_CACHE_KEY = 'odoo_salary_rule_pool'
 
 /**
- * Mengambil katalog Salary Rules resmi dari Odoo ERP secara dinamis (100% murni tanpa data hardcode)
- * Memfilter aturan dengan kategori Allowance (ALW) dan Deduction (DED) pada Structure ID 6 (atau yang aktif).
+ * Komponen yang sudah memiliki formula perhitungan otomatis di Kalkulator Payroll / Presensi PeopleHub
+ * dan TIDAK BOLEH dimasukkan ke dalam persentase alokasi gaji bulanan (rasio upah 100%).
  */
-export async function fetchOdooSalaryRules({ forceRefresh = false } = {}) {
+export const CALCULATOR_EXCLUDED_CODES = [
+  'overtime',
+  'attendance_reward',
+  'late',
+  'sick leave',
+  'leave',
+  'half leave',
+  'jht',
+  'jp',
+  'bpjs_kesehatan_ded',
+  'attach_salary',
+  'assig_salary',
+  'child_support',
+  'deduction',
+  'reimbursement',
+]
+
+/**
+ * Mengambil katalog Salary Rules resmi dari Odoo ERP secara dinamis (100% murni tanpa data hardcode).
+ * Jika onlyPercentageEligible = true, mengecualikan seluruh komponen yang sudah dihitung oleh Kalkulator Payroll.
+ */
+export async function fetchOdooSalaryRules({ forceRefresh = false, onlyPercentageEligible = true } = {}) {
+  const filterEligible = (items) => {
+    if (!onlyPercentageEligible) return items
+    return items.filter((r) => {
+      const code = (r.code || '').toLowerCase().trim()
+      const name = (r.name || '').toLowerCase().trim()
+      const isExcluded = CALCULATOR_EXCLUDED_CODES.some(
+        (ex) => code === ex || name === ex || code.includes(ex) || name.includes(ex)
+      )
+      return !isExcluded
+    })
+  }
+
   // 1. Periksa cache di AppState jika tidak meminta forceRefresh
   if (!forceRefresh) {
     try {
@@ -20,7 +53,7 @@ export async function fetchOdooSalaryRules({ forceRefresh = false } = {}) {
         if (Array.isArray(parsed.rules) && parsed.rules.length > 0) {
           const age = Date.now() - (parsed.updatedAt || 0)
           if (age < 3600000) {
-            return parsed.rules
+            return filterEligible(parsed.rules)
           }
         }
       }
@@ -39,7 +72,7 @@ export async function fetchOdooSalaryRules({ forceRefresh = false } = {}) {
       })
       if (fallbackRow?.value) {
         const parsed = JSON.parse(fallbackRow.value)
-        if (Array.isArray(parsed.rules)) return parsed.rules
+        if (Array.isArray(parsed.rules)) return filterEligible(parsed.rules)
       }
     } catch {}
     throw new Error('Kredensial Odoo ERP belum dikonfigurasi di Pengaturan Odoo.')
@@ -203,7 +236,7 @@ export async function fetchOdooSalaryRules({ forceRefresh = false } = {}) {
     console.warn('Gagal menyimpan cache rule pool Odoo:', err.message)
   }
 
-  return catalog
+  return filterEligible(catalog)
 }
 
 // Deprecated: Tidak lagi menggunakan data hardcoded
@@ -370,6 +403,13 @@ export function normalizeSalaryConfig(raw) {
       if (rule.enableTransport ?? baseLoc.enableTransport ?? true) enabledCodes.push('TRANS')
       if (rule.enableNonPermanent ?? rule.enableKpi ?? baseLoc.enableNonPermanent ?? true) enabledCodes.push('NPA')
       // Seluruh komponen non-base lainnya yang ada di components aktif secara default untuk lokasi ini
+      for (const comp of components) {
+        if (!comp.isBase && !enabledCodes.includes(comp.code)) {
+          enabledCodes.push(comp.code)
+        }
+      }
+    } else {
+      // Pastikan seluruh non-base component yang terdaftar di components otomatis aktif jika belum ada
       for (const comp of components) {
         if (!comp.isBase && !enabledCodes.includes(comp.code)) {
           enabledCodes.push(comp.code)

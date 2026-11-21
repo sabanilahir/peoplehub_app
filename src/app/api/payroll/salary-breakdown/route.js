@@ -184,12 +184,12 @@ export async function POST(request) {
       })
     }
 
-    // Aksi 1b: Sinkronkan seluruh Master Rule resmi (Allowance & Deduction) dari Odoo ERP secara dinamis
+    // Aksi 1b: Sinkronkan seluruh Master Tunjangan Rutin resmi dari Odoo ERP secara dinamis
     if (action === 'sync_odoo_pool') {
-      const rules = await fetchOdooSalaryRules({ forceRefresh: true })
+      const rules = await fetchOdooSalaryRules({ forceRefresh: true, onlyPercentageEligible: true })
       return NextResponse.json({
         success: true,
-        message: `Berhasil menyinkronkan ${rules.length} Master Rule resmi dari Odoo ERP.`,
+        message: `Berhasil menyinkronkan ${rules.length} Tunjangan Rutin resmi dari Odoo ERP (komponen kalkulator payroll otomatis dikecualikan).`,
         poolCatalog: rules,
       })
     }

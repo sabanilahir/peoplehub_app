@@ -188,9 +188,12 @@ export default function PayrollSetupPage() {
 
   // Open Config Modal
   const handleOpenConfig = () => {
+    const comps = Array.isArray(config.components) && config.components.length > 0
+      ? config.components
+      : activeComponents
     setTempConfig({
       ...config,
-      components: JSON.parse(JSON.stringify(config.components || [])),
+      components: JSON.parse(JSON.stringify(comps)),
       locationRules: JSON.parse(JSON.stringify(config.locationRules || {})),
     })
     setConfigTab('global')
@@ -502,7 +505,7 @@ export default function PayrollSetupPage() {
       <PageHeader
         icon="🧾"
         title="Payroll Setup: Komponen Gaji Karyawan"
-        subtitle={`Basic Salary (${config.basicPercent}%) bersumber dari Wage Odoo. Tunjangan Transportasi & Non Permanent Allowance (NPA) dapat diatur per Work Location dan per Karyawan Tertentu.`}
+        subtitle={`Basic Salary (${baseComponent?.percent || 75}%) bersumber dari Wage Odoo. Seluruh tunjangan (${nonBaseComponents.map((c) => `${c.name} ${c.percent}%`).join(', ')}) dapat diatur per Work Location dan per Karyawan Tertentu.`}
         actions={
           <div className="flex items-center gap-2">
             <button
@@ -558,7 +561,7 @@ export default function PayrollSetupPage() {
       )}
 
       {/* Metric Stat Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 gap-3">
         <StatCard
           title="Total Karyawan"
           value={stats.totalEmployees || 0}
@@ -577,14 +580,14 @@ export default function PayrollSetupPage() {
           icon="🏛️"
           tone="blue"
         />
-        {nonBaseComponents.slice(0, 3).map((c, i) => {
+        {nonBaseComponents.map((c, i) => {
           const tot = stats.componentTotals?.[c.code] ?? (c.code === 'TRANS' ? stats.totalTransport : stats.totalNonPermanent || 0)
-          const tones = ['orange', 'teal', 'amber']
-          const icons = ['🚗', '🎯', '🍱']
+          const tones = ['orange', 'teal', 'amber', 'emerald', 'indigo', 'rose', 'cyan', 'blue']
+          const icons = ['🚗', '🎯', '🍱', '💻', '📈', '🏢', '🏷️', '🎁', '⭐', '🛡️']
           return (
             <StatCard
               key={c.code}
-              title={`${c.name.split(' ')[0]} (${c.percent}%)`}
+              title={`${c.name} (${c.percent}%)`}
               value={`Rp ${((tot || 0) / 1000000).toFixed(1)}M`}
               icon={icons[i % icons.length]}
               tone={tones[i % tones.length]}
@@ -840,6 +843,55 @@ export default function PayrollSetupPage() {
                 </Tr>
               )
             })}
+
+            {/* Row Ringkasan Total Footer */}
+            <Tr className="bg-slate-50 font-bold border-t-2 border-slate-200">
+              <Td className="text-xs font-mono text-gray-400">∑</Td>
+              <Td>
+                <div className="font-bold text-xs text-slate-800">TOTAL KESELURUHAN</div>
+                <div className="text-[10px] text-slate-500 font-medium">
+                  {filteredRows.length} Karyawan ({stats.withWageCount || 0} dengan Wage Odoo)
+                </div>
+              </Td>
+              <Td>
+                <span className="text-[10px] text-slate-400 font-medium">—</span>
+              </Td>
+              {/* Total Basic Salary */}
+              <Td align="right">
+                <div className="text-xs font-bold text-blue-900 font-mono">
+                  Rp {(stats.totalBasic || 0).toLocaleString('id-ID')}
+                </div>
+                <span className="text-[9px] text-blue-700 bg-blue-100/60 px-1.5 py-0.2 rounded font-semibold">
+                  Total Basic
+                </span>
+              </Td>
+              {/* Total Tiap Tunjangan Dinamis */}
+              {nonBaseComponents.map((c) => {
+                const tot = stats.componentTotals?.[c.code] ?? (c.code === 'TRANS' ? stats.totalTransport : stats.totalNonPermanent || 0)
+                return (
+                  <Td key={c.code} align="right">
+                    <div className="text-xs font-bold text-amber-900 font-mono">
+                      Rp {(tot || 0).toLocaleString('id-ID')}
+                    </div>
+                    <span className="text-[9px] text-amber-700 bg-amber-100/60 px-1.5 py-0.2 rounded font-semibold">
+                      Total {c.name.split(' ')[0]}
+                    </span>
+                  </Td>
+                )
+              })}
+              {/* Total Gross Salary */}
+              <Td align="right">
+                <div className="text-xs font-bold text-purple-900 font-mono">
+                  Rp {(stats.totalGross || 0).toLocaleString('id-ID')}
+                </div>
+                <span className="text-[9px] text-purple-700 bg-purple-100/60 px-1.5 py-0.2 rounded font-semibold">
+                  Total Gross
+                </span>
+              </Td>
+              <Td align="center">
+                <span className="text-xs text-gray-300">—</span>
+              </Td>
+            </Tr>
           </DataTable>
         )}
       </div>
@@ -1316,41 +1368,26 @@ export default function PayrollSetupPage() {
                   className="w-full text-xs border border-gray-300 rounded-lg px-3 py-2 focus:outline-teal-600 bg-white"
                   required
                 >
-                  {/* Group 1: Allowance */}
-                  {poolCatalog.filter((p) => p.category === 'ALW' || p.categoryName?.toLowerCase().includes('allowance')).length > 0 && (
-                    <optgroup label="📁 Tunjangan (Allowance) — Odoo Structure 6">
-                      {poolCatalog
-                        .filter((p) => p.category === 'ALW' || p.categoryName?.toLowerCase().includes('allowance'))
-                        .map((p) => {
-                          const isAlreadyAdded = (tempConfig.components || []).some((c) => c.code === p.code)
-                          return (
-                            <option key={p.code} value={p.code} disabled={isAlreadyAdded}>
-                              {p.name} ({p.code}) {isAlreadyAdded ? '— [Sudah Ada]' : ''}
-                            </option>
-                          )
-                        })}
-                    </optgroup>
-                  )}
-
-                  {/* Group 2: Deduction */}
-                  {poolCatalog.filter((p) => p.category === 'DED' || p.categoryName?.toLowerCase().includes('deduction')).length > 0 && (
-                    <optgroup label="📁 Potongan (Deduction) — Odoo Structure 6">
-                      {poolCatalog
-                        .filter((p) => p.category === 'DED' || p.categoryName?.toLowerCase().includes('deduction'))
-                        .map((p) => {
-                          const isAlreadyAdded = (tempConfig.components || []).some((c) => c.code === p.code)
-                          return (
-                            <option key={p.code} value={p.code} disabled={isAlreadyAdded}>
-                              {p.name} ({p.code}) {isAlreadyAdded ? '— [Sudah Ada]' : ''}
-                            </option>
-                          )
-                        })}
-                    </optgroup>
-                  )}
+                  <optgroup label="📁 Tunjangan Rutin (Regular Allowances) — Odoo Structure 6">
+                    {poolCatalog.map((p) => {
+                      const isAlreadyAdded = (tempConfig.components || []).some((c) => c.code === p.code)
+                      return (
+                        <option key={p.code} value={p.code} disabled={isAlreadyAdded}>
+                          {p.name} ({p.code}) {isAlreadyAdded ? '— [Sudah Ada]' : ''}
+                        </option>
+                      )
+                    })}
+                  </optgroup>
                 </select>
                 <div className="flex items-center justify-between text-[10px] text-gray-500 mt-1">
                   <span>Ditarik dinamis dari Structure ID 6 di Odoo ERP.</span>
-                  <span className="font-medium text-teal-700">{poolCatalog.length} master rule terdaftar</span>
+                  <span className="font-medium text-teal-700">{poolCatalog.length} tunjangan terdaftar</span>
+                </div>
+                <div className="mt-2.5 p-2.5 bg-blue-50/70 border border-blue-200/80 rounded-lg text-[11px] text-blue-900 flex items-start gap-2">
+                  <span className="text-sm shrink-0">ℹ️</span>
+                  <span>
+                    <strong>Informasi:</strong> Komponen yang sudah dihitung otomatis oleh Kalkulator Payroll (seperti Lembur/Overtime, Keterlambatan, Cuti Sakit, Mangkir, Setengah Hari, dan Iuran BPJS) secara otomatis dikecualikan dari alokasi persentase upah ini.
+                  </span>
                 </div>
               </div>
 

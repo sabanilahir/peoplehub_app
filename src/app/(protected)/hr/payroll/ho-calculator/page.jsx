@@ -30,6 +30,8 @@ export default function HoPayrollCalculatorPage() {
     range: { dateFrom: '', dateTo: '', label: '', workingDays: 22 },
     stats: {},
     employees: [],
+    config: null,
+    components: [],
     tables: {
       rekapPayroll: [],
       overtimes: [],
@@ -39,6 +41,26 @@ export default function HoPayrollCalculatorPage() {
       prorates: [],
     },
   })
+
+  // Dynamic salary components from config
+  const activeComponents = useMemo(() => {
+    if (Array.isArray(data.components) && data.components.length > 0) {
+      return data.components
+    }
+    return [
+      { code: 'BASIC', name: 'Gaji Pokok', percent: 75, isBase: true },
+      { code: 'TRANS', name: 'Transport', percent: 15, isBase: false },
+      { code: 'NPA', name: 'NPA', percent: 10, isBase: false },
+    ]
+  }, [data.components])
+
+  const baseComponent = useMemo(() => {
+    return activeComponents.find((c) => c.isBase) || activeComponents[0] || { code: 'BASIC', name: 'Gaji Pokok', percent: 75, isBase: true }
+  }, [activeComponents])
+
+  const nonBaseComponents = useMemo(() => {
+    return activeComponents.filter((c) => !c.isBase)
+  }, [activeComponents])
 
   // Date filters
   const [dateFrom, setDateFrom] = useState('')
@@ -255,6 +277,8 @@ export default function HoPayrollCalculatorPage() {
     const isGudang = loc === 'gudang' || loc.includes('warehouse') || loc.includes('pack')
     const isSales = loc === 'sales' || loc.includes('sales') || loc.includes('other')
 
+    const basePct = baseComponent.percent || 75
+
     if (isGudang) {
       const d = new Date(otForm.date + 'T00:00:00')
       const isSunday = d.getDay() === 0
@@ -267,13 +291,14 @@ export default function HoPayrollCalculatorPage() {
         hourlyRate,
         fee,
         empName: emp.name,
-        basicSalary: Math.round(Number(emp.salary || 0) * 0.75),
+        basicSalary: Math.round(Number(emp.salary || 0) * (basePct / 100)),
+        basePercent: basePct,
         dayTypeLabel: isSunday ? 'Minggu / Tanggal Merah (Rp 25.000/jam)' : 'Senin - Sabtu (Hari Kerja, Rp 15.000/jam)',
         ruleDesc: 'Aturan Gudang: Flat Rp 15.000/jam hari kerja, Rp 25.000/jam Minggu & Libur Nasional',
       }
     }
 
-    const basicSalary = Number(emp.basicSalary || Math.round(Number(emp.salary || 0) * 0.75))
+    const basicSalary = Number(emp.basicSalary || Math.round(Number(emp.salary || 0) * (basePct / 100)))
     const days = Number(overrideWorkingDays) || data.range?.workingDays || 22
     const fee = calcHoOvertimeFee(basicSalary, days, dur.hours)
     return {
@@ -284,6 +309,7 @@ export default function HoPayrollCalculatorPage() {
       fee: fee.fee,
       empName: emp.name,
       basicSalary,
+      basePercent: basePct,
       dayTypeLabel: isSales
         ? `Area Sales (Gaji Pokok / ${days} hr / 8 jam)`
         : `Head Office (Gaji Pokok / ${days} hr / 8 jam)`,
@@ -291,7 +317,7 @@ export default function HoPayrollCalculatorPage() {
         ? 'Aturan Area Sales: (Gaji Pokok / Hari Kerja / 8 Jam)'
         : 'Aturan HO: (Gaji Pokok / Hari Kerja / 8 Jam)',
     }
-  }, [otForm, data.employees, data.allEmployees, overrideWorkingDays, data.range])
+  }, [otForm, data.employees, data.allEmployees, overrideWorkingDays, data.range, baseComponent])
 
   // Filtered employees for table
   const filteredEmployees = useMemo(() => {
@@ -328,24 +354,33 @@ export default function HoPayrollCalculatorPage() {
   // Export CSV
   const handleExport = () => {
     if (activeTab === 'rekap') {
-      const rows = data.employees.map((e, idx) => ({
-        No: idx + 1,
-        NIK: e.nik || '',
-        Nama: e.name,
-        Departemen: e.dept,
-        'Gaji Gross': e.grossSalary,
-        'Gaji Pokok (75%)': e.basicSalary,
-        'Transport (15%)': e.transportAllowance,
-        'Non Permanent Allowance (NPA - 10%)': e.nonPermanentAllowance ?? e.kpiAllowance,
-        'Jam Lembur': e.totalOvertimeHours,
-        'Uang Lembur (+)': e.totalOvertimeFee,
-        'Potongan 1/2 Hari (-)': e.halfDayDeduction,
-        'Potongan Sakit (-)': e.sickLeaveDeduction,
-        'Potongan Unpaid (-)': e.unpaidLeaveDeduction,
-        'Prorata Status': e.isProrated ? e.prorateReason : 'Penuh',
-        'Gaji Prorata Dasar': e.proratedBaseGross,
-        'Total Potongan': e.totalDeductions,
-      }))
+      const rows = data.employees.map((e, idx) => {
+        const row = {
+          No: idx + 1,
+          NIK: e.nik || '',
+          Nama: e.name,
+          Departemen: e.dept,
+          'Gaji Gross': e.grossSalary,
+          [`${baseComponent.name} (${baseComponent.percent}%)`]: e.basicSalary,
+        }
+
+        nonBaseComponents.forEach((c) => {
+          const item = e.items?.[c.code]
+          const amt = item ? (item.enabled ? item.amount : 0) : (c.code === 'TRANS' ? e.transportAllowance : e.nonPermanentAllowance || 0)
+          row[`${c.name} (${c.percent}%)`] = amt
+        })
+
+        row['Jam Lembur'] = e.totalOvertimeHours
+        row['Uang Lembur (+)'] = e.totalOvertimeFee
+        row['Potongan 1/2 Hari (-)'] = e.halfDayDeduction
+        row['Potongan Sakit (-)'] = e.sickLeaveDeduction
+        row['Potongan Unpaid (-)'] = e.unpaidLeaveDeduction
+        row['Prorata Status'] = e.isProrated ? e.prorateReason : 'Penuh'
+        row['Gaji Prorata Dasar'] = e.proratedBaseGross
+        row['Total Potongan'] = e.totalDeductions
+
+        return row
+      })
       exportCsv(rows, `HO_Payroll_Rekap_${data.range?.dateFrom}_${data.range?.dateTo}.csv`)
     } else if (activeTab === 'lembur') {
       const rows = (data.tables?.overtimes || []).map((o, idx) => ({
@@ -598,9 +633,11 @@ export default function HoPayrollCalculatorPage() {
               { label: 'No', width: '50px' },
               { label: 'Karyawan' },
               { label: 'Total Gross', align: 'right' },
-              { label: 'Gaji Pokok (75%)', align: 'right' },
-              { label: 'Transport (15%)', align: 'right' },
-              { label: 'NPA (10%)', align: 'right' },
+              { label: `${baseComponent.name} (${baseComponent.percent}%)`, align: 'right' },
+              ...nonBaseComponents.map((c) => ({
+                label: `${c.name} (${c.percent}%)`,
+                align: 'right',
+              })),
               { label: 'Lembur (+)', align: 'right' },
               { label: '1/2 Hari (-)', align: 'right' },
               { label: 'Sakit (-)', align: 'right' },
@@ -610,7 +647,7 @@ export default function HoPayrollCalculatorPage() {
           >
             {paginatedEmployees.length === 0 ? (
               <Tr>
-                <Td colSpan={11} className="py-8 text-center text-gray-400">
+                <Td colSpan={9 + nonBaseComponents.length} className="py-8 text-center text-gray-400">
                   {searchQuery ? `Tidak ada data karyawan yang cocok dengan pencarian "${searchQuery}".` : 'Belum ada data karyawan.'}
                 </Td>
               </Tr>
@@ -646,9 +683,16 @@ export default function HoPayrollCalculatorPage() {
                         <div className="text-[10px] text-amber-600 font-normal">Belum ada wage</div>
                       )}
                     </Td>
-                    <Td align="right" className="text-gray-600">{fmtRp(e.basicSalary)}</Td>
-                    <Td align="right" className="text-gray-600">{fmtRp(e.transportAllowance)}</Td>
-                    <Td align="right" className="text-gray-600">{fmtRp(e.nonPermanentAllowance ?? e.kpiAllowance)}</Td>
+                    <Td align="right" className="text-gray-600 font-mono">{fmtRp(e.basicSalary)}</Td>
+                    {nonBaseComponents.map((c) => {
+                      const item = e.items?.[c.code]
+                      const amt = item ? (item.enabled ? item.amount : 0) : (c.code === 'TRANS' ? e.transportAllowance : e.nonPermanentAllowance || 0)
+                      return (
+                        <Td key={c.code} align="right" className="text-gray-600 font-mono">
+                          {fmtRp(amt)}
+                        </Td>
+                      )
+                    })}
                     <Td align="right" className="font-semibold text-emerald-600">
                       {e.totalOvertimeFee > 0 ? `+${fmtRp(e.totalOvertimeFee)}` : '-'}
                       {e.totalOvertimeHours > 0 && (
@@ -1025,9 +1069,10 @@ export default function HoPayrollCalculatorPage() {
                   <th className="py-2.5 px-3">NO</th>
                   <th className="py-2.5 px-3">NAMA</th>
                   <th className="py-2.5 px-3 text-right">TOTAL SALARY GROSS</th>
-                  <th className="py-2.5 px-3 text-right">GAJI POKOK</th>
-                  <th className="py-2.5 px-3 text-right">TUNJANGAN TRANSPORT</th>
-                  <th className="py-2.5 px-3 text-right">TUNJANGAN TIDAK TETAP</th>
+                  <th className="py-2.5 px-3 text-right">{baseComponent.name} ({baseComponent.percent}%)</th>
+                  {nonBaseComponents.map((c) => (
+                    <th key={c.code} className="py-2.5 px-3 text-right">{c.name} ({c.percent}%)</th>
+                  ))}
                   <th className="py-2.5 px-3 text-right">GAJI SATU HARI</th>
                   <th className="py-2.5 px-3 text-right bg-blue-50 text-blue-900">GAJI SETENGAH HARI</th>
                   <th className="py-2.5 px-3">KETERANGAN / KEBIJAKAN</th>
@@ -1039,9 +1084,16 @@ export default function HoPayrollCalculatorPage() {
                     <td className="py-2.5 px-3 text-gray-400">{idx + 1}</td>
                     <td className="py-2.5 px-3 font-semibold text-gray-900">{h.name}</td>
                     <td className="py-2.5 px-3 text-right font-medium">{fmtRp(h.salaryGross)}</td>
-                    <td className="py-2.5 px-3 text-right text-gray-600">{fmtRp(h.basicSalary)}</td>
-                    <td className="py-2.5 px-3 text-right text-gray-600">{fmtRp(h.transportAllowance)}</td>
-                    <td className="py-2.5 px-3 text-right text-gray-600">{fmtRp(h.nonPermanentAllowance ?? h.kpiAllowance)}</td>
+                    <td className="py-2.5 px-3 text-right text-gray-600 font-mono">{fmtRp(h.basicSalary)}</td>
+                    {nonBaseComponents.map((c) => {
+                      const item = h.items?.[c.code]
+                      const amt = item ? (item.enabled ? item.amount : 0) : (c.code === 'TRANS' ? h.transportAllowance : h.kpiAllowance || 0)
+                      return (
+                        <td key={c.code} className="py-2.5 px-3 text-right text-gray-600 font-mono">
+                          {fmtRp(amt)}
+                        </td>
+                      )
+                    })}
                     <td className="py-2.5 px-3 text-right font-medium text-gray-800">{fmtRp(h.fullDayRate)}</td>
                     <td className="py-2.5 px-3 text-right font-bold text-red-600 bg-blue-50/50">
                       {fmtRp(h.halfDayRate)}
@@ -1053,7 +1105,7 @@ export default function HoPayrollCalculatorPage() {
                 ))}
                 {(!data.tables?.halfDays || data.tables.halfDays.length === 0) && (
                   <tr>
-                    <td colSpan={9} className="py-8 text-center text-gray-400">
+                    <td colSpan={6 + nonBaseComponents.length} className="py-8 text-center text-gray-400">
                       Tidak ada rekaman izin setengah hari pada periode cut-off ini.
                     </td>
                   </tr>
@@ -1084,10 +1136,11 @@ export default function HoPayrollCalculatorPage() {
                   <th className="py-2.5 px-3">NO</th>
                   <th className="py-2.5 px-3">NAMA</th>
                   <th className="py-2.5 px-3 text-right">TOTAL SALARY GROSS</th>
-                  <th className="py-2.5 px-3 text-right">GAJI POKOK (UTUH)</th>
-                  <th className="py-2.5 px-3 text-right">TUNJANGAN TRANSPORT</th>
-                  <th className="py-2.5 px-3 text-right">NON PERMANENT ALLOWANCE (NPA)</th>
-                  <th className="py-2.5 px-3 text-right bg-emerald-50 text-emerald-900">PRORATA TRANSPORT / HARI</th>
+                  <th className="py-2.5 px-3 text-right">{baseComponent.name} (UTUH)</th>
+                  {nonBaseComponents.map((c) => (
+                    <th key={c.code} className="py-2.5 px-3 text-right">{c.name}</th>
+                  ))}
+                  <th className="py-2.5 px-3 text-right bg-emerald-50 text-emerald-900">PRORATA POTONGAN / HARI</th>
                   <th className="py-2.5 px-3 text-right text-red-600 font-bold">POTONGAN</th>
                   <th className="py-2.5 px-3">STATUS SURAT SAKIT</th>
                 </tr>
@@ -1098,9 +1151,16 @@ export default function HoPayrollCalculatorPage() {
                     <td className="py-2.5 px-3 text-gray-400">{idx + 1}</td>
                     <td className="py-2.5 px-3 font-semibold text-gray-900">{s.name}</td>
                     <td className="py-2.5 px-3 text-right font-medium">{fmtRp(s.salaryGross)}</td>
-                    <td className="py-2.5 px-3 text-right text-emerald-700 font-medium">{fmtRp(s.basicSalary)}</td>
-                    <td className="py-2.5 px-3 text-right text-gray-600">{fmtRp(s.transportAllowance)}</td>
-                    <td className="py-2.5 px-3 text-right text-gray-600">{fmtRp(s.nonPermanentAllowance ?? s.kpiAllowance)}</td>
+                    <td className="py-2.5 px-3 text-right text-emerald-700 font-medium font-mono">{fmtRp(s.basicSalary)}</td>
+                    {nonBaseComponents.map((c) => {
+                      const item = s.items?.[c.code]
+                      const amt = item ? (item.enabled ? item.amount : 0) : (c.code === 'TRANS' ? s.transportAllowance : s.kpiAllowance || 0)
+                      return (
+                        <td key={c.code} className="py-2.5 px-3 text-right text-gray-600 font-mono">
+                          {fmtRp(amt)}
+                        </td>
+                      )
+                    })}
                     <td className="py-2.5 px-3 text-right font-bold text-gray-900 bg-emerald-50/50">
                       {fmtRp(s.transportPerDay)}
                     </td>
@@ -1116,7 +1176,7 @@ export default function HoPayrollCalculatorPage() {
                 ))}
                 {(!data.tables?.sickLeaves || data.tables.sickLeaves.length === 0) && (
                   <tr>
-                    <td colSpan={9} className="py-8 text-center text-gray-400">
+                    <td colSpan={6 + nonBaseComponents.length} className="py-8 text-center text-gray-400">
                       Tidak ada rekaman cuti sakit pada periode cut-off ini.
                     </td>
                   </tr>
@@ -1346,7 +1406,7 @@ export default function HoPayrollCalculatorPage() {
                   ) : (
                     <>
                       <div className="flex justify-between">
-                        <span className="text-gray-600">Gaji Pokok (75%):</span>
+                        <span className="text-gray-600">{baseComponent.name} ({liveOtCalc.basePercent || baseComponent.percent}%):</span>
                         <strong>{fmtRp(liveOtCalc.basicSalary)}</strong>
                       </div>
                       <div className="flex justify-between">

@@ -230,6 +230,9 @@ export function calculateHoFullPayroll({
   transportAllowance,
   nonPermanentAllowance,
   kpiAllowance,
+  items = {},
+  components = [],
+  sickDeductibleTotal,
   workingDays,
   overtimeEntries = [],
   halfDayCount = 0,
@@ -323,7 +326,8 @@ export function calculateHoFullPayroll({
     extraUnpaidFromSick = sickLeaveDays
   }
 
-  const sick = calcHoSickLeaveDeduction(empTransport, totalDays, actualSickDays)
+  const sickBase = typeof sickDeductibleTotal === 'number' ? sickDeductibleTotal : empTransport
+  const sick = calcHoSickLeaveDeduction(sickBase, totalDays, actualSickDays)
 
   // 4. Unpaid Leave
   const totalUnpaidDays = unpaidDays + extraUnpaidFromSick
@@ -366,6 +370,8 @@ export function calculateHoFullPayroll({
     transportAllowance: empTransport,
     nonPermanentAllowance: empNonPermanent,
     kpiAllowance: empKpi, // alias
+    items,
+    components,
     workingDays: totalDays,
     // Prorate info
     isProrated,
