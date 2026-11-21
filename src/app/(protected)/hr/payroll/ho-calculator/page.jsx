@@ -605,13 +605,6 @@ export default function HoPayrollCalculatorPage() {
             + Input Lembur
           </ActionButton>
           <ActionButton
-            icon="⚙️"
-            variant="secondary"
-            onClick={() => setOtConfigModalOpen(true)}
-          >
-            Atur Tarif Lembur
-          </ActionButton>
-          <ActionButton
             icon="📥"
             variant="secondary"
             onClick={handleExport}
