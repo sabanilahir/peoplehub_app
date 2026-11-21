@@ -9,8 +9,8 @@ import {
   saveEmployeeAllowanceOverride,
   calculateSalaryBreakdown,
   syncOdooWages,
+  fetchOdooSalaryRules,
   DEFAULT_LOCATION_RULES,
-  ODOO_PRECONFIGURED_RULE_POOL,
 } from '@/lib/odooWageService'
 
 export const dynamic = 'force-dynamic'
@@ -28,6 +28,12 @@ export async function GET(request) {
 
     // 2. Ambil data override hak tunjangan per karyawan
     const overrides = await getEmployeeAllowanceOverrides()
+
+    // 3. Ambil master rule pool resmi dari Odoo ERP secara dinamis
+    const poolCatalog = await fetchOdooSalaryRules().catch((err) => {
+      console.warn('Gagal memuat master rule Odoo:', err.message)
+      return []
+    })
 
     // 3. Ambil data seluruh karyawan aktif
     const whereClause = { status: 'Active' }
@@ -138,7 +144,7 @@ export async function GET(request) {
       success: true,
       config,
       components: config.components || [],
-      poolCatalog: ODOO_PRECONFIGURED_RULE_POOL,
+      poolCatalog,
       locationRules: config.locationRules || DEFAULT_LOCATION_RULES,
       overrides,
       stats: {
@@ -175,6 +181,16 @@ export async function POST(request) {
         success: true,
         message: `Sinkronisasi selesai: ${result.updatedCount} karyawan diperbarui Basic Salary-nya dari Odoo Wage, ${result.unchangedCount} karyawan tetap.`,
         ...result,
+      })
+    }
+
+    // Aksi 1b: Sinkronkan seluruh Master Rule resmi (Allowance & Deduction) dari Odoo ERP secara dinamis
+    if (action === 'sync_odoo_pool') {
+      const rules = await fetchOdooSalaryRules({ forceRefresh: true })
+      return NextResponse.json({
+        success: true,
+        message: `Berhasil menyinkronkan ${rules.length} Master Rule resmi dari Odoo ERP.`,
+        poolCatalog: rules,
       })
     }
 

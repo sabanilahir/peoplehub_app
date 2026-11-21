@@ -66,6 +66,7 @@ export default function PayrollSetupPage() {
 
   // Modal Tambah Komponen dari Pool Odoo
   const [addComponentModalOpen, setAddComponentModalOpen] = useState(false)
+  const [refreshingPool, setRefreshingPool] = useState(false)
   const [newCompPoolCode, setNewCompPoolCode] = useState('MEAL')
   const [newCompName, setNewCompName] = useState('')
   const [newCompPercent, setNewCompPercent] = useState(10)
@@ -241,11 +242,35 @@ export default function PayrollSetupPage() {
     }
   }
 
+  // Refresh Master Rule Pool dari Odoo secara dinamis
+  const handleRefreshPool = async () => {
+    try {
+      setRefreshingPool(true)
+      const res = await fetch('/api/payroll/salary-breakdown', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'sync_odoo_pool' }),
+      })
+      const json = await res.json()
+      if (json.success && Array.isArray(json.poolCatalog)) {
+        setPoolCatalog(json.poolCatalog)
+        setActionMsg({ type: 'success', text: json.message || 'Katalog Master Rule Odoo berhasil disinkronkan.' })
+      } else {
+        setActionMsg({ type: 'error', text: json.error || 'Gagal menyinkronkan rule Odoo.' })
+      }
+    } catch (err) {
+      console.error(err)
+      setActionMsg({ type: 'error', text: 'Gagal terhubung ke Odoo ERP.' })
+    } finally {
+      setRefreshingPool(false)
+    }
+  }
+
   // Buka modal tambah komponen dari pool Odoo
   const handleOpenAddCompModal = () => {
     const existingCodes = (tempConfig.components || []).map((c) => c.code)
     const availablePool = poolCatalog.filter((p) => !existingCodes.includes(p.code))
-    const firstPool = availablePool[0] || poolCatalog[0] || { code: 'OTHER_ALW', name: 'Other Allowance' }
+    const firstPool = availablePool[0] || poolCatalog[0] || { code: 'MEAL', name: 'Meal Allowance' }
     setNewCompPoolCode(firstPool.code)
     setNewCompName(firstPool.name)
     setNewCompPercent(5)
@@ -260,19 +285,25 @@ export default function PayrollSetupPage() {
       code: newCompPoolCode,
       name: newCompName,
       odooRuleCode: newCompPoolCode,
-      odooInputCode: newCompPoolCode.toLowerCase(),
+      odooInputCode: newCompPoolCode,
+      category: 'ALW',
+      categoryName: 'Allowance',
     }
 
+    const safeCode = (poolItem.code || newCompPoolCode).toLowerCase().replace(/[^a-z0-9]/g, '_')
     const newComp = {
-      id: `comp_${poolItem.code.toLowerCase()}_${Date.now()}`,
+      id: `comp_${safeCode}_${Date.now()}`,
       code: poolItem.code,
       name: (newCompName || poolItem.name).trim(),
       percent: Math.max(0, Number(newCompPercent) || 0),
       isBase: false,
       isRemovable: true,
-      isSickDeductible: newCompSickDeductible,
+      isSickDeductible: Boolean(newCompSickDeductible),
       odooRuleCode: poolItem.odooRuleCode || poolItem.code,
-      odooInputCode: poolItem.odooInputCode || poolItem.code.toLowerCase(),
+      odooInputCode: poolItem.odooInputCode || poolItem.code,
+      category: poolItem.category || 'ALW',
+      categoryName: poolItem.categoryName || 'Allowance',
+      amountSelect: poolItem.amountSelect || 'input',
     }
 
     const updatedComps = [...(tempConfig.components || []), newComp]
@@ -1256,9 +1287,21 @@ export default function PayrollSetupPage() {
 
             <form onSubmit={handleAddCompConfirm} className="p-5 space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">
-                  Pilih Master Rule dari Pool Odoo:
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-gray-700">
+                    Pilih Master Rule dari Odoo:
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleRefreshPool}
+                    disabled={refreshingPool}
+                    className="text-[11px] text-teal-700 hover:text-teal-900 font-semibold flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                    title="Tarik master rule terbaru langsung dari Odoo ERP"
+                  >
+                    <span className={refreshingPool ? 'animate-spin inline-block' : 'inline-block'}>🔄</span>
+                    {refreshingPool ? 'Menyinkronkan...' : 'Sinkronkan dari Odoo'}
+                  </button>
+                </div>
                 <select
                   value={newCompPoolCode}
                   onChange={(e) => {
@@ -1273,18 +1316,42 @@ export default function PayrollSetupPage() {
                   className="w-full text-xs border border-gray-300 rounded-lg px-3 py-2 focus:outline-teal-600 bg-white"
                   required
                 >
-                  {poolCatalog.map((p) => {
-                    const isAlreadyAdded = (tempConfig.components || []).some((c) => c.code === p.code)
-                    return (
-                      <option key={p.code} value={p.code} disabled={isAlreadyAdded}>
-                        {p.name} ({p.code}) {isAlreadyAdded ? '— [Sudah Ada]' : ''}
-                      </option>
-                    )
-                  })}
+                  {/* Group 1: Allowance */}
+                  {poolCatalog.filter((p) => p.category === 'ALW' || p.categoryName?.toLowerCase().includes('allowance')).length > 0 && (
+                    <optgroup label="📁 Tunjangan (Allowance) — Odoo Structure 6">
+                      {poolCatalog
+                        .filter((p) => p.category === 'ALW' || p.categoryName?.toLowerCase().includes('allowance'))
+                        .map((p) => {
+                          const isAlreadyAdded = (tempConfig.components || []).some((c) => c.code === p.code)
+                          return (
+                            <option key={p.code} value={p.code} disabled={isAlreadyAdded}>
+                              {p.name} ({p.code}) {isAlreadyAdded ? '— [Sudah Ada]' : ''}
+                            </option>
+                          )
+                        })}
+                    </optgroup>
+                  )}
+
+                  {/* Group 2: Deduction */}
+                  {poolCatalog.filter((p) => p.category === 'DED' || p.categoryName?.toLowerCase().includes('deduction')).length > 0 && (
+                    <optgroup label="📁 Potongan (Deduction) — Odoo Structure 6">
+                      {poolCatalog
+                        .filter((p) => p.category === 'DED' || p.categoryName?.toLowerCase().includes('deduction'))
+                        .map((p) => {
+                          const isAlreadyAdded = (tempConfig.components || []).some((c) => c.code === p.code)
+                          return (
+                            <option key={p.code} value={p.code} disabled={isAlreadyAdded}>
+                              {p.name} ({p.code}) {isAlreadyAdded ? '— [Sudah Ada]' : ''}
+                            </option>
+                          )
+                        })}
+                    </optgroup>
+                  )}
                 </select>
-                <p className="text-[10px] text-gray-500 mt-1">
-                  Master rule ini sudah dikonfigurasi pada Structure ID 6 di Odoo ERP.
-                </p>
+                <div className="flex items-center justify-between text-[10px] text-gray-500 mt-1">
+                  <span>Ditarik dinamis dari Structure ID 6 di Odoo ERP.</span>
+                  <span className="font-medium text-teal-700">{poolCatalog.length} master rule terdaftar</span>
+                </div>
               </div>
 
               <div>

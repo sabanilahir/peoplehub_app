@@ -1,60 +1,213 @@
 // src/lib/odooWageService.js
 import { prisma } from './prisma.js'
 
+export const RULE_POOL_CACHE_KEY = 'odoo_salary_rule_pool'
+
 /**
- * Master Katalog Rule Pool Odoo (Strategi 2: Pre-Configured Rule Pool di Odoo)
- * Admin Odoo sudah membuat master salary rule & input type ini di Odoo Structure ID 6.
+ * Mengambil katalog Salary Rules resmi dari Odoo ERP secara dinamis (100% murni tanpa data hardcode)
+ * Memfilter aturan dengan kategori Allowance (ALW) dan Deduction (DED) pada Structure ID 6 (atau yang aktif).
  */
-export const ODOO_PRECONFIGURED_RULE_POOL = [
-  {
-    code: 'TRANS',
-    name: 'Transport Allowance',
-    odooRuleCode: 'TRANS',
-    odooInputCode: 'transport',
-    isSickDeductible: true,
-    description: 'Tunjangan transportasi kehadiran harian',
-  },
-  {
-    code: 'NPA',
-    name: 'Non Permanent Allowance (NPA)',
-    odooRuleCode: 'NPA',
-    odooInputCode: 'NPA',
-    isSickDeductible: false,
-    description: 'Tunjangan tidak tetap / insentif kinerja',
-  },
-  {
-    code: 'MEAL',
-    name: 'Meal Allowance (Uang Makan)',
-    odooRuleCode: 'MEAL',
-    odooInputCode: 'meal',
-    isSickDeductible: false,
-    description: 'Tunjangan uang makan siang',
-  },
-  {
-    code: 'COMM',
-    name: 'Communication Allowance',
-    odooRuleCode: 'COMM',
-    odooInputCode: 'comm',
-    isSickDeductible: false,
-    description: 'Tunjangan pulsa, kuota, atau internet',
-  },
-  {
-    code: 'POS',
-    name: 'Position Allowance (Tunjangan Jabatan)',
-    odooRuleCode: 'POS',
-    odooInputCode: 'pos',
-    isSickDeductible: false,
-    description: 'Tunjangan tanggung jawab struktural / jabatan',
-  },
-  {
-    code: 'OTHER_ALW',
-    name: 'Other Allowance (Tunjangan Lain-lain)',
-    odooRuleCode: 'OTHER_ALW',
-    odooInputCode: 'other_alw',
-    isSickDeductible: false,
-    description: 'Tunjangan fleksibel kustom lainnya',
-  },
-]
+export async function fetchOdooSalaryRules({ forceRefresh = false } = {}) {
+  // 1. Periksa cache di AppState jika tidak meminta forceRefresh
+  if (!forceRefresh) {
+    try {
+      const cachedRow = await prisma.appState.findUnique({
+        where: { key: RULE_POOL_CACHE_KEY },
+      })
+      if (cachedRow?.value) {
+        const parsed = JSON.parse(cachedRow.value)
+        // Cache valid selama 1 jam (3600000 ms) jika data ada
+        if (Array.isArray(parsed.rules) && parsed.rules.length > 0) {
+          const age = Date.now() - (parsed.updatedAt || 0)
+          if (age < 3600000) {
+            return parsed.rules
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Gagal membaca cache rule pool Odoo:', e.message)
+    }
+  }
+
+  // 2. Ambil kredensial Odoo dari tabel odooSettings
+  const s = await prisma.odooSettings.findFirst()
+  if (!s || !s.url || !s.db || !s.user || !s.apiKey) {
+    // Jika Odoo belum disetting, coba ambil dari cache terakhir (jika ada)
+    try {
+      const fallbackRow = await prisma.appState.findUnique({
+        where: { key: RULE_POOL_CACHE_KEY },
+      })
+      if (fallbackRow?.value) {
+        const parsed = JSON.parse(fallbackRow.value)
+        if (Array.isArray(parsed.rules)) return parsed.rules
+      }
+    } catch {}
+    throw new Error('Kredensial Odoo ERP belum dikonfigurasi di Pengaturan Odoo.')
+  }
+
+  const baseUrl = s.url.replace(/\/$/, '').replace(/\/odoo$/, '')
+  const jsonRpcUrl = `${baseUrl}/jsonrpc`
+
+  // 3. Authenticate JSON-RPC ke Odoo
+  const authRes = await fetch(jsonRpcUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      method: 'call',
+      params: { service: 'common', method: 'authenticate', args: [s.db, s.user, s.apiKey, {}] },
+      id: 1,
+    }),
+  })
+  if (!authRes.ok) {
+    throw new Error(`Koneksi HTTP ke Odoo gagal (status ${authRes.status})`)
+  }
+  const authData = await authRes.json()
+  const uid = authData.result
+  if (!uid) {
+    throw new Error(`Autentikasi Odoo gagal: ${authData.error?.data?.message || authData.error?.message || 'Invalid credentials'}`)
+  }
+
+  // 4. Cari kategori Allowance (ALW) & Deduction (DED)
+  const catRes = await fetch(jsonRpcUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      method: 'call',
+      params: {
+        service: 'object',
+        method: 'execute_kw',
+        args: [
+          s.db,
+          uid,
+          s.apiKey,
+          'hr.salary.rule.category',
+          'search_read',
+          [[['code', 'in', ['ALW', 'DED']]]],
+          { fields: ['id', 'name', 'code'] },
+        ],
+      },
+      id: 2,
+    }),
+  })
+  const targetCategories = (await catRes.json()).result || []
+  let catIds = targetCategories.map((c) => c.id)
+
+  if (catIds.length === 0) {
+    // Fallback search by category name
+    const catByNameRes = await fetch(jsonRpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'call',
+        params: {
+          service: 'object',
+          method: 'execute_kw',
+          args: [
+            s.db,
+            uid,
+            s.apiKey,
+            'hr.salary.rule.category',
+            'search_read',
+            [[['name', 'in', ['Allowance', 'Deduction']]]],
+            { fields: ['id', 'name', 'code'] },
+          ],
+        },
+        id: 21,
+      }),
+    })
+    const catsByName = (await catByNameRes.json()).result || []
+    catIds = catsByName.map((c) => c.id)
+  }
+
+  // 5. Query Salary Rules pada Structure ID 6 (atau yang aktif)
+  const ruleRes = await fetch(jsonRpcUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      method: 'call',
+      params: {
+        service: 'object',
+        method: 'execute_kw',
+        args: [
+          s.db,
+          uid,
+          s.apiKey,
+          'hr.salary.rule',
+          'search_read',
+          [[['struct_id', '=', 6], ['category_id', 'in', catIds]]],
+          { fields: ['id', 'name', 'code', 'category_id', 'amount_select'], order: 'category_id asc, name asc' },
+        ],
+      },
+      id: 3,
+    }),
+  })
+  const rules = (await ruleRes.json()).result || []
+
+  // 6. Query Payslip Input Types untuk pemetaan odooInputCode otomatis
+  const inputTypeRes = await fetch(jsonRpcUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      method: 'call',
+      params: {
+        service: 'object',
+        method: 'execute_kw',
+        args: [s.db, uid, s.apiKey, 'hr.payslip.input.type', 'search_read', [[]], { fields: ['id', 'name', 'code'] }],
+      },
+      id: 4,
+    }),
+  })
+  const inputTypes = (await inputTypeRes.json()).result || []
+
+  // 7. Bentuk katalog dinamis murni (100% Odoo, tanpa data mock)
+  const catalog = rules.map((r) => {
+    const catName = Array.isArray(r.category_id) ? r.category_id[1] : ''
+    const isAlw = catName.toLowerCase().includes('allowance')
+    const codeLower = (r.code || '').toLowerCase()
+    const nameLower = (r.name || '').toLowerCase()
+
+    const matchInput = inputTypes.find(
+      (t) =>
+        (t.code && t.code.toLowerCase() === codeLower) ||
+        (t.name && t.name.toLowerCase() === nameLower) ||
+        (codeLower === 'np_allowance' && (t.code === 'NPA' || t.name?.toLowerCase().includes('non permanent'))) ||
+        (codeLower === 'transport' && t.code?.toLowerCase() === 'transport')
+    )
+
+    return {
+      code: r.code,
+      name: r.name,
+      category: isAlw ? 'ALW' : 'DED',
+      categoryName: catName || (isAlw ? 'Allowance' : 'Deduction'),
+      odooRuleId: r.id,
+      odooRuleCode: r.code,
+      odooInputCode: matchInput?.code || r.code,
+      amountSelect: r.amount_select,
+      isSickDeductible: codeLower.includes('transport'),
+    }
+  })
+
+  // 8. Simpan ke AppState cache
+  try {
+    await prisma.appState.upsert({
+      where: { key: RULE_POOL_CACHE_KEY },
+      update: { value: JSON.stringify({ updatedAt: Date.now(), rules: catalog }) },
+      create: { key: RULE_POOL_CACHE_KEY, value: JSON.stringify({ updatedAt: Date.now(), rules: catalog }) },
+    })
+  } catch (err) {
+    console.warn('Gagal menyimpan cache rule pool Odoo:', err.message)
+  }
+
+  return catalog
+}
+
+// Deprecated: Tidak lagi menggunakan data hardcoded
+export const ODOO_PRECONFIGURED_RULE_POOL = []
 
 export const DEFAULT_COMPONENTS = [
   {
