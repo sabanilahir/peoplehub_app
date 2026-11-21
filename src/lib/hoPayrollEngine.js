@@ -19,12 +19,13 @@
  * @param {number} workingDays - Jumlah hari kerja efektif dalam periode cut-off (misal 22)
  * @returns {{ dailyRate: number, hourlyRate: number, exactDailyRate: number, exactHourlyRate: number }}
  */
-export function calcHoOvertimeRate(basicSalary, workingDays) {
+export function calcHoOvertimeRate(basicSalary, workingDays, hoursPerDay = 8) {
   if (!basicSalary || !workingDays || workingDays <= 0) {
     return { dailyRate: 0, hourlyRate: 0, exactDailyRate: 0, exactHourlyRate: 0 }
   }
+  const h = Number(hoursPerDay) > 0 ? Number(hoursPerDay) : 8
   const exactDailyRate = basicSalary / workingDays
-  const exactHourlyRate = exactDailyRate / 8
+  const exactHourlyRate = exactDailyRate / h
   const dailyRate = Math.round(exactDailyRate)
   const hourlyRate = Math.round(exactHourlyRate)
 
@@ -36,10 +37,11 @@ export function calcHoOvertimeRate(basicSalary, workingDays) {
  * @param {number} basicSalary
  * @param {number} workingDays
  * @param {number} hours - Durasi lembur dalam desimal jam (misal 5.333333 atau 2.5)
+ * @param {number} [hoursPerDay=8] - Jam kerja harian cut-off pembagi
  * @returns {{ hours: number, hourlyRate: number, fee: number }}
  */
-export function calcHoOvertimeFee(basicSalary, workingDays, hours) {
-  const { hourlyRate, exactHourlyRate } = calcHoOvertimeRate(basicSalary, workingDays)
+export function calcHoOvertimeFee(basicSalary, workingDays, hours, hoursPerDay = 8) {
+  const { hourlyRate, exactHourlyRate } = calcHoOvertimeRate(basicSalary, workingDays, hoursPerDay)
   // Perhitungan presisi menggunakan exactHourlyRate lalu dibulatkan ke rupiah
   const fee = Math.round(exactHourlyRate * hours)
   return { hours, hourlyRate, fee }
@@ -84,20 +86,29 @@ export function parseOvertimeDuration(startTime, endTime) {
  * @param {boolean} [params.isHoliday=false] - Apakah tanggal merah / libur nasional
  * @returns {{ hourlyRate: number, fee: number, dayType: string, label: string, isSpecialRate: boolean }}
  */
-export function calcWarehouseOvertime({ date, hours = 0, isHoliday = false }) {
+export function calcWarehouseOvertime({
+  date,
+  hours = 0,
+  isHoliday = false,
+  weekdayRate = 15000,
+  holidayRate = 25000,
+}) {
   let isSunday = false
   if (date) {
     const d = new Date(date + 'T00:00:00')
     isSunday = d.getDay() === 0
   }
 
+  const wRate = Number(weekdayRate) > 0 ? Number(weekdayRate) : 15000
+  const hRate = Number(holidayRate) > 0 ? Number(holidayRate) : 25000
+
   const isSpecialRate = isSunday || isHoliday
-  const hourlyRate = isSpecialRate ? 25000 : 15000
+  const hourlyRate = isSpecialRate ? hRate : wRate
   const fee = Math.round(hourlyRate * hours)
   const dayType = isSpecialRate ? 'HOLIDAY_OR_SUNDAY' : 'REGULAR_WORKDAY'
   const label = isSpecialRate
-    ? (isSunday ? 'Lembur Hari Minggu (Rp 25.000/jam)' : 'Lembur Tanggal Merah (Rp 25.000/jam)')
-    : 'Lembur Hari Kerja Senin-Sabtu (Rp 15.000/jam)'
+    ? (isSunday ? `Lembur Hari Minggu (Rp ${hourlyRate.toLocaleString('id-ID')}/jam)` : `Lembur Tanggal Merah (Rp ${hourlyRate.toLocaleString('id-ID')}/jam)`)
+    : `Lembur Hari Kerja (Rp ${hourlyRate.toLocaleString('id-ID')}/jam)`
 
   return { hourlyRate, fee, dayType, label, isSpecialRate, hours }
 }
@@ -110,13 +121,15 @@ export function calcWarehouseOvertime({ date, hours = 0, isHoliday = false }) {
  * @param {number} [params.workingDays=22] - Hari kerja cut-off (untuk HO)
  * @param {boolean} [params.isHoliday=false] - Apakah tanggal merah
  */
-export function resolveEmployeeOvertimeRate({ employee, date, workingDays = 22, isHoliday = false }) {
+export function resolveEmployeeOvertimeRate({ employee, date, workingDays = 22, isHoliday = false, overtimeConfig = null }) {
   const loc = (employee?.workLocationCode || employee?.location || 'ho').toLowerCase()
   const isGudang = loc === 'gudang' || loc.includes('warehouse') || loc.includes('pack')
   const isSales = loc === 'sales' || loc.includes('sales') || loc.includes('other')
 
   if (isGudang) {
-    const res = calcWarehouseOvertime({ date, hours: 1, isHoliday })
+    const weekdayRate = overtimeConfig?.warehouse?.weekdayRate || 15000
+    const holidayRate = overtimeConfig?.warehouse?.holidayRate || 25000
+    const res = calcWarehouseOvertime({ date, hours: 1, isHoliday, weekdayRate, holidayRate })
     return {
       locationType: 'gudang',
       hourlyRate: res.hourlyRate,
@@ -125,9 +138,10 @@ export function resolveEmployeeOvertimeRate({ employee, date, workingDays = 22, 
     }
   }
 
-  // Default HO & Area Sales (Others): Basic (75%) / WorkingDays / 8
+  // Default HO & Area Sales (Others): Basic (75%) / WorkingDays / hoursPerDay
   const basicSalary = Number(employee?.salary || 0) * 0.75
-  const hoRate = calcHoOvertimeRate(basicSalary, workingDays)
+  const hoursPerDay = overtimeConfig?.ho?.hoursPerDay || 8
+  const hoRate = calcHoOvertimeRate(basicSalary, workingDays, hoursPerDay)
   return {
     locationType: isSales ? 'sales' : 'ho',
     hourlyRate: hoRate.hourlyRate,
@@ -233,6 +247,7 @@ export function calculateHoFullPayroll({
   items = {},
   components = [],
   sickDeductibleTotal,
+  overtimeConfig = null,
   workingDays,
   overtimeEntries = [],
   halfDayCount = 0,
@@ -254,6 +269,9 @@ export function calculateHoFullPayroll({
   // 1. Lembur
   const loc = (employee?.workLocationCode || employee?.location || '').toLowerCase()
   const isGudang = loc === 'gudang' || loc.includes('warehouse') || loc.includes('pack')
+  const gudangWeekday = overtimeConfig?.warehouse?.weekdayRate || 15000
+  const gudangHoliday = overtimeConfig?.warehouse?.holidayRate || 25000
+  const hoHoursPerDay = overtimeConfig?.ho?.hoursPerDay || 8
 
   let overtimeRate = { dailyRate: 0, hourlyRate: 0, exactDailyRate: 0, exactHourlyRate: 0 }
   let totalOvertimeHours = 0
@@ -273,7 +291,12 @@ export function calculateHoFullPayroll({
         fee = ot.totalFee
         hourlyRate = ot.hourlyRate || Math.round(fee / (hours || 1))
       } else {
-        const calc = calcWarehouseOvertime({ date: ot.date, hours })
+        const calc = calcWarehouseOvertime({
+          date: ot.date,
+          hours,
+          weekdayRate: gudangWeekday,
+          holidayRate: gudangHoliday,
+        })
         fee = calc.fee
         hourlyRate = calc.hourlyRate
       }
@@ -288,30 +311,39 @@ export function calculateHoFullPayroll({
     })
     overtimeRate = {
       dailyRate: 0,
-      hourlyRate: totalOvertimeHours > 0 ? Math.round(totalOvertimeFee / totalOvertimeHours) : 15000,
+      hourlyRate: totalOvertimeHours > 0 ? Math.round(totalOvertimeFee / totalOvertimeHours) : gudangWeekday,
       exactDailyRate: 0,
-      exactHourlyRate: totalOvertimeHours > 0 ? totalOvertimeFee / totalOvertimeHours : 15000,
+      exactHourlyRate: totalOvertimeHours > 0 ? totalOvertimeFee / totalOvertimeHours : gudangWeekday,
     }
   } else {
-    overtimeRate = calcHoOvertimeRate(empBasic, totalDays)
+    overtimeRate = calcHoOvertimeRate(empBasic, totalDays, hoHoursPerDay)
     processedOvertimes = overtimeEntries.map((ot) => {
       // Utamakan hitung dari startTime & endTime agar durasi menit (misal 20 menit = 1/3 jam) presisi
       const duration = (ot.startTime && ot.endTime)
         ? parseOvertimeDuration(ot.startTime, ot.endTime)
         : { hours: Number(ot.totalHours) || 0 }
       const hours = duration.hours
-      const fee = Math.round(overtimeRate.exactHourlyRate * hours)
+      let fee = 0
+      let hourlyRate = overtimeRate.hourlyRate
+      if (ot.totalFee && ot.totalFee > 0) {
+        fee = ot.totalFee
+        hourlyRate = ot.hourlyRate || Math.round(fee / (hours || 1))
+      } else {
+        fee = Math.round(overtimeRate.exactHourlyRate * hours)
+      }
       totalOvertimeHours += hours
+      totalOvertimeFee += fee
       return {
         ...ot,
         totalHours: Math.round(hours * 100) / 100,
         formattedHours: (Math.round(hours * 100) / 100).toFixed(2),
-        hourlyRate: overtimeRate.hourlyRate,
+        hourlyRate,
         fee,
       }
     })
-    // Total lembur dihitung dari total akumulasi jam presisi agar sesuai pembulatan Excel
-    totalOvertimeFee = Math.round(overtimeRate.exactHourlyRate * totalOvertimeHours)
+    if (!processedOvertimes.some((o) => o.totalFee && o.totalFee > 0)) {
+      totalOvertimeFee = Math.round(overtimeRate.exactHourlyRate * totalOvertimeHours)
+    }
   }
 
   // 2. Setengah Hari

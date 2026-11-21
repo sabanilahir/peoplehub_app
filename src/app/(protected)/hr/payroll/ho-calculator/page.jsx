@@ -32,6 +32,7 @@ export default function HoPayrollCalculatorPage() {
     employees: [],
     config: null,
     components: [],
+    overtimeConfig: null,
     tables: {
       rekapPayroll: [],
       overtimes: [],
@@ -87,7 +88,7 @@ export default function HoPayrollCalculatorPage() {
     setOtPage(1)
   }, [otStatusFilter])
 
-  // Modal Overtime
+  // Modal Overtime Input
   const [otModalOpen, setOtModalOpen] = useState(false)
   const [otSubmitting, setOtSubmitting] = useState(false)
   const [otForm, setOtForm] = useState({
@@ -96,6 +97,42 @@ export default function HoPayrollCalculatorPage() {
     startTime: '18:00',
     endTime: '21:00',
     taskNote: '',
+  })
+
+  // Modal Overtime Policy Configuration
+  const [otConfigModalOpen, setOtConfigModalOpen] = useState(false)
+  const [otConfigSubmitting, setOtConfigSubmitting] = useState(false)
+  const [otConfigForm, setOtConfigForm] = useState({
+    weekdayRate: 15000,
+    holidayRate: 25000,
+    hoursPerDay: 8,
+  })
+
+  // Synchronize overtime config state from server data
+  useEffect(() => {
+    if (data.overtimeConfig) {
+      setOtConfigForm({
+        weekdayRate: data.overtimeConfig.warehouse?.weekdayRate ?? 15000,
+        holidayRate: data.overtimeConfig.warehouse?.holidayRate ?? 25000,
+        hoursPerDay: data.overtimeConfig.ho?.hoursPerDay ?? 8,
+      })
+    }
+  }, [data.overtimeConfig])
+
+  // Modal Edit Overtime Entry
+  const [editOtModalOpen, setEditOtModalOpen] = useState(false)
+  const [editOtSubmitting, setEditOtSubmitting] = useState(false)
+  const [editOtForm, setEditOtForm] = useState({
+    id: null,
+    employee: null,
+    empName: '',
+    date: '',
+    startTime: '',
+    endTime: '',
+    taskNote: '',
+    status: 'Approved',
+    totalFee: '',
+    isManualFee: false,
   })
 
   // Flash message
@@ -266,6 +303,96 @@ export default function HoPayrollCalculatorPage() {
     }
   }
 
+  // Handle Save Overtime Policy Configuration
+  const handleSaveOtConfig = async (e) => {
+    e.preventDefault()
+    try {
+      setOtConfigSubmitting(true)
+      const res = await fetch('/api/payroll/overtime-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          warehouse: {
+            weekdayRate: Number(otConfigForm.weekdayRate),
+            holidayRate: Number(otConfigForm.holidayRate),
+          },
+          ho: {
+            hoursPerDay: Number(otConfigForm.hoursPerDay),
+          },
+          sales: {
+            hoursPerDay: Number(otConfigForm.hoursPerDay),
+          },
+        }),
+      })
+      const json = await res.json()
+      if (json.success) {
+        flash(json.message || 'Kebijakan tarif lembur berhasil diperbarui!')
+        setOtConfigModalOpen(false)
+        await fetchData(dateFrom, dateTo, overrideWorkingDays)
+      } else {
+        flash(json.error || 'Gagal menyimpan aturan lembur.', 'error')
+      }
+    } catch (err) {
+      flash('Terjadi kesalahan saat menyimpan aturan lembur.', 'error')
+    } finally {
+      setOtConfigSubmitting(false)
+    }
+  }
+
+  // Handle Open Edit Overtime Modal
+  const handleOpenEditOt = (ot) => {
+    setEditOtForm({
+      id: ot.id,
+      employee: ot.employee,
+      empName: ot.employee?.name || `Karyawan ID: ${ot.empId}`,
+      date: ot.date,
+      startTime: ot.startTime,
+      endTime: ot.endTime,
+      taskNote: ot.taskNote || '',
+      status: ot.status || 'Approved',
+      totalFee: ot.totalFee,
+      isManualFee: false,
+    })
+    setEditOtModalOpen(true)
+  }
+
+  // Handle Update Overtime Entry
+  const handleUpdateOvertime = async (e) => {
+    e.preventDefault()
+    try {
+      setEditOtSubmitting(true)
+      const payload = {
+        id: editOtForm.id,
+        date: editOtForm.date,
+        startTime: editOtForm.startTime,
+        endTime: editOtForm.endTime,
+        taskNote: editOtForm.taskNote,
+        status: editOtForm.status,
+        workingDays: Number(overrideWorkingDays) || data.range?.workingDays || 22,
+      }
+      if (editOtForm.isManualFee) {
+        payload.totalFee = Number(editOtForm.totalFee)
+      }
+      const res = await fetch('/api/overtime', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const json = await res.json()
+      if (json.success) {
+        flash('Entri lembur berhasil diperbarui dan kalkulasi payroll otomatis dihitung ulang!')
+        setEditOtModalOpen(false)
+        await fetchData(dateFrom, dateTo, overrideWorkingDays)
+      } else {
+        flash(json.error || 'Gagal memperbarui entri lembur.', 'error')
+      }
+    } catch (err) {
+      flash('Terjadi kesalahan saat memperbarui entri lembur.', 'error')
+    } finally {
+      setEditOtSubmitting(false)
+    }
+  }
+
   // Live calculation preview in overtime modal
   const liveOtCalc = useMemo(() => {
     if (!otForm.empId || !otForm.startTime || !otForm.endTime) return null
@@ -278,11 +405,15 @@ export default function HoPayrollCalculatorPage() {
     const isSales = loc === 'sales' || loc.includes('sales') || loc.includes('other')
 
     const basePct = baseComponent.percent || 75
+    const otConfig = data.overtimeConfig || {}
+    const gudangWeekday = otConfig.warehouse?.weekdayRate || 15000
+    const gudangHoliday = otConfig.warehouse?.holidayRate || 25000
+    const hoHours = otConfig.ho?.hoursPerDay || 8
 
     if (isGudang) {
       const d = new Date(otForm.date + 'T00:00:00')
       const isSunday = d.getDay() === 0
-      const hourlyRate = isSunday ? 25000 : 15000
+      const hourlyRate = isSunday ? gudangHoliday : gudangWeekday
       const fee = Math.round(hourlyRate * dur.hours)
       return {
         isGudang: true,
@@ -293,14 +424,16 @@ export default function HoPayrollCalculatorPage() {
         empName: emp.name,
         basicSalary: Math.round(Number(emp.salary || 0) * (basePct / 100)),
         basePercent: basePct,
-        dayTypeLabel: isSunday ? 'Minggu / Tanggal Merah (Rp 25.000/jam)' : 'Senin - Sabtu (Hari Kerja, Rp 15.000/jam)',
-        ruleDesc: 'Aturan Gudang: Flat Rp 15.000/jam hari kerja, Rp 25.000/jam Minggu & Libur Nasional',
+        dayTypeLabel: isSunday
+          ? `Minggu / Tanggal Merah (${fmtRp(gudangHoliday)}/jam)`
+          : `Senin - Sabtu (Hari Kerja, ${fmtRp(gudangWeekday)}/jam)`,
+        ruleDesc: `Aturan Gudang: Flat ${fmtRp(gudangWeekday)}/jam hari kerja, ${fmtRp(gudangHoliday)}/jam Minggu & Libur Nasional`,
       }
     }
 
     const basicSalary = Number(emp.basicSalary || Math.round(Number(emp.salary || 0) * (basePct / 100)))
     const days = Number(overrideWorkingDays) || data.range?.workingDays || 22
-    const fee = calcHoOvertimeFee(basicSalary, days, dur.hours)
+    const fee = calcHoOvertimeFee(basicSalary, days, dur.hours, hoHours)
     return {
       isGudang: false,
       isSales,
@@ -311,13 +444,66 @@ export default function HoPayrollCalculatorPage() {
       basicSalary,
       basePercent: basePct,
       dayTypeLabel: isSales
-        ? `Area Sales (Gaji Pokok / ${days} hr / 8 jam)`
-        : `Head Office (Gaji Pokok / ${days} hr / 8 jam)`,
+        ? `Area Sales (Gaji Pokok / ${days} hr / ${hoHours} jam)`
+        : `Head Office (Gaji Pokok / ${days} hr / ${hoHours} jam)`,
       ruleDesc: isSales
-        ? 'Aturan Area Sales: (Gaji Pokok / Hari Kerja / 8 Jam)'
-        : 'Aturan HO: (Gaji Pokok / Hari Kerja / 8 Jam)',
+        ? `Aturan Area Sales: (Gaji Pokok / Hari Kerja / ${hoHours} Jam)`
+        : `Aturan HO: (Gaji Pokok / Hari Kerja / ${hoHours} Jam)`,
     }
-  }, [otForm, data.employees, data.allEmployees, overrideWorkingDays, data.range, baseComponent])
+  }, [otForm, data.employees, data.allEmployees, overrideWorkingDays, data.range, baseComponent, data.overtimeConfig])
+
+  // Live calculation preview in Edit Overtime modal
+  const liveEditOtCalc = useMemo(() => {
+    if (!editOtForm.id || !editOtForm.startTime || !editOtForm.endTime) return null
+    const dur = parseOvertimeDuration(editOtForm.startTime, editOtForm.endTime)
+    const emp = editOtForm.employee || {}
+    const loc = (emp.workLocationCode || emp.location || '').toLowerCase()
+    const isGudang = loc === 'gudang' || loc.includes('warehouse') || loc.includes('pack')
+    const isSales = loc === 'sales' || loc.includes('sales') || loc.includes('other')
+
+    const basePct = baseComponent.percent || 75
+    const otConfig = data.overtimeConfig || {}
+    const gudangWeekday = otConfig.warehouse?.weekdayRate || 15000
+    const gudangHoliday = otConfig.warehouse?.holidayRate || 25000
+    const hoHours = otConfig.ho?.hoursPerDay || 8
+
+    if (isGudang) {
+      const d = new Date(editOtForm.date + 'T00:00:00')
+      const isSunday = d.getDay() === 0
+      const hourlyRate = isSunday ? gudangHoliday : gudangWeekday
+      const autoFee = Math.round(hourlyRate * dur.hours)
+      const fee = editOtForm.isManualFee && editOtForm.totalFee !== '' ? Number(editOtForm.totalFee) : autoFee
+      return {
+        isGudang: true,
+        isSales: false,
+        hours: dur.formattedHours,
+        hourlyRate,
+        autoFee,
+        fee,
+        dayTypeLabel: isSunday
+          ? `Minggu / Tanggal Merah (${fmtRp(gudangHoliday)}/jam)`
+          : `Senin - Sabtu (Hari Kerja, ${fmtRp(gudangWeekday)}/jam)`,
+      }
+    }
+
+    const basicSalary = Number(emp.basicSalary || Math.round(Number(emp.salary || 0) * (basePct / 100)))
+    const days = Number(overrideWorkingDays) || data.range?.workingDays || 22
+    const calc = calcHoOvertimeFee(basicSalary, days, dur.hours, hoHours)
+    const fee = editOtForm.isManualFee && editOtForm.totalFee !== '' ? Number(editOtForm.totalFee) : calc.fee
+    return {
+      isGudang: false,
+      isSales,
+      hours: dur.formattedHours,
+      hourlyRate: calc.hourlyRate,
+      autoFee: calc.fee,
+      fee,
+      basicSalary,
+      basePercent: basePct,
+      dayTypeLabel: isSales
+        ? `Area Sales (Gaji Pokok / ${days} hr / ${hoHours} jam)`
+        : `Head Office (Gaji Pokok / ${days} hr / ${hoHours} jam)`,
+    }
+  }, [editOtForm, data.overtimeConfig, overrideWorkingDays, data.range, baseComponent])
 
   // Filtered employees for table
   const filteredEmployees = useMemo(() => {
@@ -417,6 +603,13 @@ export default function HoPayrollCalculatorPage() {
             onClick={() => setOtModalOpen(true)}
           >
             + Input Lembur
+          </ActionButton>
+          <ActionButton
+            icon="⚙️"
+            variant="secondary"
+            onClick={() => setOtConfigModalOpen(true)}
+          >
+            Atur Tarif Lembur
           </ActionButton>
           <ActionButton
             icon="📥"
@@ -785,22 +978,40 @@ export default function HoPayrollCalculatorPage() {
             {/* Header Comparison Policy Banner */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
               <div className="p-4 bg-indigo-50/70 border border-indigo-200 rounded-xl text-xs space-y-1">
-                <div className="font-bold text-sm text-indigo-900 flex items-center gap-1.5">
-                  <span>🏢</span> Aturan Lembur HO & <span>💼</span> Area Sales
+                <div className="font-bold text-sm text-indigo-900 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <span>🏢</span> Aturan Lembur HO & <span>💼</span> Area Sales
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setOtConfigModalOpen(true)}
+                    className="text-[11px] font-semibold text-indigo-700 hover:text-indigo-900 bg-white/80 border border-indigo-300 px-2 py-0.5 rounded shadow-sm hover:bg-white transition cursor-pointer"
+                  >
+                    ⚙️ Atur Kebijakan
+                  </button>
                 </div>
-                <div className="text-gray-700">Formula: <strong className="font-mono text-indigo-800">(Gaji Pokok / Hari Kerja Cut-off) / 8 Jam</strong></div>
-                <div className="text-gray-600">Tarif per jam dihitung proporsional berbasis gaji pokok untuk staf Head Office dan Area Sales (Others).</div>
+                <div className="text-gray-700">Formula: <strong className="font-mono text-indigo-800">(Gaji Pokok / Hari Kerja Cut-off) / {data.overtimeConfig?.ho?.hoursPerDay || 8} Jam</strong></div>
+                <div className="text-gray-600">Tarif per jam dihitung proporsional berbasis gaji pokok ({baseComponent.percent}%) untuk staf Head Office dan Area Sales (Others).</div>
               </div>
 
               <div className="p-4 bg-amber-50/70 border border-amber-200 rounded-xl text-xs space-y-1">
-                <div className="font-bold text-sm text-amber-900 flex items-center gap-1.5">
-                  <span>📦</span> Aturan Lembur Gudang (Warehouse)
+                <div className="font-bold text-sm text-amber-900 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <span>📦</span> Aturan Lembur Gudang (Warehouse)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setOtConfigModalOpen(true)}
+                    className="text-[11px] font-semibold text-amber-800 hover:text-amber-950 bg-white/80 border border-amber-300 px-2 py-0.5 rounded shadow-sm hover:bg-white transition cursor-pointer"
+                  >
+                    ⚙️ Atur Tarif
+                  </button>
                 </div>
                 <div className="text-gray-700">
-                  Hari Kerja (Senin - Sabtu): <strong className="font-mono text-amber-900">Rp 15.000 / Jam</strong> (Flat)
+                  Hari Kerja (Senin - Sabtu): <strong className="font-mono text-amber-900">{fmtRp(data.overtimeConfig?.warehouse?.weekdayRate || 15000)} / Jam</strong> (Flat)
                 </div>
                 <div className="text-gray-700">
-                  Minggu & Tanggal Merah: <strong className="font-mono text-red-700">Rp 25.000 / Jam</strong> (Flat)
+                  Minggu & Tanggal Merah: <strong className="font-mono text-red-700">{fmtRp(data.overtimeConfig?.warehouse?.holidayRate || 25000)} / Jam</strong> (Flat)
                 </div>
                 <div className="text-gray-600">Tarif flat berlaku untuk staf operasional gudang dan logistik.</div>
               </div>
@@ -952,8 +1163,16 @@ export default function HoPayrollCalculatorPage() {
                             <div className="flex items-center justify-center gap-1">
                               <button
                                 type="button"
+                                onClick={() => handleOpenEditOt(ot)}
+                                className="text-indigo-600 bg-indigo-50 hover:bg-indigo-100 text-[11px] font-semibold px-2 py-1 rounded border border-indigo-200 transition cursor-pointer"
+                                title="Ubah data lembur"
+                              >
+                                ✏️ Ubah
+                              </button>
+                              <button
+                                type="button"
                                 onClick={() => handleQuickApproveOvertime(ot.id)}
-                                className="text-white bg-emerald-600 hover:bg-emerald-700 text-[11px] font-bold px-2 py-1 rounded transition"
+                                className="text-white bg-emerald-600 hover:bg-emerald-700 text-[11px] font-bold px-2 py-1 rounded transition cursor-pointer"
                                 title="Setujui lembur"
                               >
                                 ✓ Setujui
@@ -961,7 +1180,7 @@ export default function HoPayrollCalculatorPage() {
                               <button
                                 type="button"
                                 onClick={() => handleQuickRejectOvertime(ot.id)}
-                                className="text-amber-800 bg-amber-100 hover:bg-amber-200 text-[11px] font-semibold px-2 py-1 rounded border border-amber-300 transition"
+                                className="text-amber-800 bg-amber-100 hover:bg-amber-200 text-[11px] font-semibold px-2 py-1 rounded border border-amber-300 transition cursor-pointer"
                                 title="Tolak lembur"
                               >
                                 ✗ Tolak
@@ -969,20 +1188,30 @@ export default function HoPayrollCalculatorPage() {
                               <button
                                 type="button"
                                 onClick={() => handleDeleteOvertime(ot.id)}
-                                className="text-red-500 hover:text-red-700 text-[11px] font-semibold px-1 py-1 rounded hover:bg-red-50 transition"
+                                className="text-red-500 hover:text-red-700 text-[11px] font-semibold px-1 py-1 rounded hover:bg-red-50 transition cursor-pointer"
                                 title="Hapus entri"
                               >
                                 Hapus
                               </button>
                             </div>
                           ) : (
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteOvertime(ot.id)}
-                              className="text-red-500 hover:text-red-700 text-xs font-semibold px-2 py-1 rounded hover:bg-red-50"
-                            >
-                              Hapus
-                            </button>
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditOt(ot)}
+                                className="text-indigo-600 bg-indigo-50 hover:bg-indigo-100 text-[11px] font-semibold px-2 py-1 rounded border border-indigo-200 transition cursor-pointer"
+                                title="Ubah data lembur"
+                              >
+                                ✏️ Ubah
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteOvertime(ot.id)}
+                                className="text-red-500 hover:text-red-700 text-xs font-semibold px-2 py-1 rounded hover:bg-red-50 cursor-pointer"
+                              >
+                                Hapus
+                              </button>
+                            </div>
                           )}
                         </td>
                       </tr>
@@ -1410,7 +1639,7 @@ export default function HoPayrollCalculatorPage() {
                         <strong>{fmtRp(liveOtCalc.basicSalary)}</strong>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-gray-600">Rate / Jam ({data.range?.workingDays || 22} hr, 8 jam):</span>
+                        <span className="text-gray-600">Rate / Jam ({data.range?.workingDays || 22} hr, {data.overtimeConfig?.ho?.hoursPerDay || 8} jam):</span>
                         <strong className="text-indigo-700">{fmtRp(liveOtCalc.hourlyRate)}/jam</strong>
                       </div>
                     </>
@@ -1443,6 +1672,257 @@ export default function HoPayrollCalculatorPage() {
                   disabled={otSubmitting}
                 >
                   {otSubmitting ? 'Menyimpan...' : 'Simpan Entri Lembur'}
+                </ActionButton>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL EDIT LEMBUR KARYAWAN */}
+      {editOtModalOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b pb-3">
+              <div>
+                <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                  <span>✏️</span> Ubah Entri Lembur Karyawan
+                </h3>
+                <p className="text-xs text-gray-500">Perbarui tanggal, jam kerja, atau nominal uang lembur karyawan.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditOtModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600 text-xl font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateOvertime} className="space-y-4">
+              <FormField label="Karyawan">
+                <Input
+                  value={editOtForm.empName}
+                  disabled
+                  className="bg-gray-100 text-gray-700 font-semibold cursor-not-allowed"
+                />
+              </FormField>
+
+              <div className="grid grid-cols-2 gap-3">
+                <FormField label="Tanggal Lembur">
+                  <Input
+                    type="date"
+                    value={editOtForm.date}
+                    onChange={(e) => setEditOtForm({ ...editOtForm, date: e.target.value })}
+                    required
+                  />
+                </FormField>
+                <FormField label="Status Lembur">
+                  <Select
+                    value={editOtForm.status}
+                    onChange={(e) => setEditOtForm({ ...editOtForm, status: e.target.value })}
+                  >
+                    <option value="Approved">Approved (Disetujui)</option>
+                    <option value="Pending">Pending (Menunggu)</option>
+                    <option value="Rejected">Rejected (Ditolak)</option>
+                  </Select>
+                </FormField>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <FormField label="Jam Mulai (HH:mm)">
+                  <Input
+                    type="time"
+                    value={editOtForm.startTime}
+                    onChange={(e) => setEditOtForm({ ...editOtForm, startTime: e.target.value })}
+                    required
+                  />
+                </FormField>
+                <FormField label="Jam Selesai (HH:mm)">
+                  <Input
+                    type="time"
+                    value={editOtForm.endTime}
+                    onChange={(e) => setEditOtForm({ ...editOtForm, endTime: e.target.value })}
+                    required
+                  />
+                </FormField>
+              </div>
+
+              <FormField label="Uraian Tugas Lembur">
+                <Input
+                  value={editOtForm.taskNote}
+                  onChange={(e) => setEditOtForm({ ...editOtForm, taskNote: e.target.value })}
+                  required
+                />
+              </FormField>
+
+              {/* Live Preview Calculation */}
+              {liveEditOtCalc && (
+                <div className={`p-4 rounded-xl space-y-2 text-xs border ${
+                  liveEditOtCalc.isGudang
+                    ? 'bg-amber-50 border-amber-200 text-amber-950'
+                    : 'bg-indigo-50 border-indigo-200 text-indigo-950'
+                }`}>
+                  <div className="font-bold flex items-center justify-between">
+                    <span>
+                      {liveEditOtCalc.isGudang
+                        ? '📦 Simulasi Perhitungan Gudang:'
+                        : '🏢 Simulasi Perhitungan HO / Sales:'}
+                    </span>
+                    <span className="font-mono font-bold">{liveEditOtCalc.hours} Jam</span>
+                  </div>
+
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Tarif Per Jam:</span>
+                    <strong className="font-mono">{fmtRp(liveEditOtCalc.hourlyRate)}/jam</strong>
+                  </div>
+
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Uang Lembur Terhitung (Sistem):</span>
+                    <strong className="font-mono text-indigo-700">{fmtRp(liveEditOtCalc.autoFee)}</strong>
+                  </div>
+
+                  {/* Manual Fee Override Toggle */}
+                  <div className="pt-2 border-t border-gray-200/60 flex items-center justify-between">
+                    <label className="flex items-center gap-2 cursor-pointer text-gray-700 font-medium">
+                      <input
+                        type="checkbox"
+                        checked={editOtForm.isManualFee}
+                        onChange={(e) => setEditOtForm({
+                          ...editOtForm,
+                          isManualFee: e.target.checked,
+                          totalFee: e.target.checked ? (editOtForm.totalFee || liveEditOtCalc.autoFee) : '',
+                        })}
+                        className="rounded text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <span>Override Total Fee Manual</span>
+                    </label>
+                  </div>
+
+                  {editOtForm.isManualFee && (
+                    <div className="pt-1">
+                      <FormField label="Nominal Uang Lembur Khusus (Rp)">
+                        <Input
+                          type="number"
+                          value={editOtForm.totalFee}
+                          onChange={(e) => setEditOtForm({ ...editOtForm, totalFee: e.target.value })}
+                          placeholder="Masukkan total fee manual..."
+                          required
+                        />
+                      </FormField>
+                    </div>
+                  )}
+
+                  <div className="flex justify-between border-t pt-1.5 text-sm font-bold border-gray-200">
+                    <span>Total Uang Lembur Akhir:</span>
+                    <span className="text-emerald-700 font-mono">{fmtRp(liveEditOtCalc.fee)}</span>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-2 border-t">
+                <ActionButton
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setEditOtModalOpen(false)}
+                >
+                  Batal
+                </ActionButton>
+                <ActionButton
+                  type="submit"
+                  variant="primary"
+                  disabled={editOtSubmitting}
+                >
+                  {editOtSubmitting ? 'Menyimpan...' : 'Simpan Perubahan'}
+                </ActionButton>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL KONFIGURASI ATURAN & TARIF LEMBUR */}
+      {otConfigModalOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex justify-between items-center border-b pb-3">
+              <div>
+                <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                  <span>⚙️</span> Kebijakan & Tarif Lembur
+                </h3>
+                <p className="text-xs text-gray-500">Konfigurasi tarif flat lembur Gudang dan aturan pembagi jam kerja HO & Area Sales.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOtConfigModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600 text-xl font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveOtConfig} className="space-y-4">
+              <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 space-y-3">
+                <div className="font-bold text-xs text-amber-900 flex items-center gap-1.5">
+                  <span>📦</span> Tarif Lembur Gudang (Warehouse Flat Rate)
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <FormField label="Hari Kerja (Senin - Sabtu)">
+                    <Input
+                      type="number"
+                      min="0"
+                      step="1000"
+                      value={otConfigForm.weekdayRate}
+                      onChange={(e) => setOtConfigForm({ ...otConfigForm, weekdayRate: e.target.value })}
+                      required
+                    />
+                  </FormField>
+                  <FormField label="Minggu & Tanggal Merah">
+                    <Input
+                      type="number"
+                      min="0"
+                      step="1000"
+                      value={otConfigForm.holidayRate}
+                      onChange={(e) => setOtConfigForm({ ...otConfigForm, holidayRate: e.target.value })}
+                      required
+                    />
+                  </FormField>
+                </div>
+              </div>
+
+              <div className="p-3 bg-indigo-50 rounded-xl border border-indigo-200 space-y-3">
+                <div className="font-bold text-xs text-indigo-900 flex items-center gap-1.5">
+                  <span>🏢</span> Aturan Lembur HO & <span>💼</span> Area Sales
+                </div>
+                <FormField label="Jam Kerja Harian Pembagi (Jam/Hari)">
+                  <Input
+                    type="number"
+                    min="1"
+                    max="24"
+                    value={otConfigForm.hoursPerDay}
+                    onChange={(e) => setOtConfigForm({ ...otConfigForm, hoursPerDay: e.target.value })}
+                    required
+                  />
+                </FormField>
+                <div className="text-[11px] text-gray-500">
+                  Formula: <code>(Gaji Pokok / Hari Kerja Cut-off) / {otConfigForm.hoursPerDay || 8} Jam</code>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t">
+                <ActionButton
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setOtConfigModalOpen(false)}
+                >
+                  Batal
+                </ActionButton>
+                <ActionButton
+                  type="submit"
+                  variant="primary"
+                  disabled={otConfigSubmitting}
+                >
+                  {otConfigSubmitting ? 'Menyimpan...' : 'Simpan Kebijakan Lembur'}
                 </ActionButton>
               </div>
             </form>

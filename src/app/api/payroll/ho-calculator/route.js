@@ -8,6 +8,7 @@ import {
   getEmployeeAllowanceOverrides,
   calculateSalaryBreakdown,
 } from '@/lib/odooWageService'
+import { getOvertimeConfig } from '@/lib/overtimeConfigService'
 import {
   calcHoOvertimeRate,
   calcHoOvertimeFee,
@@ -171,6 +172,7 @@ export async function GET(req) {
 
     // 7. Hitung perhitungan per karyawan menggunakan hoPayrollEngine & dynamic breakdown
     const salaryConfig = await getSalaryBreakdownConfig()
+    const overtimeConfig = await getOvertimeConfig()
     const overrides = await getEmployeeAllowanceOverrides()
 
     const calculatedRows = []
@@ -329,6 +331,7 @@ export async function GET(req) {
         items: breakdown.items,
         components: breakdown.components,
         sickDeductibleTotal: breakdown.sickDeductibleTotal,
+        overtimeConfig,
         workingDays,
         overtimeEntries: empOvertimes,
         halfDayCount,
@@ -387,6 +390,7 @@ export async function GET(req) {
       allEmployees,
       config: salaryConfig,
       components: salaryConfig.components || [],
+      overtimeConfig,
       tables: {
         rekapPayroll: calculatedRows,
         overtimes: allOvertimeRecords,

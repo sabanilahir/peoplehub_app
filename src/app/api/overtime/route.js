@@ -1,5 +1,7 @@
 // src/app/api/overtime/route.js
 import { prisma } from '@/lib/prisma'
+import { getOvertimeConfig } from '@/lib/overtimeConfigService'
+import { getSalaryBreakdownConfig } from '@/lib/odooWageService'
 import {
   calcHoOvertimeRate,
   calcHoOvertimeFee,
@@ -178,7 +180,11 @@ export async function POST(req) {
     })
     const isHoliday = !!holidayRecord
 
-    // Hitung tarif dan total fee lembur sesuai lokasi kerja (HO vs Gudang)
+    // Hitung tarif dan total fee lembur sesuai lokasi kerja (HO vs Gudang) dengan membaca konfigurasi aktif
+    const otConfig = await getOvertimeConfig()
+    const salaryConfig = await getSalaryBreakdownConfig()
+    const basePct = (salaryConfig.components?.find((c) => c.isBase)?.percent || salaryConfig.basicPercent || 75) / 100
+
     const loc = (employee.workLocationCode || employee.location || '').toLowerCase()
     const isGudang = loc === 'gudang' || loc.includes('warehouse') || loc.includes('pack')
 
@@ -186,22 +192,20 @@ export async function POST(req) {
     let totalFee = 0
 
     if (isGudang) {
-      // Aturan Khusus Gudang:
-      // Senin - Sabtu: Rp 15.000 / Jam
-      // Minggu & Tanggal Merah: Rp 25.000 / Jam
       const gudangCalc = calcWarehouseOvertime({
         date,
         hours: duration.hours,
         isHoliday,
+        weekdayRate: otConfig.warehouse?.weekdayRate,
+        holidayRate: otConfig.warehouse?.holidayRate,
       })
       hourlyRate = gudangCalc.hourlyRate
       totalFee = gudangCalc.fee
     } else {
-      // Aturan Standar Head Office (HO):
-      // Rate = (Gaji Pokok / Hari Kerja Cut-off) / 8
-      const basicSalary = Math.round((Number(employee.salary) || 0) * 0.75)
+      const basicSalary = Math.round((Number(employee.salary) || 0) * basePct)
       const totalDays = Number(workingDays) > 0 ? Number(workingDays) : 22
-      const hoCalc = calcHoOvertimeFee(basicSalary, totalDays, duration.hours)
+      const hoHours = otConfig.ho?.hoursPerDay || 8
+      const hoCalc = calcHoOvertimeFee(basicSalary, totalDays, duration.hours, hoHours)
       hourlyRate = hoCalc.hourlyRate
       totalFee = hoCalc.fee
     }
@@ -299,7 +303,19 @@ export async function POST(req) {
 export async function PUT(req) {
   try {
     const body = await req.json()
-    const { id, status, taskNote, startTime, endTime, workingDays, approvedById, rejectReason } = body
+    const {
+      id,
+      status,
+      taskNote,
+      startTime,
+      endTime,
+      date,
+      totalFee: customTotalFee,
+      hourlyRate: customHourlyRate,
+      workingDays,
+      approvedById,
+      rejectReason,
+    } = body
 
     if (!id) {
       return Response.json({ success: false, error: 'ID lembur wajib diisi.' }, { status: 400 })
@@ -335,6 +351,13 @@ export async function PUT(req) {
       updateData.taskNote = taskNote
     }
 
+    const targetDate = date || existing.date
+    if (date && date !== existing.date) {
+      updateData.date = date
+      const d = new Date(date + 'T00:00:00')
+      updateData.dayName = DAY_NAMES_ID[d.getDay()] || ''
+    }
+
     // Selesaikan (complete) User Task di Flowable BPMN jika instance aktif
     const procId = existing.customData?.flowableProcessInstanceId
     if (procId && (status === 'Approved' || status === 'Rejected')) {
@@ -361,43 +384,70 @@ export async function PUT(req) {
     }
     updateData.customData = updatedCustom
 
-    if (startTime || endTime) {
+    if (startTime || endTime || date || customTotalFee !== undefined) {
       const s = startTime || existing.startTime
       const e = endTime || existing.endTime
       const duration = parseOvertimeDuration(s, e)
       const loc = (existing.employee?.workLocationCode || existing.employee?.location || '').toLowerCase()
       const isGudang = loc === 'gudang' || loc.includes('warehouse') || loc.includes('pack')
 
-      let hourlyRate = 0
-      let totalFee = 0
-
-      if (isGudang) {
-        const holidayRecord = await prisma.holiday.findFirst({ where: { date: existing.date } })
-        const gudangCalc = calcWarehouseOvertime({
-          date: existing.date,
-          hours: duration.hours,
-          isHoliday: !!holidayRecord,
-        })
-        hourlyRate = gudangCalc.hourlyRate
-        totalFee = gudangCalc.fee
-      } else {
-        const basicSalary = Math.round((Number(existing.employee?.salary) || 0) * 0.75)
-        const days = Number(workingDays) > 0 ? Number(workingDays) : 22
-        const hoCalc = calcHoOvertimeFee(basicSalary, days, duration.hours)
-        hourlyRate = hoCalc.hourlyRate
-        totalFee = hoCalc.fee
-      }
-
       updateData.startTime = s
       updateData.endTime = e
       updateData.totalHours = Math.round(duration.hours * 100) / 100
-      updateData.hourlyRate = hourlyRate
-      updateData.totalFee = totalFee
+
+      if (customTotalFee !== undefined && customTotalFee !== null && customTotalFee !== '') {
+        const fee = Math.round(Number(customTotalFee) || 0)
+        const rate = customHourlyRate ? Number(customHourlyRate) : (duration.hours > 0 ? Math.round(fee / duration.hours) : 0)
+        updateData.totalFee = fee
+        updateData.hourlyRate = rate
+      } else {
+        const otConfig = await getOvertimeConfig()
+        let hourlyRate = 0
+        let totalFee = 0
+
+        if (isGudang) {
+          const holidayRecord = await prisma.holiday.findFirst({ where: { date: targetDate } })
+          const gudangCalc = calcWarehouseOvertime({
+            date: targetDate,
+            hours: duration.hours,
+            isHoliday: !!holidayRecord,
+            weekdayRate: otConfig.warehouse?.weekdayRate,
+            holidayRate: otConfig.warehouse?.holidayRate,
+          })
+          hourlyRate = gudangCalc.hourlyRate
+          totalFee = gudangCalc.fee
+        } else {
+          const salaryConfig = await getSalaryBreakdownConfig()
+          const basePct = (salaryConfig.components?.find((c) => c.isBase)?.percent || salaryConfig.basicPercent || 75) / 100
+          const basicSalary = Math.round((Number(existing.employee?.salary) || 0) * basePct)
+          const days = Number(workingDays) > 0 ? Number(workingDays) : 22
+          const hoHours = otConfig.ho?.hoursPerDay || 8
+          const hoCalc = calcHoOvertimeFee(basicSalary, days, duration.hours, hoHours)
+          hourlyRate = hoCalc.hourlyRate
+          totalFee = hoCalc.fee
+        }
+
+        updateData.hourlyRate = hourlyRate
+        updateData.totalFee = totalFee
+      }
     }
 
     const updated = await prisma.overtimeRecord.update({
       where: { id: Number(id) },
       data: updateData,
+      include: {
+        employee: {
+          select: {
+            id: true,
+            name: true,
+            nik: true,
+            dept: true,
+            salary: true,
+            location: true,
+            workLocationCode: true,
+          },
+        },
+      },
     })
 
     return Response.json({ success: true, data: updated })
