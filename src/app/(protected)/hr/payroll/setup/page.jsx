@@ -571,20 +571,27 @@ export default function PayrollSetupPage() {
       {/* Metric Stat Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 gap-3">
         <StatCard
-          title="Total Karyawan"
+          label="Total Karyawan"
           value={stats.totalEmployees || 0}
+          hint={`${departments.length} Divisi terdaftar`}
           icon="👥"
           tone="brand"
+          onClick={() => setSelectedWageStatus('all')}
+          className={selectedWageStatus === 'all' ? 'ring-2 ring-teal-500 ring-offset-1' : ''}
         />
         <StatCard
-          title="Ada Wage Odoo"
+          label="Ada Wage Odoo"
           value={stats.withWageCount || 0}
+          hint={`${stats.withoutWageCount || 0} belum diset (Rp 0)`}
           icon="💼"
           tone="green"
+          onClick={() => setSelectedWageStatus(selectedWageStatus === 'with_wage' ? 'all' : 'with_wage')}
+          className={selectedWageStatus === 'with_wage' ? 'ring-2 ring-emerald-500 ring-offset-1' : ''}
         />
         <StatCard
-          title={`Basic (${baseComponent?.percent || 75}%)`}
-          value={`Rp ${((stats.totalBasic || 0) / 1000000).toFixed(1)}M`}
+          label={`${baseComponent?.name || 'Basic Salary'} (${baseComponent?.percent ?? 75}%)`}
+          value={`Rp ${(stats.totalBasic || 0).toLocaleString('id-ID')}`}
+          hint={`Porsi ${baseComponent?.percent ?? 75}% dari Wage Odoo`}
           icon="🏛️"
           tone="blue"
         />
@@ -595,16 +602,18 @@ export default function PayrollSetupPage() {
           return (
             <StatCard
               key={c.code}
-              title={`${c.name} (${c.percent}%)`}
-              value={`Rp ${((tot || 0) / 1000000).toFixed(1)}M`}
+              label={`${c.name} (${c.percent}%)`}
+              value={`Rp ${(tot || 0).toLocaleString('id-ID')}`}
+              hint={`Rasio ${c.percent}% per lokasi`}
               icon={icons[i % icons.length]}
               tone={tones[i % tones.length]}
             />
           )
         })}
         <StatCard
-          title="Total Gross Salary"
-          value={`Rp ${((stats.totalGross || 0) / 1000000).toFixed(1)}M`}
+          label="Total Gross Salary"
+          value={`Rp ${(stats.totalGross || 0).toLocaleString('id-ID')}`}
+          hint="Akumulasi seluruh komponen"
           icon="💰"
           tone="purple"
         />

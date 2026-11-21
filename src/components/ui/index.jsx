@@ -59,18 +59,32 @@ const STAT_TONES = {
   gray:   { bar: '#6b7280', soft: 'bg-gray-100',  text: 'text-gray-700'   },
 }
 
-export function StatCard({ label, value, icon, tone = 'brand', hint, href }) {
+export function StatCard({ label, title, value, icon, tone = 'brand', hint, href, onClick, className = '', valueClassName = '' }) {
+  const displayLabel = label || title
   const t = STAT_TONES[tone] || STAT_TONES.brand
+  const isLong = typeof value === 'string' && value.length > 10
+
   const card = (
     <div
-      className='group relative h-full overflow-hidden rounded-2xl bg-white p-5 shadow-sm ring-1 ring-gray-100 transition-all hover:-translate-y-0.5 hover:shadow-md'
+      onClick={onClick}
+      className={`group relative h-full overflow-hidden rounded-2xl bg-white p-4 sm:p-5 shadow-sm ring-1 ring-gray-100 transition-all hover:-translate-y-0.5 hover:shadow-md ${
+        onClick ? 'cursor-pointer' : ''
+      } ${className}`}
       style={{ borderTop: `3px solid ${t.bar}` }}
     >
-      <div className='flex items-start justify-between gap-3'>
-        <div className='min-w-0'>
-          <div className='truncate text-xs font-medium uppercase tracking-wide text-gray-400'>{label}</div>
-          <div className='mt-2 text-3xl font-bold leading-none tracking-tight text-gray-900'>{value}</div>
-          {hint && <div className='mt-2 text-xs text-gray-400'>{hint}</div>}
+      <div className='flex items-start justify-between gap-2.5'>
+        <div className='min-w-0 flex-1'>
+          <div className='truncate text-xs font-semibold uppercase tracking-wide text-gray-500' title={typeof displayLabel === 'string' ? displayLabel : undefined}>
+            {displayLabel}
+          </div>
+          <div className={`mt-2 font-bold leading-none tracking-tight text-gray-900 ${valueClassName || (isLong ? 'text-lg sm:text-xl xl:text-2xl' : 'text-2xl sm:text-3xl')}`}>
+            {value}
+          </div>
+          {hint && (
+            <div className='mt-2 text-[11px] text-gray-400 truncate' title={typeof hint === 'string' ? hint : undefined}>
+              {hint}
+            </div>
+          )}
         </div>
         {icon && (
           <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl ${t.soft} ${t.text}`}>
