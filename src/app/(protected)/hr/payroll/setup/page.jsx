@@ -505,7 +505,15 @@ export default function PayrollSetupPage() {
       <PageHeader
         icon="🧾"
         title="Payroll Setup: Komponen Gaji Karyawan"
-        subtitle={`Basic Salary (${baseComponent?.percent || 75}%) bersumber dari Wage Odoo. Seluruh tunjangan (${nonBaseComponents.map((c) => `${c.name} ${c.percent}%`).join(', ')}) dapat diatur per Work Location dan per Karyawan Tertentu.`}
+        subtitle={
+          loading && (!config.components || config.components.length === 0)
+            ? 'Memuat konfigurasi rasio dan komponen gaji karyawan...'
+            : `Basic Salary (${baseComponent?.percent ?? 75}%) bersumber dari Wage Odoo. ${
+                nonBaseComponents.length > 0
+                  ? `Seluruh tunjangan (${nonBaseComponents.map((c) => `${c.name} ${c.percent}%`).join(', ')})`
+                  : 'Seluruh tunjangan'
+              } dapat diatur per Work Location dan per Karyawan Tertentu.`
+        }
         actions={
           <div className="flex items-center gap-2">
             <button
@@ -513,7 +521,7 @@ export default function PayrollSetupPage() {
               disabled={syncingOdoo || loading}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg text-white shadow-xs transition hover:opacity-90 disabled:opacity-50 cursor-pointer"
               style={{ background: 'linear-gradient(135deg, #052B52, #039299)' }}
-              title="Tarik data Wage (Basic Salary 75%) dari tab Payroll hr.version di Odoo"
+              title={`Tarik data Wage (Basic Salary ${baseComponent?.percent ?? 75}%) dari tab Payroll hr.version di Odoo`}
             >
               <Icon e={syncingOdoo ? '⏳' : '🔄'} size={14} />
               <span>{syncingOdoo ? 'Sinkronisasi Wage...' : 'Sync Wage dari Odoo'}</span>
