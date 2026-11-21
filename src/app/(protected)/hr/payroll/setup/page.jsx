@@ -22,12 +22,14 @@ export default function PayrollSetupPage() {
   const [data, setData] = useState([])
   const [stats, setStats] = useState({})
   const [config, setConfig] = useState({
+    components: [],
     basicPercent: 75,
     transportPercent: 15,
     kpiPercent: 10,
     roundingStep: 1,
     locationRules: {},
   })
+  const [poolCatalog, setPoolCatalog] = useState([])
   const [departments, setDepartments] = useState([])
 
   // Filter States
@@ -40,10 +42,11 @@ export default function PayrollSetupPage() {
   const [syncingOdoo, setSyncingOdoo] = useState(false)
   const [actionMsg, setActionMsg] = useState(null)
 
-  // Modals
+  // Modals - Edit Karyawan Individu
   const [editModalOpen, setEditModalOpen] = useState(false)
   const [editingEmp, setEditingEmp] = useState(null)
   const [inputWage, setInputWage] = useState('')
+  const [componentOverridesInput, setComponentOverridesInput] = useState({})
   const [enableTransportInput, setEnableTransportInput] = useState(true)
   const [enableKpiInput, setEnableKpiInput] = useState(true)
   const [savingWage, setSavingWage] = useState(false)
@@ -52,6 +55,7 @@ export default function PayrollSetupPage() {
   const [configModalOpen, setConfigModalOpen] = useState(false)
   const [configTab, setConfigTab] = useState('locations') // 'locations' | 'global'
   const [tempConfig, setTempConfig] = useState({
+    components: [],
     basicPercent: 75,
     transportPercent: 15,
     kpiPercent: 10,
@@ -59,6 +63,13 @@ export default function PayrollSetupPage() {
     locationRules: {},
   })
   const [savingConfig, setSavingConfig] = useState(false)
+
+  // Modal Tambah Komponen dari Pool Odoo
+  const [addComponentModalOpen, setAddComponentModalOpen] = useState(false)
+  const [newCompPoolCode, setNewCompPoolCode] = useState('MEAL')
+  const [newCompName, setNewCompName] = useState('')
+  const [newCompPercent, setNewCompPercent] = useState(10)
+  const [newCompSickDeductible, setNewCompSickDeductible] = useState(false)
 
   // Fetch Data
   const fetchData = async () => {
@@ -70,6 +81,7 @@ export default function PayrollSetupPage() {
         setData(json.data || [])
         setStats(json.stats || {})
         setConfig(json.config || {})
+        setPoolCatalog(json.poolCatalog || [])
         setDepartments(json.departments || [])
       } else {
         setActionMsg({ type: 'error', text: json.error || 'Gagal memuat data komponen gaji.' })
@@ -117,8 +129,25 @@ export default function PayrollSetupPage() {
   const handleOpenEdit = (emp) => {
     setEditingEmp(emp)
     setInputWage(emp.basicSalary ? String(emp.basicSalary) : '')
-    setEnableTransportInput(emp.enableTransport ?? true)
-    setEnableKpiInput(emp.enableKpi ?? true)
+
+    // Siapkan checklist hak tunjangan dinamis untuk seluruh komponen non-base
+    const activeNonBase = (config.components || []).filter((c) => !c.isBase)
+    const initialOverrides = {}
+    activeNonBase.forEach((c) => {
+      const item = emp.items?.[c.code]
+      if (item) {
+        initialOverrides[c.code] = item.enabled
+      } else if (c.code === 'TRANS') {
+        initialOverrides[c.code] = emp.enableTransport ?? true
+      } else if (c.code === 'NPA') {
+        initialOverrides[c.code] = emp.enableNonPermanent ?? emp.enableKpi ?? true
+      } else {
+        initialOverrides[c.code] = true
+      }
+    })
+    setComponentOverridesInput(initialOverrides)
+    setEnableTransportInput(initialOverrides['TRANS'] ?? true)
+    setEnableKpiInput(initialOverrides['NPA'] ?? true)
     setEditModalOpen(true)
   }
 
@@ -136,8 +165,9 @@ export default function PayrollSetupPage() {
           action: 'update_wage',
           empId: editingEmp.id,
           wage: wageNum,
-          enableTransport: enableTransportInput,
-          enableKpi: enableKpiInput,
+          componentOverrides: componentOverridesInput,
+          enableTransport: componentOverridesInput['TRANS'] ?? true,
+          enableKpi: componentOverridesInput['NPA'] ?? true,
         }),
       })
       const json = await res.json()
@@ -159,23 +189,27 @@ export default function PayrollSetupPage() {
   const handleOpenConfig = () => {
     setTempConfig({
       ...config,
+      components: JSON.parse(JSON.stringify(config.components || [])),
       locationRules: JSON.parse(JSON.stringify(config.locationRules || {})),
     })
-    setConfigTab('locations')
+    setConfigTab('global')
     setConfigModalOpen(true)
   }
 
   // Save Config
   const handleSaveConfig = async (e) => {
     e.preventDefault()
-    const b = Number(tempConfig.basicPercent) || 0
-    const t = Number(tempConfig.transportPercent) || 0
-    const k = Number(tempConfig.kpiPercent) || 0
-    const step = Number(tempConfig.roundingStep) || 1
-    const sum = Math.round((b + t + k) * 100) / 100
+    const comps = tempConfig.components || []
+    const sum = Math.round(comps.reduce((acc, c) => acc + (Number(c.percent) || 0), 0) * 100) / 100
 
     if (sum !== 100) {
-      alert(`Total persentase harus tepat 100%! (Saat ini: ${sum}%)`)
+      alert(`Total persentase komponen harus tepat 100%! (Saat ini: ${sum}%)`)
+      return
+    }
+
+    const baseComp = comps.find((c) => c.isBase)
+    if (!baseComp || Number(baseComp.percent) <= 0) {
+      alert('Komponen dasar (Basic Salary) harus memiliki rasio persentase > 0%')
       return
     }
 
@@ -186,10 +220,9 @@ export default function PayrollSetupPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'update_config',
-          basicPercent: b,
-          transportPercent: t,
-          kpiPercent: k,
-          roundingStep: step,
+          components: comps,
+          basicPercent: Number(baseComp.percent),
+          roundingStep: Number(tempConfig.roundingStep) || 1,
           locationRules: tempConfig.locationRules,
         }),
       })
@@ -207,6 +240,119 @@ export default function PayrollSetupPage() {
       setSavingConfig(false)
     }
   }
+
+  // Buka modal tambah komponen dari pool Odoo
+  const handleOpenAddCompModal = () => {
+    const existingCodes = (tempConfig.components || []).map((c) => c.code)
+    const availablePool = poolCatalog.filter((p) => !existingCodes.includes(p.code))
+    const firstPool = availablePool[0] || poolCatalog[0] || { code: 'OTHER_ALW', name: 'Other Allowance' }
+    setNewCompPoolCode(firstPool.code)
+    setNewCompName(firstPool.name)
+    setNewCompPercent(5)
+    setNewCompSickDeductible(Boolean(firstPool.isSickDeductible))
+    setAddComponentModalOpen(true)
+  }
+
+  // Tambahkan komponen terpilih ke tempConfig.components
+  const handleAddCompConfirm = (e) => {
+    e.preventDefault()
+    const poolItem = poolCatalog.find((p) => p.code === newCompPoolCode) || {
+      code: newCompPoolCode,
+      name: newCompName,
+      odooRuleCode: newCompPoolCode,
+      odooInputCode: newCompPoolCode.toLowerCase(),
+    }
+
+    const newComp = {
+      id: `comp_${poolItem.code.toLowerCase()}_${Date.now()}`,
+      code: poolItem.code,
+      name: (newCompName || poolItem.name).trim(),
+      percent: Math.max(0, Number(newCompPercent) || 0),
+      isBase: false,
+      isRemovable: true,
+      isSickDeductible: newCompSickDeductible,
+      odooRuleCode: poolItem.odooRuleCode || poolItem.code,
+      odooInputCode: poolItem.odooInputCode || poolItem.code.toLowerCase(),
+    }
+
+    const updatedComps = [...(tempConfig.components || []), newComp]
+
+    // Otomatis aktifkan di seluruh locationRules
+    const updatedLocationRules = { ...(tempConfig.locationRules || {}) }
+    for (const [locKey, locRule] of Object.entries(updatedLocationRules)) {
+      const currentCodes = Array.isArray(locRule.enabledComponentCodes) ? [...locRule.enabledComponentCodes] : ['TRANS', 'NPA']
+      if (!currentCodes.includes(poolItem.code)) {
+        currentCodes.push(poolItem.code)
+      }
+      updatedLocationRules[locKey] = {
+        ...locRule,
+        enabledComponentCodes: currentCodes,
+      }
+    }
+
+    setTempConfig({
+      ...tempConfig,
+      components: updatedComps,
+      locationRules: updatedLocationRules,
+    })
+
+    setAddComponentModalOpen(false)
+  }
+
+  // Hapus komponen dari tempConfig.components (non-base only)
+  const handleRemoveComp = (codeToRemove) => {
+    const updatedComps = (tempConfig.components || []).filter((c) => c.code !== codeToRemove)
+    const updatedLocationRules = { ...(tempConfig.locationRules || {}) }
+    for (const [locKey, locRule] of Object.entries(updatedLocationRules)) {
+      if (Array.isArray(locRule.enabledComponentCodes)) {
+        updatedLocationRules[locKey] = {
+          ...locRule,
+          enabledComponentCodes: locRule.enabledComponentCodes.filter((c) => c !== codeToRemove),
+        }
+      }
+    }
+    setTempConfig({
+      ...tempConfig,
+      components: updatedComps,
+      locationRules: updatedLocationRules,
+    })
+  }
+
+  // Update persentase komponen
+  const handleUpdateCompPercent = (code, newPercent) => {
+    const num = Math.max(0, Math.min(100, Number(newPercent) || 0))
+    const updatedComps = (tempConfig.components || []).map((c) => (c.code === code ? { ...c, percent: num } : c))
+    setTempConfig({
+      ...tempConfig,
+      components: updatedComps,
+    })
+  }
+
+  // Toggle sick deductible flag
+  const handleToggleCompSick = (code) => {
+    const updatedComps = (tempConfig.components || []).map((c) =>
+      c.code === code ? { ...c, isSickDeductible: !c.isSickDeductible } : c
+    )
+    setTempConfig({
+      ...tempConfig,
+      components: updatedComps,
+    })
+  }
+
+  // Active dynamic components
+  const activeComponents = useMemo(() => {
+    if (Array.isArray(config.components) && config.components.length > 0) {
+      return config.components
+    }
+    return [
+      { id: 'comp_basic', code: 'BASIC', name: 'Basic Salary (Gaji Pokok)', percent: config.basicPercent || 75, isBase: true },
+      { id: 'comp_trans', code: 'TRANS', name: 'Transport Allowance', percent: config.transportPercent || 15, isBase: false, isSickDeductible: true },
+      { id: 'comp_npa', code: 'NPA', name: 'Non Permanent Allowance', percent: config.kpiPercent || 10, isBase: false },
+    ]
+  }, [config.components, config.basicPercent, config.transportPercent, config.kpiPercent])
+
+  const baseComponent = useMemo(() => activeComponents.find((c) => c.isBase) || activeComponents[0], [activeComponents])
+  const nonBaseComponents = useMemo(() => activeComponents.filter((c) => !c.isBase), [activeComponents])
 
   // Filtered Rows
   const filteredRows = useMemo(() => {
@@ -255,9 +401,8 @@ export default function PayrollSetupPage() {
       'Odoo ID',
       'Departemen / Divisi',
       'Lokasi Kerja',
-      `Basic Salary (${config.basicPercent}%) (Rp)`,
-      `Transportation Allowance (${config.transportPercent}%) (Rp)`,
-      `Non Permanent Allowance (${config.kpiPercent}%) (Rp)`,
+      `Basic Salary (${baseComponent?.percent || 75}%) (Rp)`,
+      ...nonBaseComponents.map((c) => `"${c.name} (${c.percent}%) (Rp)"`),
       'GROSS SALARY (Rp)',
     ]
 
@@ -269,8 +414,13 @@ export default function PayrollSetupPage() {
       `"${r.dept || 'General'}"`,
       `"${r.location || 'Head Office'}"`,
       r.basicSalary,
-      r.enableTransport ? r.transportAllowance : 0,
-      r.enableKpi ? r.kpiAllowance : 0,
+      ...nonBaseComponents.map((c) => {
+        const item = r.items?.[c.code]
+        if (item) return item.enabled ? item.amount : 0
+        if (c.code === 'TRANS') return r.enableTransport ? r.transportAllowance : 0
+        if (c.code === 'NPA') return r.enableKpi ? r.kpiAllowance : 0
+        return 0
+      }),
       r.grossSalary,
     ])
 
@@ -293,19 +443,27 @@ export default function PayrollSetupPage() {
     if (!s || s <= 1) return Math.round(val)
     return Math.round(val / s) * s
   }
-  const liveTransport = enableTransportInput
-    ? roundStep(
-        config.basicPercent > 0 ? (liveBasicNum * config.transportPercent) / config.basicPercent : 0,
-        config.roundingStep
-      )
-    : 0
-  const liveKpi = enableKpiInput
-    ? roundStep(
-        config.basicPercent > 0 ? (liveBasicNum * config.kpiPercent) / config.basicPercent : 0,
-        config.roundingStep
-      )
-    : 0
-  const liveGross = liveBasicNum + liveTransport + liveKpi
+
+  const liveBreakdown = useMemo(() => {
+    const baseP = Number(baseComponent?.percent) || 75
+    const liveItems = {}
+    let totalGross = liveBasicNum
+
+    nonBaseComponents.forEach((c) => {
+      const isEnabled = componentOverridesInput[c.code] ?? true
+      const raw = isEnabled && liveBasicNum > 0 && baseP > 0 ? (liveBasicNum * Number(c.percent)) / baseP : 0
+      const amt = isEnabled && liveBasicNum > 0 ? roundStep(raw, config.roundingStep) : 0
+      liveItems[c.code] = {
+        name: c.name,
+        percent: c.percent,
+        amount: amt,
+        enabled: isEnabled,
+      }
+      if (isEnabled) totalGross += amt
+    })
+
+    return { liveItems, totalGross }
+  }, [liveBasicNum, baseComponent, nonBaseComponents, componentOverridesInput, config.roundingStep])
 
   return (
     <div className="space-y-5 pb-16">
@@ -383,23 +541,25 @@ export default function PayrollSetupPage() {
           tone="green"
         />
         <StatCard
-          title={`Basic (${config.basicPercent}%)`}
+          title={`Basic (${baseComponent?.percent || 75}%)`}
           value={`Rp ${((stats.totalBasic || 0) / 1000000).toFixed(1)}M`}
           icon="🏛️"
           tone="blue"
         />
-        <StatCard
-          title={`Transport (${config.transportPercent}%)`}
-          value={`Rp ${((stats.totalTransport || 0) / 1000000).toFixed(1)}M`}
-          icon="🚗"
-          tone="orange"
-        />
-        <StatCard
-          title={`NPA (${config.kpiPercent}%)`}
-          value={`Rp ${((stats.totalKpi || 0) / 1000000).toFixed(1)}M`}
-          icon="🎯"
-          tone="teal"
-        />
+        {nonBaseComponents.slice(0, 3).map((c, i) => {
+          const tot = stats.componentTotals?.[c.code] ?? (c.code === 'TRANS' ? stats.totalTransport : stats.totalNonPermanent || 0)
+          const tones = ['orange', 'teal', 'amber']
+          const icons = ['🚗', '🎯', '🍱']
+          return (
+            <StatCard
+              key={c.code}
+              title={`${c.name.split(' ')[0]} (${c.percent}%)`}
+              value={`Rp ${((tot || 0) / 1000000).toFixed(1)}M`}
+              icon={icons[i % icons.length]}
+              tone={tones[i % tones.length]}
+            />
+          )
+        })}
         <StatCard
           title="Total Gross Salary"
           value={`Rp ${((stats.totalGross || 0) / 1000000).toFixed(1)}M`}
@@ -496,9 +656,11 @@ export default function PayrollSetupPage() {
               { label: 'No', width: '45px' },
               { label: 'Karyawan (NIK / Odoo ID)' },
               { label: 'Divisi & Lokasi Kerja' },
-              { label: `Basic Salary (${config.basicPercent}%)`, align: 'right' },
-              { label: `Transportation Allowance (${config.transportPercent}%)`, align: 'right' },
-              { label: `Non Permanent / NPA (${config.kpiPercent}%)`, align: 'right' },
+              { label: `${baseComponent?.name || 'Basic Salary'} (${baseComponent?.percent || 75}%)`, align: 'right' },
+              ...nonBaseComponents.map((c) => ({
+                label: `${c.name} (${c.percent}%)`,
+                align: 'right',
+              })),
               { label: 'GROSS SALARY', align: 'right' },
               { label: 'Aksi', align: 'center', width: '70px' },
             ]}
@@ -567,7 +729,7 @@ export default function PayrollSetupPage() {
                     </div>
                   </Td>
 
-                  {/* Basic Salary (75%) - Odoo Wage */}
+                  {/* Basic Salary */}
                   <Td align="right">
                     {r.hasOdooWage ? (
                       <div>
@@ -588,51 +750,37 @@ export default function PayrollSetupPage() {
                     )}
                   </Td>
 
-                  {/* Transportation Allowance (15%) */}
-                  <Td align="right">
-                    {r.enableTransport ? (
-                      <span
-                        className={`text-xs font-mono font-medium ${
-                          r.transportAllowance > 0 ? 'text-amber-700 font-semibold' : 'text-gray-400'
-                        }`}
-                      >
-                        Rp {r.transportAllowance.toLocaleString('id-ID')}
-                      </span>
-                    ) : (
-                      <div>
-                        <span className="text-xs text-gray-400 font-mono">Rp 0</span>
-                        <div>
-                          <span className="text-[9px] text-gray-400 bg-gray-100 px-1.5 py-0.2 rounded">
-                            Nonaktif
-                          </span>
-                        </div>
-                      </div>
-                    )}
-                  </Td>
+                  {/* Dynamic Non-Base Allowances */}
+                  {nonBaseComponents.map((c) => {
+                    const compItem = r.items?.[c.code]
+                    const isEnabled = compItem ? compItem.enabled : (c.code === 'TRANS' ? r.enableTransport : r.enableKpi)
+                    const amount = compItem ? compItem.amount : (c.code === 'TRANS' ? r.transportAllowance : r.nonPermanentAllowance || 0)
 
-                  {/* KPI Allowance (10%) */}
-                  <Td align="right">
-                    {r.enableKpi ? (
-                      <span
-                        className={`text-xs font-mono font-medium ${
-                          r.kpiAllowance > 0 ? 'text-teal-700 font-semibold' : 'text-gray-400'
-                        }`}
-                      >
-                        Rp {r.kpiAllowance.toLocaleString('id-ID')}
-                      </span>
-                    ) : (
-                      <div>
-                        <span className="text-xs text-gray-400 font-mono">Rp 0</span>
-                        <div>
-                          <span className="text-[9px] text-gray-400 bg-gray-100 px-1.5 py-0.2 rounded">
-                            Nonaktif
+                    return (
+                      <Td key={c.code} align="right">
+                        {isEnabled ? (
+                          <span
+                            className={`text-xs font-mono font-medium ${
+                              amount > 0 ? 'text-amber-800 font-semibold' : 'text-gray-400'
+                            }`}
+                          >
+                            Rp {amount.toLocaleString('id-ID')}
                           </span>
-                        </div>
-                      </div>
-                    )}
-                  </Td>
+                        ) : (
+                          <div>
+                            <span className="text-xs text-gray-400 font-mono">Rp 0</span>
+                            <div>
+                              <span className="text-[9px] text-gray-400 bg-gray-100 px-1.5 py-0.2 rounded">
+                                Nonaktif
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </Td>
+                    )
+                  })}
 
-                  {/* GROSS SALARY (Total 100%) */}
+                  {/* GROSS SALARY */}
                   <Td align="right">
                     {r.hasOdooWage ? (
                       <div>
@@ -698,7 +846,7 @@ export default function PayrollSetupPage() {
               {/* Input Basic Salary */}
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1">
-                  Basic Salary (Wage Odoo Tab Payroll) ({config.basicPercent}%) (Rp)
+                  Basic Salary (Wage Odoo Tab Payroll) ({baseComponent?.percent || 75}%) (Rp)
                 </label>
                 <div className="relative">
                   <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400 text-xs font-semibold">
@@ -715,63 +863,66 @@ export default function PayrollSetupPage() {
                 </div>
               </div>
 
-              {/* Checklist Hak Tunjangan Karyawan Ini */}
+              {/* Checklist Hak Tunjangan Dinamis Karyawan Ini */}
               <div className="p-3 bg-gray-50 rounded-lg border border-gray-200/80 space-y-2.5">
                 <div className="text-xs font-bold text-gray-800">Hak Tunjangan Karyawan Ini:</div>
-                <div className="space-y-2">
-                  <label className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={enableTransportInput}
-                      onChange={(e) => setEnableTransportInput(e.target.checked)}
-                      className="w-4 h-4 text-teal-600 rounded focus:ring-teal-500"
-                    />
-                    <span>
-                      Dapat <strong>Transportation Allowance</strong> ({config.transportPercent}%)
-                    </span>
-                  </label>
-
-                  <label className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={enableKpiInput}
-                      onChange={(e) => setEnableKpiInput(e.target.checked)}
-                      className="w-4 h-4 text-teal-600 rounded focus:ring-teal-500"
-                    />
-                    <span>
-                      Dapat <strong>Non Permanent Allowance (NPA)</strong> ({config.kpiPercent}%)
-                    </span>
-                  </label>
+                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                  {nonBaseComponents.map((c) => {
+                    const isChecked = componentOverridesInput[c.code] ?? true
+                    return (
+                      <label key={c.code} className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={(e) =>
+                            setComponentOverridesInput({
+                              ...componentOverridesInput,
+                              [c.code]: e.target.checked,
+                            })
+                          }
+                          className="w-4 h-4 text-teal-600 rounded focus:ring-teal-500"
+                        />
+                        <span>
+                          Dapat <strong>{c.name}</strong> ({c.percent}%)
+                        </span>
+                      </label>
+                    )
+                  })}
                 </div>
               </div>
 
-              {/* Live Preview Breakdown */}
+              {/* Live Preview Breakdown Dinamis */}
               <div className="p-3 bg-purple-50/50 rounded-lg border border-purple-100 space-y-2">
                 <div className="text-[11px] font-bold text-purple-900">Hasil Simulasi Gaji Karyawan Ini:</div>
-                <div className="grid grid-cols-3 gap-2 text-center mb-1">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-center mb-1">
                   <div className="p-2 bg-white rounded border border-gray-100">
-                    <div className="text-[10px] text-gray-500 font-medium">Basic ({config.basicPercent}%)</div>
+                    <div className="text-[10px] text-gray-500 font-medium truncate">Basic ({baseComponent?.percent || 75}%)</div>
                     <div className="text-xs font-bold text-blue-700 font-mono mt-0.5">
                       Rp {liveBasicNum.toLocaleString('id-ID')}
                     </div>
                   </div>
-                  <div className="p-2 bg-white rounded border border-gray-100">
-                    <div className="text-[10px] text-gray-500 font-medium">Transport</div>
-                    <div className={`text-xs font-bold font-mono mt-0.5 ${enableTransportInput ? 'text-amber-700' : 'text-gray-400'}`}>
-                      {enableTransportInput ? `Rp ${liveTransport.toLocaleString('id-ID')}` : 'Rp 0'}
-                    </div>
-                  </div>
-                  <div className="p-2 bg-white rounded border border-gray-100">
-                    <div className="text-[10px] text-gray-500 font-medium">NPA (10%)</div>
-                    <div className={`text-xs font-bold font-mono mt-0.5 ${enableKpiInput ? 'text-teal-700' : 'text-gray-400'}`}>
-                      {enableKpiInput ? `Rp ${liveKpi.toLocaleString('id-ID')}` : 'Rp 0'}
-                    </div>
-                  </div>
+                  {nonBaseComponents.map((c) => {
+                    const item = liveBreakdown.liveItems[c.code]
+                    return (
+                      <div key={c.code} className="p-2 bg-white rounded border border-gray-100">
+                        <div className="text-[10px] text-gray-500 font-medium truncate" title={c.name}>
+                          {c.name} ({c.percent}%)
+                        </div>
+                        <div
+                          className={`text-xs font-bold font-mono mt-0.5 ${
+                            item?.enabled ? 'text-amber-800' : 'text-gray-400'
+                          }`}
+                        >
+                          {item?.enabled ? `Rp ${item.amount.toLocaleString('id-ID')}` : 'Rp 0'}
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
 
                 <div className="p-2 bg-purple-100/60 rounded flex items-center justify-between text-xs font-bold text-purple-950">
                   <span>GROSS SALARY:</span>
-                  <span className="font-mono text-sm">Rp {liveGross.toLocaleString('id-ID')}</span>
+                  <span className="font-mono text-sm">Rp {liveBreakdown.totalGross.toLocaleString('id-ID')}</span>
                 </div>
               </div>
 
@@ -848,279 +999,201 @@ export default function PayrollSetupPage() {
                   </p>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {/* HO */}
-                    <div className="p-3.5 rounded-lg border border-purple-200 bg-purple-50/30 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-purple-900">Head Office (HO)</span>
-                        <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-purple-100 text-purple-800">
-                          {locationCounts.ho || 0} Karyawan
-                        </span>
-                      </div>
-                      <div className="space-y-1.5 pt-1">
-                        <label className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={tempConfig.locationRules?.ho?.enableTransport ?? true}
-                            onChange={(e) =>
-                              setTempConfig({
-                                ...tempConfig,
-                                locationRules: {
-                                  ...tempConfig.locationRules,
-                                  ho: { ...tempConfig.locationRules?.ho, enableTransport: e.target.checked },
-                                },
-                              })
-                            }
-                            className="w-4 h-4 text-teal-600 rounded"
-                          />
-                          <span>Dapat Transport Allowance</span>
-                        </label>
-                        <label className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={tempConfig.locationRules?.ho?.enableKpi ?? true}
-                            onChange={(e) =>
-                              setTempConfig({
-                                ...tempConfig,
-                                locationRules: {
-                                  ...tempConfig.locationRules,
-                                  ho: { ...tempConfig.locationRules?.ho, enableKpi: e.target.checked },
-                                },
-                              })
-                            }
-                            className="w-4 h-4 text-teal-600 rounded"
-                          />
-                          <span>Dapat Non Permanent Allowance (NPA)</span>
-                        </label>
-                      </div>
-                    </div>
+                    {[
+                      { key: 'ho', label: 'Head Office (HO)', tone: 'border-purple-200 bg-purple-50/30 text-purple-900 badge-purple' },
+                      { key: 'gudang', label: 'Gudang (Warehouse)', tone: 'border-amber-200 bg-amber-50/30 text-amber-900 badge-amber' },
+                      { key: 'sales', label: 'Area Sales (Others)', tone: 'border-blue-200 bg-blue-50/30 text-blue-900 badge-blue' },
+                      { key: 'livestream', label: 'Livestream (Manhattan)', tone: 'border-teal-200 bg-teal-50/30 text-teal-900 badge-teal' },
+                    ].map((loc) => {
+                      const locRule = tempConfig.locationRules?.[loc.key] || {}
+                      const enabledCodes = Array.isArray(locRule.enabledComponentCodes)
+                        ? locRule.enabledComponentCodes
+                        : [
+                            ...(locRule.enableTransport !== false ? ['TRANS'] : []),
+                            ...(locRule.enableNonPermanent !== false && locRule.enableKpi !== false ? ['NPA'] : []),
+                          ]
 
-                    {/* Gudang */}
-                    <div className="p-3.5 rounded-lg border border-amber-200 bg-amber-50/30 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-amber-900">Gudang (Warehouse)</span>
-                        <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-amber-100 text-amber-800">
-                          {locationCounts.gudang || 0} Karyawan
-                        </span>
-                      </div>
-                      <div className="space-y-1.5 pt-1">
-                        <label className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={tempConfig.locationRules?.gudang?.enableTransport ?? true}
-                            onChange={(e) =>
-                              setTempConfig({
-                                ...tempConfig,
-                                locationRules: {
-                                  ...tempConfig.locationRules,
-                                  gudang: { ...tempConfig.locationRules?.gudang, enableTransport: e.target.checked },
-                                },
-                              })
-                            }
-                            className="w-4 h-4 text-teal-600 rounded"
-                          />
-                          <span>Dapat Transport Allowance</span>
-                        </label>
-                        <label className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={tempConfig.locationRules?.gudang?.enableKpi ?? true}
-                            onChange={(e) =>
-                              setTempConfig({
-                                ...tempConfig,
-                                locationRules: {
-                                  ...tempConfig.locationRules,
-                                  gudang: { ...tempConfig.locationRules?.gudang, enableKpi: e.target.checked },
-                                },
-                              })
-                            }
-                            className="w-4 h-4 text-teal-600 rounded"
-                          />
-                          <span>Dapat Non Permanent Allowance (NPA)</span>
-                        </label>
-                      </div>
-                    </div>
+                      const nonBaseComps = (tempConfig.components || []).filter((c) => !c.isBase)
 
-                    {/* Sales */}
-                    <div className="p-3.5 rounded-lg border border-blue-200 bg-blue-50/30 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-blue-900">Area Sales (Others)</span>
-                        <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-blue-100 text-blue-800">
-                          {locationCounts.sales || 0} Karyawan
-                        </span>
-                      </div>
-                      <div className="space-y-1.5 pt-1">
-                        <label className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={tempConfig.locationRules?.sales?.enableTransport ?? true}
-                            onChange={(e) =>
-                              setTempConfig({
-                                ...tempConfig,
-                                locationRules: {
-                                  ...tempConfig.locationRules,
-                                  sales: { ...tempConfig.locationRules?.sales, enableTransport: e.target.checked },
-                                },
-                              })
-                            }
-                            className="w-4 h-4 text-teal-600 rounded"
-                          />
-                          <span>Dapat Transport Allowance</span>
-                        </label>
-                        <label className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={tempConfig.locationRules?.sales?.enableKpi ?? true}
-                            onChange={(e) =>
-                              setTempConfig({
-                                ...tempConfig,
-                                locationRules: {
-                                  ...tempConfig.locationRules,
-                                  sales: { ...tempConfig.locationRules?.sales, enableKpi: e.target.checked },
-                                },
-                              })
-                            }
-                            className="w-4 h-4 text-teal-600 rounded"
-                          />
-                          <span>Dapat Non Permanent Allowance (NPA)</span>
-                        </label>
-                      </div>
-                    </div>
+                      return (
+                        <div key={loc.key} className={`p-3.5 rounded-lg border space-y-2.5 ${loc.tone}`}>
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold">{loc.label}</span>
+                            <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-white/80 border border-gray-200 text-gray-700">
+                              {locationCounts[loc.key] || 0} Karyawan
+                            </span>
+                          </div>
 
-                    {/* Livestream */}
-                    <div className="p-3.5 rounded-lg border border-teal-200 bg-teal-50/30 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-teal-900">Livestream (Manhattan)</span>
-                        <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-teal-100 text-teal-800">
-                          {locationCounts.livestream || 0} Karyawan
-                        </span>
-                      </div>
-                      <div className="space-y-1.5 pt-1">
-                        <label className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={tempConfig.locationRules?.livestream?.enableTransport ?? true}
-                            onChange={(e) =>
-                              setTempConfig({
-                                ...tempConfig,
-                                locationRules: {
-                                  ...tempConfig.locationRules,
-                                  livestream: { ...tempConfig.locationRules?.livestream, enableTransport: e.target.checked },
-                                },
+                          <div className="space-y-2 pt-1 border-t border-black/5">
+                            {nonBaseComps.length === 0 ? (
+                              <div className="text-[11px] text-gray-500 italic">Belum ada tunjangan dinamis aktif.</div>
+                            ) : (
+                              nonBaseComps.map((comp) => {
+                                const isChecked = enabledCodes.includes(comp.code)
+                                return (
+                                  <label key={comp.code} className="flex items-center gap-2 text-xs text-gray-800 cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      checked={isChecked}
+                                      onChange={(e) => {
+                                        const newCodes = e.target.checked
+                                          ? [...enabledCodes, comp.code]
+                                          : enabledCodes.filter((c) => c !== comp.code)
+
+                                        setTempConfig({
+                                          ...tempConfig,
+                                          locationRules: {
+                                            ...tempConfig.locationRules,
+                                            [loc.key]: {
+                                              ...locRule,
+                                              enabledComponentCodes: newCodes,
+                                              enableTransport: newCodes.includes('TRANS'),
+                                              enableNonPermanent: newCodes.includes('NPA'),
+                                              enableKpi: newCodes.includes('NPA'),
+                                            },
+                                          },
+                                        })
+                                      }}
+                                      className="w-4 h-4 text-teal-600 rounded"
+                                    />
+                                    <span>
+                                      Dapat <strong>{comp.name}</strong> ({comp.percent}%)
+                                    </span>
+                                  </label>
+                                )
                               })
-                            }
-                            className="w-4 h-4 text-teal-600 rounded"
-                          />
-                          <span>Dapat Transport Allowance</span>
-                        </label>
-                        <label className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={tempConfig.locationRules?.livestream?.enableKpi ?? true}
-                            onChange={(e) =>
-                              setTempConfig({
-                                ...tempConfig,
-                                locationRules: {
-                                  ...tempConfig.locationRules,
-                                  livestream: { ...tempConfig.locationRules?.livestream, enableKpi: e.target.checked },
-                                },
-                              })
-                            }
-                            className="w-4 h-4 text-teal-600 rounded"
-                          />
-                          <span>Dapat Non Permanent Allowance (NPA)</span>
-                        </label>
-                      </div>
-                    </div>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
                   </div>
                 </div>
               ) : (
-                <div className="space-y-3.5">
-                  <p className="text-xs text-gray-600 leading-relaxed">
-                    Tentukan rasio persentase standar komponen gaji. Nilai dari tab Payroll di Odoo diperlakukan sebagai <strong>Basic Salary ({tempConfig.basicPercent}%)</strong>. Seluruh tunjangan dihitung secara riil (eksak) tanpa pembulatan ratusan/ribuan.
-                  </p>
-
-                  <div className="grid grid-cols-3 gap-3">
-                    {/* Basic Salary */}
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-700 mb-1">
-                        Basic Salary (%)
-                      </label>
-                      <input
-                        type="number"
-                        min="1"
-                        max="100"
-                        step="1"
-                        value={tempConfig.basicPercent}
-                        onChange={(e) => setTempConfig({ ...tempConfig, basicPercent: Number(e.target.value) })}
-                        className="w-full text-xs border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-teal-600 font-mono"
-                        required
-                      />
-                    </div>
-
-                    {/* Transportation Allowance */}
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-700 mb-1">
-                        Transport Allowance (%)
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        max="100"
-                        step="1"
-                        value={tempConfig.transportPercent}
-                        onChange={(e) => setTempConfig({ ...tempConfig, transportPercent: Number(e.target.value) })}
-                        className="w-full text-xs border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-teal-600 font-mono"
-                        required
-                      />
-                    </div>
-
-                    {/* Non Permanent Allowance */}
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-700 mb-1">
-                        NPA / Non Permanent (%)
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        max="100"
-                        step="1"
-                        value={tempConfig.kpiPercent}
-                        onChange={(e) => setTempConfig({ ...tempConfig, kpiPercent: Number(e.target.value) })}
-                        className="w-full text-xs border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-teal-600 font-mono"
-                        required
-                      />
-                    </div>
+                <div className="space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <p className="text-xs text-gray-600 leading-relaxed max-w-md">
+                      Tentukan komponen gaji dan rasio alokasi persentase. Nilai Wage di tab Payroll Odoo diperlakukan sebagai <strong>Basic Salary (Base Anchor)</strong>. Total seluruh komponen wajib tepat <strong>100%</strong>.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleOpenAddCompModal}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 transition cursor-pointer self-start sm:self-auto shrink-0"
+                    >
+                      <span>➕ Tambah dari Pool Odoo</span>
+                    </button>
                   </div>
 
-                  {/* Metode Perhitungan Riil (Tanpa Pembulatan) */}
-                  <div className="p-3 bg-emerald-50/60 border border-emerald-200 rounded-xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-xs">
-                    <div>
-                      <span className="font-semibold text-emerald-950 block">Metode Perhitungan Nominal:</span>
-                      <span className="text-emerald-800 text-[11px]">
-                        Dihitung secara riil (eksak) per Rupiah tanpa pembulatan kelipatan ratusan/ribuan.
-                      </span>
-                    </div>
-                    <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 font-bold rounded-lg border border-emerald-300 text-[11px] shrink-0 self-start sm:self-auto">
-                      ✅ Perhitungan Riil (Aktif)
-                    </span>
+                  {/* Daftar Komponen Gaji Dinamis */}
+                  <div className="space-y-2.5">
+                    {(tempConfig.components || []).map((comp) => {
+                      return (
+                        <div
+                          key={comp.code}
+                          className={`p-3 rounded-xl border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 ${
+                            comp.isBase
+                              ? 'bg-blue-50/40 border-blue-200'
+                              : 'bg-white border-gray-200 shadow-2xs hover:border-teal-300'
+                          }`}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-xs font-bold text-gray-900">{comp.name}</span>
+                              <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-gray-100 text-gray-600 font-semibold">
+                                {comp.code}
+                              </span>
+                              {comp.isBase ? (
+                                <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded bg-blue-100 text-blue-800">
+                                  Base Wage (Odoo Contract)
+                                </span>
+                              ) : (
+                                <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded bg-teal-50 text-teal-700 border border-teal-100">
+                                  Odoo Rule: {comp.odooRuleCode || comp.code} ({comp.odooInputCode || comp.code.toLowerCase()})
+                                </span>
+                              )}
+                            </div>
+
+                            {!comp.isBase && (
+                              <div className="flex items-center gap-2 mt-1.5">
+                                <label className="inline-flex items-center gap-1.5 text-[11px] text-gray-600 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={Boolean(comp.isSickDeductible)}
+                                    onChange={() => handleToggleCompSick(comp.code)}
+                                    className="w-3.5 h-3.5 text-teal-600 rounded"
+                                  />
+                                  <span>Dipotong prorata jika izin sakit (Sick Leave Deduction)</span>
+                                </label>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-2.5 self-end sm:self-auto shrink-0">
+                            <div className="flex items-center gap-1">
+                              <input
+                                type="number"
+                                min={comp.isBase ? '1' : '0'}
+                                max="100"
+                                step="1"
+                                value={comp.percent}
+                                onChange={(e) => handleUpdateCompPercent(comp.code, e.target.value)}
+                                className="w-16 text-xs text-right font-bold font-mono border border-gray-300 rounded-lg px-2 py-1.5 focus:outline-teal-600 bg-white"
+                                required
+                              />
+                              <span className="text-xs font-bold text-gray-600">%</span>
+                            </div>
+
+                            {!comp.isBase && comp.isRemovable !== false && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveComp(comp.code)}
+                                className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                                title={`Hapus komponen ${comp.name}`}
+                              >
+                                🗑️
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
                   </div>
 
-                  {/* Total Verification */}
+                  {/* Total Verification Progress Bar */}
                   {(() => {
-                    const total =
-                      (Number(tempConfig.basicPercent) || 0) +
-                      (Number(tempConfig.transportPercent) || 0) +
-                      (Number(tempConfig.kpiPercent) || 0)
+                    const comps = tempConfig.components || []
+                    const total = Math.round(comps.reduce((acc, c) => acc + (Number(c.percent) || 0), 0) * 100) / 100
                     const isValid = total === 100
+                    const baseComp = comps.find((c) => c.isBase)
+                    const isBaseValid = baseComp && Number(baseComp.percent) > 0
+
                     return (
                       <div
-                        className={`p-2.5 rounded-lg text-xs font-semibold flex items-center justify-between ${
-                          isValid ? 'bg-emerald-50 text-emerald-800' : 'bg-rose-50 text-rose-800'
+                        className={`p-3 rounded-xl text-xs font-semibold flex items-center justify-between border ${
+                          isValid && isBaseValid
+                            ? 'bg-emerald-50 text-emerald-900 border-emerald-200'
+                            : 'bg-rose-50 text-rose-900 border-rose-200'
                         }`}
                       >
-                        <span>Total Alokasi Rasio:</span>
-                        <span>
-                          {total}% {isValid ? '✅ (Valid 100%)' : `❌ (Kurang/Lebih ${total - 100}%)`}
+                        <div className="flex items-center gap-2">
+                          <span className="text-base">{isValid && isBaseValid ? '✅' : '⚠️'}</span>
+                          <div>
+                            <div>Total Alokasi Rasio: <strong>{total}%</strong> dari 100%</div>
+                            {!isValid && (
+                              <div className="text-[11px] font-normal text-rose-700 mt-0.5">
+                                {total < 100
+                                  ? `Rasio kurang ${100 - total}%. Tambahkan pada komponen yang ada.`
+                                  : `Rasio berlebih ${total - 100}%. Kurangi persentase komponen.`}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <span
+                          className={`px-2 py-1 rounded-md text-[11px] font-bold ${
+                            isValid && isBaseValid ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                          }`}
+                        >
+                          {isValid && isBaseValid ? 'Valid (100%)' : 'Belum 100%'}
                         </span>
                       </div>
                     )
@@ -1140,15 +1213,136 @@ export default function PayrollSetupPage() {
                   type="submit"
                   disabled={
                     savingConfig ||
-                    (Number(tempConfig.basicPercent) || 0) +
-                      (Number(tempConfig.transportPercent) || 0) +
-                      (Number(tempConfig.kpiPercent) || 0) !==
+                    Math.round(
+                      (tempConfig.components || []).reduce((acc, c) => acc + (Number(c.percent) || 0), 0) * 100
+                    ) /
+                      100 !==
                       100
                   }
                   className="px-4 py-1.5 text-xs font-semibold rounded-lg text-white shadow-xs hover:opacity-95 cursor-pointer disabled:opacity-50"
                   style={{ background: 'linear-gradient(135deg, #052B52, #039299)' }}
                 >
                   {savingConfig ? 'Menyimpan...' : 'Simpan Seluruh Pengaturan'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Tambah Komponen dari Pool Odoo */}
+      {addComponentModalOpen && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/50 p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden border border-gray-100">
+            <div
+              className="p-4 text-white flex items-center justify-between"
+              style={{ background: 'linear-gradient(135deg, #052B52, #039299)' }}
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-base">➕</span>
+                <h3 className="font-bold text-sm">Tambah Komponen dari Pool Odoo</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAddComponentModalOpen(false)}
+                className="text-white/80 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleAddCompConfirm} className="p-5 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  Pilih Master Rule dari Pool Odoo:
+                </label>
+                <select
+                  value={newCompPoolCode}
+                  onChange={(e) => {
+                    const code = e.target.value
+                    setNewCompPoolCode(code)
+                    const poolItem = poolCatalog.find((p) => p.code === code)
+                    if (poolItem) {
+                      setNewCompName(poolItem.name)
+                      setNewCompSickDeductible(Boolean(poolItem.isSickDeductible))
+                    }
+                  }}
+                  className="w-full text-xs border border-gray-300 rounded-lg px-3 py-2 focus:outline-teal-600 bg-white"
+                  required
+                >
+                  {poolCatalog.map((p) => {
+                    const isAlreadyAdded = (tempConfig.components || []).some((c) => c.code === p.code)
+                    return (
+                      <option key={p.code} value={p.code} disabled={isAlreadyAdded}>
+                        {p.name} ({p.code}) {isAlreadyAdded ? '— [Sudah Ada]' : ''}
+                      </option>
+                    )
+                  })}
+                </select>
+                <p className="text-[10px] text-gray-500 mt-1">
+                  Master rule ini sudah dikonfigurasi pada Structure ID 6 di Odoo ERP.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Nama Tampilan Komponen:</label>
+                <input
+                  type="text"
+                  value={newCompName}
+                  onChange={(e) => setNewCompName(e.target.value)}
+                  placeholder="Contoh: Meal Allowance (Uang Makan)"
+                  className="w-full text-xs border border-gray-300 rounded-lg px-3 py-2 focus:outline-teal-600"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Rasio Alokasi Persentase (%):</label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    min="1"
+                    max="100"
+                    step="1"
+                    value={newCompPercent}
+                    onChange={(e) => setNewCompPercent(e.target.value)}
+                    className="w-full text-xs font-bold font-mono border border-gray-300 rounded-lg px-3 py-2 focus:outline-teal-600"
+                    required
+                  />
+                  <span className="absolute inset-y-0 right-3 flex items-center text-xs font-bold text-gray-400">
+                    %
+                  </span>
+                </div>
+              </div>
+
+              <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                <label className="flex items-start gap-2 text-xs text-gray-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={newCompSickDeductible}
+                    onChange={(e) => setNewCompSickDeductible(e.target.checked)}
+                    className="w-4 h-4 text-teal-600 rounded mt-0.5"
+                  />
+                  <span>
+                    <strong>Dipotong Prorata Saat Cuti Sakit:</strong> Jika dicentang, tunjangan ini akan dipotong prorata per hari saat karyawan mengambil cuti sakit berbayar (seperti Tunjangan Transport).
+                  </span>
+                </label>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setAddComponentModalOpen(false)}
+                  className="px-3 py-1.5 text-xs font-semibold rounded-lg text-gray-600 hover:bg-gray-100 cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 text-xs font-semibold rounded-lg text-white shadow-xs hover:opacity-95 cursor-pointer"
+                  style={{ background: 'linear-gradient(135deg, #052B52, #039299)' }}
+                >
+                  Tambahkan ke Komponen Gaji
                 </button>
               </div>
             </form>

@@ -10,6 +10,7 @@ import {
   calculateSalaryBreakdown,
   syncOdooWages,
   DEFAULT_LOCATION_RULES,
+  ODOO_PRECONFIGURED_RULE_POOL,
 } from '@/lib/odooWageService'
 
 export const dynamic = 'force-dynamic'
@@ -72,9 +73,15 @@ export async function GET(request) {
     let totalNonPermanent = 0
     let totalKpi = 0
     let withWageCount = 0
+    const componentTotals = {}
+
+    // Inisialisasi total untuk seluruh komponen yang ada
+    for (const comp of config.components || []) {
+      componentTotals[comp.code] = 0
+    }
 
     const enrichedEmployees = filtered.map((emp) => {
-      // emp.salary adalah Odoo Wage (Basic Salary 75%)
+      // emp.salary adalah Odoo Wage (Basic Salary)
       const basicWage = Number(emp.salary) || 0
       const locCode = emp.workLocationCode || 'ho'
       const empOverride = overrides[String(emp.id)] || null
@@ -91,6 +98,11 @@ export async function GET(request) {
         totalNonPermanent += breakdown.nonPermanentAllowance
         totalKpi = totalNonPermanent
         totalGross += breakdown.grossSalary
+
+        // Akumulasikan total per komponen dinamis
+        for (const [code, item] of Object.entries(breakdown.items || {})) {
+          componentTotals[code] = (componentTotals[code] || 0) + (item.amount || 0)
+        }
       }
 
       return {
@@ -108,6 +120,9 @@ export async function GET(request) {
         nonPermanentAllowance: breakdown.nonPermanentAllowance,
         kpiAllowance: breakdown.kpiAllowance,
         grossSalary: breakdown.grossSalary,
+        items: breakdown.items,
+        components: breakdown.components,
+        componentOverrides: empOverride?.componentOverrides || null,
         enableTransport: breakdown.enableTransport,
         enableNonPermanent: breakdown.enableNonPermanent,
         enableKpi: breakdown.enableKpi,
@@ -122,6 +137,8 @@ export async function GET(request) {
     return NextResponse.json({
       success: true,
       config,
+      components: config.components || [],
+      poolCatalog: ODOO_PRECONFIGURED_RULE_POOL,
       locationRules: config.locationRules || DEFAULT_LOCATION_RULES,
       overrides,
       stats: {
@@ -134,6 +151,7 @@ export async function GET(request) {
         totalNonPermanent,
         totalKpi: totalNonPermanent,
         totalGross,
+        componentTotals,
       },
       departments: allDepts,
       data: enrichedEmployees,
@@ -162,7 +180,7 @@ export async function POST(request) {
 
     // Aksi 2: Update / Koreksi Basic Salary satu karyawan secara langsung
     if (action === 'update_wage') {
-      const { empId, wage, enableTransport, enableNonPermanent, enableKpi } = body
+      const { empId, wage, enableTransport, enableNonPermanent, enableKpi, componentOverrides } = body
       if (!empId) {
         return NextResponse.json({ success: false, error: 'empId wajib disertakan' }, { status: 400 })
       }
@@ -177,8 +195,9 @@ export async function POST(request) {
 
       // Jika ada perubahan hak tunjangan karyawan
       const hasNP = typeof enableNonPermanent === 'boolean' || typeof enableKpi === 'boolean'
-      if (typeof enableTransport === 'boolean' || hasNP) {
+      if (componentOverrides || typeof enableTransport === 'boolean' || hasNP) {
         await saveEmployeeAllowanceOverride(empId, {
+          componentOverrides: componentOverrides || {},
           enableTransport: enableTransport ?? true,
           enableKpi: enableNonPermanent ?? enableKpi ?? true,
         })
@@ -193,11 +212,12 @@ export async function POST(request) {
 
     // Aksi 3: Simpan override hak tunjangan individu karyawan
     if (action === 'update_employee_allowance') {
-      const { empId, enableTransport, enableNonPermanent, enableKpi } = body
+      const { empId, componentOverrides, enableTransport, enableNonPermanent, enableKpi } = body
       if (!empId) {
         return NextResponse.json({ success: false, error: 'empId wajib disertakan' }, { status: 400 })
       }
       const override = await saveEmployeeAllowanceOverride(empId, {
+        componentOverrides: componentOverrides || {},
         enableTransport,
         enableKpi: enableNonPermanent ?? enableKpi,
       })
@@ -222,10 +242,11 @@ export async function POST(request) {
       })
     }
 
-    // Aksi 5: Simpan konfigurasi persentase global (perhitungan riil)
+    // Aksi 5: Simpan konfigurasi komponen gaji global (perhitungan riil)
     if (action === 'update_config') {
-      const { basicPercent, transportPercent, nonPermanentPercent, kpiPercent, roundingStep, locationRules } = body
+      const { components, basicPercent, transportPercent, nonPermanentPercent, kpiPercent, roundingStep, locationRules } = body
       const newConfig = await saveSalaryBreakdownConfig({
+        components,
         basicPercent,
         transportPercent,
         nonPermanentPercent: nonPermanentPercent ?? kpiPercent,
@@ -235,7 +256,7 @@ export async function POST(request) {
       })
       return NextResponse.json({
         success: true,
-        message: `Konfigurasi berhasil disimpan: Basic ${newConfig.basicPercent}%, Transport ${newConfig.transportPercent}%, Non Permanent Allowance ${newConfig.nonPermanentPercent}% (Perhitungan Riil)`,
+        message: `Konfigurasi komponen gaji berhasil disimpan (${(newConfig.components || []).length} komponen, Total 100% - Perhitungan Riil)`,
         config: newConfig,
       })
     }

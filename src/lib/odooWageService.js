@@ -1,6 +1,96 @@
 // src/lib/odooWageService.js
 import { prisma } from './prisma.js'
 
+/**
+ * Master Katalog Rule Pool Odoo (Strategi 2: Pre-Configured Rule Pool di Odoo)
+ * Admin Odoo sudah membuat master salary rule & input type ini di Odoo Structure ID 6.
+ */
+export const ODOO_PRECONFIGURED_RULE_POOL = [
+  {
+    code: 'TRANS',
+    name: 'Transport Allowance',
+    odooRuleCode: 'TRANS',
+    odooInputCode: 'transport',
+    isSickDeductible: true,
+    description: 'Tunjangan transportasi kehadiran harian',
+  },
+  {
+    code: 'NPA',
+    name: 'Non Permanent Allowance (NPA)',
+    odooRuleCode: 'NPA',
+    odooInputCode: 'NPA',
+    isSickDeductible: false,
+    description: 'Tunjangan tidak tetap / insentif kinerja',
+  },
+  {
+    code: 'MEAL',
+    name: 'Meal Allowance (Uang Makan)',
+    odooRuleCode: 'MEAL',
+    odooInputCode: 'meal',
+    isSickDeductible: false,
+    description: 'Tunjangan uang makan siang',
+  },
+  {
+    code: 'COMM',
+    name: 'Communication Allowance',
+    odooRuleCode: 'COMM',
+    odooInputCode: 'comm',
+    isSickDeductible: false,
+    description: 'Tunjangan pulsa, kuota, atau internet',
+  },
+  {
+    code: 'POS',
+    name: 'Position Allowance (Tunjangan Jabatan)',
+    odooRuleCode: 'POS',
+    odooInputCode: 'pos',
+    isSickDeductible: false,
+    description: 'Tunjangan tanggung jawab struktural / jabatan',
+  },
+  {
+    code: 'OTHER_ALW',
+    name: 'Other Allowance (Tunjangan Lain-lain)',
+    odooRuleCode: 'OTHER_ALW',
+    odooInputCode: 'other_alw',
+    isSickDeductible: false,
+    description: 'Tunjangan fleksibel kustom lainnya',
+  },
+]
+
+export const DEFAULT_COMPONENTS = [
+  {
+    id: 'comp_basic',
+    code: 'BASIC',
+    name: 'Basic Salary (Gaji Pokok)',
+    percent: 75,
+    isBase: true,
+    isRemovable: false,
+    odooRuleCode: 'BASIC',
+    odooInputCode: 'BASIC',
+  },
+  {
+    id: 'comp_trans',
+    code: 'TRANS',
+    name: 'Transport Allowance',
+    percent: 15,
+    isBase: false,
+    isRemovable: true,
+    isSickDeductible: true,
+    odooRuleCode: 'TRANS',
+    odooInputCode: 'transport',
+  },
+  {
+    id: 'comp_npa',
+    code: 'NPA',
+    name: 'Non Permanent Allowance',
+    percent: 10,
+    isBase: false,
+    isRemovable: true,
+    isSickDeductible: false,
+    odooRuleCode: 'NPA',
+    odooInputCode: 'NPA',
+  },
+]
+
 export const DEFAULT_LOCATION_RULES = {
   ho: {
     locationName: 'Head Office (HO)',
@@ -41,6 +131,7 @@ export const DEFAULT_LOCATION_RULES = {
 }
 
 export const DEFAULT_SALARY_BREAKDOWN_CONFIG = {
+  components: DEFAULT_COMPONENTS,
   basicPercent: 75,
   transportPercent: 15,
   nonPermanentPercent: 10,
@@ -53,6 +144,111 @@ const CONFIG_KEY = 'payroll_salary_breakdown_config'
 const OVERRIDES_KEY = 'employee_allowance_overrides'
 
 /**
+ * Normalisasi konfigurasi salary breakdown agar kompatibel baik format lama maupun baru (array components)
+ */
+export function normalizeSalaryConfig(raw) {
+  if (!raw || typeof raw !== 'object') {
+    return { ...DEFAULT_SALARY_BREAKDOWN_CONFIG }
+  }
+
+  let components = Array.isArray(raw.components) && raw.components.length > 0 ? raw.components : null
+
+  if (!components) {
+    const basic = typeof raw.basicPercent === 'number' ? raw.basicPercent : 75
+    const transport = typeof raw.transportPercent === 'number' ? raw.transportPercent : 15
+    const npa = typeof (raw.nonPermanentPercent ?? raw.kpiPercent) === 'number' ? (raw.nonPermanentPercent ?? raw.kpiPercent) : 10
+
+    components = [
+      {
+        id: 'comp_basic',
+        code: 'BASIC',
+        name: 'Basic Salary (Gaji Pokok)',
+        percent: basic,
+        isBase: true,
+        isRemovable: false,
+        odooRuleCode: 'BASIC',
+        odooInputCode: 'BASIC',
+      },
+      {
+        id: 'comp_trans',
+        code: 'TRANS',
+        name: 'Transport Allowance',
+        percent: transport,
+        isBase: false,
+        isRemovable: true,
+        isSickDeductible: true,
+        odooRuleCode: 'TRANS',
+        odooInputCode: 'transport',
+      },
+      {
+        id: 'comp_npa',
+        code: 'NPA',
+        name: 'Non Permanent Allowance',
+        percent: npa,
+        isBase: false,
+        isRemovable: true,
+        isSickDeductible: false,
+        odooRuleCode: 'NPA',
+        odooInputCode: 'NPA',
+      },
+    ]
+  }
+
+  // Cari base comp
+  const baseComp = components.find((c) => c.isBase) || components[0]
+  const basicPercent = Number(baseComp?.percent) || 75
+  const transportComp = components.find((c) => c.code === 'TRANS')
+  const transportPercent = transportComp ? Number(transportComp.percent) : 0
+  const npaComp = components.find((c) => c.code === 'NPA')
+  const nonPermanentPercent = npaComp ? Number(npaComp.percent) : 0
+
+  // Normalisasi location rules untuk 4 lokasi standar (ho, sales, gudang, livestream)
+  const locationKeys = ['ho', 'sales', 'gudang', 'livestream']
+  const locationRules = {}
+  const rawLocRules = raw.locationRules || {}
+
+  for (const key of locationKeys) {
+    const baseLoc = DEFAULT_LOCATION_RULES[key] || { locationName: key }
+    const rule = rawLocRules[key] || {}
+    let enabledCodes = Array.isArray(rule.enabledComponentCodes) ? [...rule.enabledComponentCodes] : null
+
+    if (!enabledCodes) {
+      enabledCodes = []
+      if (rule.enableTransport ?? baseLoc.enableTransport ?? true) enabledCodes.push('TRANS')
+      if (rule.enableNonPermanent ?? rule.enableKpi ?? baseLoc.enableNonPermanent ?? true) enabledCodes.push('NPA')
+      // Seluruh komponen non-base lainnya yang ada di components aktif secara default untuk lokasi ini
+      for (const comp of components) {
+        if (!comp.isBase && !enabledCodes.includes(comp.code)) {
+          enabledCodes.push(comp.code)
+        }
+      }
+    }
+
+    locationRules[key] = {
+      ...baseLoc,
+      ...rule,
+      locationName: rule.locationName || baseLoc.locationName || key,
+      enabledComponentCodes: enabledCodes,
+      enableTransport: enabledCodes.includes('TRANS'),
+      enableNonPermanent: enabledCodes.includes('NPA'),
+      enableKpi: enabledCodes.includes('NPA'),
+    }
+  }
+
+  return {
+    ...DEFAULT_SALARY_BREAKDOWN_CONFIG,
+    ...raw,
+    components,
+    basicPercent,
+    transportPercent,
+    nonPermanentPercent,
+    kpiPercent: nonPermanentPercent,
+    roundingStep: Number(raw.roundingStep) || 1,
+    locationRules,
+  }
+}
+
+/**
  * Mengambil konfigurasi persentase pemecahan gaji, aturan pembulatan, & aturan per lokasi kerja
  */
 export async function getSalaryBreakdownConfig() {
@@ -62,21 +258,7 @@ export async function getSalaryBreakdownConfig() {
     })
     if (row && row.value) {
       const parsed = JSON.parse(row.value)
-      if (
-        typeof parsed.basicPercent === 'number' &&
-        typeof parsed.transportPercent === 'number' &&
-        typeof parsed.kpiPercent === 'number'
-      ) {
-        return {
-          ...DEFAULT_SALARY_BREAKDOWN_CONFIG,
-          ...parsed,
-          roundingStep: Number(parsed.roundingStep) || DEFAULT_SALARY_BREAKDOWN_CONFIG.roundingStep,
-          locationRules: {
-            ...DEFAULT_LOCATION_RULES,
-            ...(parsed.locationRules || {}),
-          },
-        }
-      }
+      return normalizeSalaryConfig(parsed)
     }
   } catch (err) {
     console.warn('[Salary Breakdown] Failed to read config from appState, using defaults:', err.message)
@@ -90,18 +272,75 @@ export async function getSalaryBreakdownConfig() {
 export async function saveSalaryBreakdownConfig(config) {
   const current = await getSalaryBreakdownConfig()
 
-  const basic = Number(config.basicPercent) || current.basicPercent || 75
-  const transport = Number(config.transportPercent) || current.transportPercent || 15
-  const nonPermanent = Number(config.nonPermanentPercent ?? config.kpiPercent) || current.nonPermanentPercent || current.kpiPercent || 10
+  let components = null
+  if (Array.isArray(config.components) && config.components.length > 0) {
+    components = config.components.map((c) => ({
+      ...c,
+      percent: Math.max(0, Number(c.percent) || 0),
+    }))
+  } else {
+    const basic = Number(config.basicPercent) || current.basicPercent || 75
+    const transport = Number(config.transportPercent) || current.transportPercent || 15
+    const nonPermanent = Number(config.nonPermanentPercent ?? config.kpiPercent) || current.nonPermanentPercent || current.kpiPercent || 10
+
+    components = [
+      {
+        id: 'comp_basic',
+        code: 'BASIC',
+        name: 'Basic Salary (Gaji Pokok)',
+        percent: basic,
+        isBase: true,
+        isRemovable: false,
+        odooRuleCode: 'BASIC',
+        odooInputCode: 'BASIC',
+      },
+      {
+        id: 'comp_trans',
+        code: 'TRANS',
+        name: 'Transport Allowance',
+        percent: transport,
+        isBase: false,
+        isRemovable: true,
+        isSickDeductible: true,
+        odooRuleCode: 'TRANS',
+        odooInputCode: 'transport',
+      },
+      {
+        id: 'comp_npa',
+        code: 'NPA',
+        name: 'Non Permanent Allowance',
+        percent: nonPermanent,
+        isBase: false,
+        isRemovable: true,
+        isSickDeductible: false,
+        odooRuleCode: 'NPA',
+        odooInputCode: 'NPA',
+      },
+    ]
+  }
+
+  // Validasi total persentase harus tepat 100%
+  const total = Math.round(components.reduce((acc, c) => acc + (Number(c.percent) || 0), 0) * 100) / 100
+  if (total !== 100) {
+    throw new Error(`Total persentase seluruh komponen harus tepat 100% (saat ini ${total}%)`)
+  }
+
+  const baseComp = components.find((c) => c.isBase) || components[0]
+  if (!baseComp || Number(baseComp.percent) <= 0) {
+    throw new Error('Komponen dasar (Basic Salary) harus memiliki persentase lebih dari 0%')
+  }
+
+  const basic = Number(baseComp.percent)
+  const transportComp = components.find((c) => c.code === 'TRANS')
+  const transport = transportComp ? Number(transportComp.percent) : 0
+  const npaComp = components.find((c) => c.code === 'NPA')
+  const nonPermanent = npaComp ? Number(npaComp.percent) : 0
+
   const roundingStep = Number(config.roundingStep) || current.roundingStep || 1
   const locationRules = config.locationRules || current.locationRules || DEFAULT_LOCATION_RULES
 
-  const total = Math.round((basic + transport + nonPermanent) * 100) / 100
-  if (total !== 100) {
-    throw new Error(`Total persentase harus tepat 100% (saat ini ${total}%: Basic ${basic}%, Transport ${transport}%, Non Permanent ${nonPermanent}%)`)
-  }
-
   const payload = {
+    components,
     basicPercent: basic,
     transportPercent: transport,
     nonPermanentPercent: nonPermanent,
@@ -117,7 +356,7 @@ export async function saveSalaryBreakdownConfig(config) {
     create: { key: CONFIG_KEY, value: JSON.stringify(payload) },
   })
 
-  return payload
+  return normalizeSalaryConfig(payload)
 }
 
 /**
@@ -138,7 +377,7 @@ export async function saveLocationRules(locationRules) {
 
 /**
  * Mengambil seluruh data override hak tunjangan per karyawan
- * @returns {Promise<Record<string, { enableTransport: boolean, enableKpi: boolean }>>}
+ * @returns {Promise<Record<string, any>>}
  */
 export async function getEmployeeAllowanceOverrides() {
   try {
@@ -157,13 +396,13 @@ export async function getEmployeeAllowanceOverrides() {
 /**
  * Menyimpan override hak tunjangan untuk satu karyawan tertentu
  */
-export async function saveEmployeeAllowanceOverride(empId, { enableTransport, enableKpi }) {
+export async function saveEmployeeAllowanceOverride(empId, overrideData) {
   const overrides = await getEmployeeAllowanceOverrides()
   const idStr = String(empId)
 
   overrides[idStr] = {
-    enableTransport: Boolean(enableTransport),
-    enableKpi: Boolean(enableKpi),
+    ...(overrides[idStr] || {}),
+    ...overrideData,
     updatedAt: new Date().toISOString(),
   }
 
@@ -185,80 +424,108 @@ export function roundToStep(val, step = 1) {
 }
 
 /**
- * Menghitung rincian komponen gaji dari Odoo Wage (Basic Salary 75%)
+ * Menghitung rincian komponen gaji dari Odoo Wage (Basic Salary)
  * Memperhitungkan aturan Work Location & Override Individu Karyawan
+ * Mendukung komponen gaji dinamis (Strategi 2: Pre-Configured Rule Pool)
  * @param {number} odooWage - Nilai wage dari tab payroll Odoo (Basic Salary)
- * @param {object} config - Konfigurasi persentase, aturan pembulatan & lokasi kerja
+ * @param {object} rawConfig - Konfigurasi persentase, aturan pembulatan & lokasi kerja
  * @param {object} [options] - { locationCode, employeeOverride }
  */
-export function calculateSalaryBreakdown(odooWage, config = DEFAULT_SALARY_BREAKDOWN_CONFIG, options = {}) {
+export function calculateSalaryBreakdown(odooWage, rawConfig = DEFAULT_SALARY_BREAKDOWN_CONFIG, options = {}) {
+  const config = normalizeSalaryConfig(rawConfig)
   const basic = Math.max(0, Number(odooWage) || 0)
-  const basicPercent = Number(config.basicPercent) || DEFAULT_SALARY_BREAKDOWN_CONFIG.basicPercent
-  const roundingStep = Number(config.roundingStep) || DEFAULT_SALARY_BREAKDOWN_CONFIG.roundingStep
+  const roundingStep = Number(config.roundingStep) || 1
+  const components = config.components || DEFAULT_COMPONENTS
 
   const locCode = (options.locationCode || 'ho').toLowerCase()
   const locRule = (config.locationRules && config.locationRules[locCode]) || DEFAULT_LOCATION_RULES[locCode] || {}
   const override = options.employeeOverride || null
 
-  // 1. Tentukan apakah Transport & Non Permanent Allowance Aktif (Hierarki: Override Individu > Aturan Lokasi > Default True)
-  let enableTransport = true
-  let enableNonPermanent = true
+  // 1. Identifikasi komponen base (Basic Salary)
+  const baseComp = components.find((c) => c.isBase) || components[0]
+  const basePercent = Number(baseComp?.percent) || 75
 
-  if (override && typeof override.enableTransport === 'boolean') {
-    enableTransport = override.enableTransport
-  } else if (typeof locRule.enableTransport === 'boolean') {
-    enableTransport = locRule.enableTransport
-  }
+  // 2. Loop dan hitung rincian tiap komponen
+  const items = {}
+  let grossSalary = 0
+  let sickDeductibleTotal = 0
 
-  const rawOverrideNP = override ? (override.enableNonPermanent ?? override.enableKpi) : undefined
-  const rawLocNP = locRule.enableNonPermanent ?? locRule.enableKpi
-
-  if (typeof rawOverrideNP === 'boolean') {
-    enableNonPermanent = rawOverrideNP
-  } else if (typeof rawLocNP === 'boolean') {
-    enableNonPermanent = rawLocNP
-  }
-
-  // 2. Persentase Tunjangan (Lokasi Rule atau Global Config)
-  const transportPercent = typeof locRule.transportPercent === 'number'
-    ? locRule.transportPercent
-    : (Number(config.transportPercent) || DEFAULT_SALARY_BREAKDOWN_CONFIG.transportPercent)
-
-  const nonPermanentPercent = typeof (locRule.nonPermanentPercent ?? locRule.kpiPercent) === 'number'
-    ? (locRule.nonPermanentPercent ?? locRule.kpiPercent)
-    : (Number(config.nonPermanentPercent ?? config.kpiPercent) || DEFAULT_SALARY_BREAKDOWN_CONFIG.nonPermanentPercent)
-
-  if (basic === 0) {
-    return {
-      basicSalary: 0,
-      transportAllowance: 0,
-      nonPermanentAllowance: 0,
-      kpiAllowance: 0, // alias
-      grossSalary: 0,
-      enableTransport,
-      enableNonPermanent,
-      enableKpi: enableNonPermanent, // alias
-      isOverridden: !!override,
-      percentages: {
-        basicPercent,
-        transportPercent,
-        nonPermanentPercent,
-        kpiPercent: nonPermanentPercent,
-        roundingStep,
-      },
+  components.forEach((comp) => {
+    if (comp.isBase) {
+      items[comp.code] = {
+        id: comp.id,
+        code: comp.code,
+        name: comp.name,
+        percent: comp.percent,
+        amount: basic,
+        enabled: true,
+        isBase: true,
+        isSickDeductible: false,
+        odooRuleCode: comp.odooRuleCode || comp.code,
+        odooInputCode: comp.odooInputCode || comp.code.toLowerCase(),
+      }
+      grossSalary += basic
+      return
     }
-  }
 
-  // 3. Tunjangan dihitung proporsional terhadap Basic Salary jika aktif
-  const transportRaw = enableTransport && basicPercent > 0 ? (basic * transportPercent) / basicPercent : 0
-  const npRaw = enableNonPermanent && basicPercent > 0 ? (basic * nonPermanentPercent) / basicPercent : 0
+    // Tentukan apakah komponen aktif untuk karyawan ini
+    // Hierarki: Override Individu > Aturan Lokasi > Default Aktif
+    let isEnabled = true
 
-  // 4. Terapkan pembulatan ke kelipatan step
-  const transportAllowance = enableTransport ? roundToStep(transportRaw, roundingStep) : 0
-  const nonPermanentAllowance = enableNonPermanent ? roundToStep(npRaw, roundingStep) : 0
+    if (override) {
+      if (override.componentOverrides && typeof override.componentOverrides[comp.code] === 'boolean') {
+        isEnabled = override.componentOverrides[comp.code]
+      } else if (typeof override[comp.code] === 'boolean') {
+        isEnabled = override[comp.code]
+      } else if (comp.code === 'TRANS' && typeof override.enableTransport === 'boolean') {
+        isEnabled = override.enableTransport
+      } else if (comp.code === 'NPA') {
+        const rawNP = override.enableNonPermanent ?? override.enableKpi
+        if (typeof rawNP === 'boolean') isEnabled = rawNP
+      }
+    } else if (locRule) {
+      if (Array.isArray(locRule.enabledComponentCodes)) {
+        isEnabled = locRule.enabledComponentCodes.includes(comp.code)
+      } else if (comp.code === 'TRANS' && typeof locRule.enableTransport === 'boolean') {
+        isEnabled = locRule.enableTransport
+      } else if (comp.code === 'NPA') {
+        const rawLocNP = locRule.enableNonPermanent ?? locRule.enableKpi
+        if (typeof rawLocNP === 'boolean') isEnabled = rawLocNP
+      }
+    }
 
-  // 5. Gross Salary adalah penjumlahan pasti Basic + Transport + NPA agar total selalu klop 100%
-  const grossSalary = basic + transportAllowance + nonPermanentAllowance
+    // Perhitungan Nominal: Proporsional terhadap Base Wage (Odoo Wage)
+    const rawAmount = isEnabled && basic > 0 && basePercent > 0
+      ? (basic * Number(comp.percent)) / basePercent
+      : 0
+    const nominal = isEnabled && basic > 0 ? roundToStep(rawAmount, roundingStep) : 0
+
+    items[comp.code] = {
+      id: comp.id,
+      code: comp.code,
+      name: comp.name,
+      percent: comp.percent,
+      amount: nominal,
+      enabled: isEnabled,
+      isBase: false,
+      isSickDeductible: Boolean(comp.isSickDeductible),
+      odooRuleCode: comp.odooRuleCode || comp.code,
+      odooInputCode: comp.odooInputCode || comp.code.toLowerCase(),
+    }
+
+    if (isEnabled && nominal > 0) {
+      grossSalary += nominal
+      if (comp.isSickDeductible) {
+        sickDeductibleTotal += nominal
+      }
+    }
+  })
+
+  // Backward-compatibility aliases
+  const transportAllowance = items['TRANS']?.amount || 0
+  const nonPermanentAllowance = items['NPA']?.amount || 0
+  const enableTransport = items['TRANS']?.enabled ?? true
+  const enableNonPermanent = items['NPA']?.enabled ?? true
 
   return {
     basicSalary: basic,
@@ -266,15 +533,18 @@ export function calculateSalaryBreakdown(odooWage, config = DEFAULT_SALARY_BREAK
     nonPermanentAllowance,
     kpiAllowance: nonPermanentAllowance, // alias
     grossSalary,
+    sickDeductibleTotal: sickDeductibleTotal || transportAllowance, // basis potongan cuti sakit
+    items,
+    components,
     enableTransport,
     enableNonPermanent,
     enableKpi: enableNonPermanent, // alias
     isOverridden: !!override,
     percentages: {
-      basicPercent,
-      transportPercent,
-      nonPermanentPercent,
-      kpiPercent: nonPermanentPercent,
+      basicPercent: basePercent,
+      transportPercent: items['TRANS']?.percent || 0,
+      nonPermanentPercent: items['NPA']?.percent || 0,
+      kpiPercent: items['NPA']?.percent || 0,
       roundingStep,
     },
   }

@@ -2,7 +2,12 @@
 import { prisma } from '@/lib/prisma'
 import { getCutoffDateRange } from '@/lib/odooPayrollService'
 import { getWorkingDaysFromDb, calculateWorkingDays } from '@/lib/workdayCalculator'
-import { syncOdooWages } from '@/lib/odooWageService'
+import {
+  syncOdooWages,
+  getSalaryBreakdownConfig,
+  getEmployeeAllowanceOverrides,
+  calculateSalaryBreakdown,
+} from '@/lib/odooWageService'
 import {
   calcHoOvertimeRate,
   calcHoOvertimeFee,
@@ -164,7 +169,10 @@ export async function GET(req) {
       orderBy: { name: 'asc' },
     })
 
-    // 7. Hitung perhitungan per karyawan menggunakan hoPayrollEngine
+    // 7. Hitung perhitungan per karyawan menggunakan hoPayrollEngine & dynamic breakdown
+    const salaryConfig = await getSalaryBreakdownConfig()
+    const overrides = await getEmployeeAllowanceOverrides()
+
     const calculatedRows = []
     const allHalfDayEntries = []
     const allSickEntries = []
@@ -173,9 +181,19 @@ export async function GET(req) {
 
     for (const emp of employees) {
       const rawSalary = Number(emp.salary) || 0
-      const basic = Math.round(rawSalary * 0.75)
-      const transport = Math.round(rawSalary * 0.15)
-      const kpi = Math.round(rawSalary * 0.10)
+      const locCode = emp.workLocationCode || 'ho'
+      const empOverride = overrides[emp.id] || overrides[String(emp.id)] || null
+
+      const breakdown = calculateSalaryBreakdown(rawSalary, salaryConfig, {
+        locationCode: locCode,
+        employeeOverride: empOverride,
+      })
+
+      const basic = breakdown.basicSalary
+      const transport = breakdown.transportAllowance
+      const kpi = breakdown.nonPermanentAllowance
+      const calculatedGross = breakdown.grossSalary
+      const sickDeductibleBase = breakdown.sickDeductibleTotal || transport
 
       // Cek Overtime
       const empOvertimes = otByEmp.get(emp.id) || []
@@ -233,8 +251,8 @@ export async function GET(req) {
               basicSalary: basic,
               transportAllowance: transport,
               kpiAllowance: kpi,
-              transportPerDay: Math.round(transport / workingDays),
-              deduction: Math.round((transport / workingDays) * days),
+              transportPerDay: Math.round(sickDeductibleBase / workingDays),
+              deduction: Math.round((sickDeductibleBase / workingDays) * days),
               attachment: lv.attachment,
               doctorCertValid: true,
               note: lv.note || 'Surat Sakit Terverifikasi',

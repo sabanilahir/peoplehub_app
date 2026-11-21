@@ -254,8 +254,9 @@ export async function aggregateCutoffAttendance({ dateFrom, dateTo }) {
     // Aturan 2: Potongan Setengah Hari = (Gross / workingDays) / 2
     const halfDayDeduction = workingDays > 0 ? Math.round(((breakdown.grossSalary / workingDays) / 2) * halfDayCount) : 0
 
-    // Aturan 3: Potongan Cuti Sakit = HANYA memotong prorata Tunjangan Transport / workingDays
-    const sickLeaveDeduction = workingDays > 0 ? Math.round((breakdown.transportAllowance / workingDays) * sickDays) : 0
+    // Aturan 3: Potongan Cuti Sakit = HANYA memotong prorata Tunjangan Kehadiran / Tunjangan yang ditandai isSickDeductible
+    const sickDeductibleBase = breakdown.sickDeductibleTotal ?? breakdown.transportAllowance ?? 0
+    const sickLeaveDeduction = workingDays > 0 ? Math.round((sickDeductibleBase / workingDays) * sickDays) : 0
 
     // Aturan 4: Potongan Unpaid Leave = Gross / workingDays
     const unpaidLeaveDeduction = workingDays > 0 ? Math.round((breakdown.grossSalary / workingDays) * unpaidDays) : 0
@@ -323,6 +324,9 @@ export async function aggregateCutoffAttendance({ dateFrom, dateTo }) {
       enableNonPermanent: breakdown.enableNonPermanent,
       enableKpi: breakdown.enableKpi, // alias
       isOverridden: breakdown.isOverridden,
+      items: breakdown.items,
+      components: breakdown.components,
+      sickDeductibleTotal: breakdown.sickDeductibleTotal,
       // Prorata
       isProrated,
       prorateReason,
@@ -469,18 +473,34 @@ export async function syncCutoffToOdoo({
   const leaveType = inputTypes.find((t) => t.code?.toLowerCase() === 'leave')
   const leaveTypeId = leaveType ? leaveType.id : 25
 
-  // List ID tipe input yang dikelola PeopleHub
-  const managedInputTypeIds = [
-    dedTypeId,
-    reimbTypeId,
-    transportTypeId,
-    npaTypeId,
-    overtimeTypeId,
-    halfLeaveTypeId,
-    sickLeaveTypeId,
-    leaveTypeId,
-    13, // legacy KPI id
-  ]
+  // List ID tipe input yang dikelola PeopleHub (mencakup seluruh komponen dinamis aktif)
+  const dynamicInputTypeIds = (salaryConfig.components || [])
+    .filter((c) => !c.isBase)
+    .map((c) => {
+      const match = inputTypes.find(
+        (t) =>
+          t.code?.toLowerCase() === c.odooInputCode?.toLowerCase() ||
+          t.code?.toLowerCase() === c.code?.toLowerCase() ||
+          t.name?.toLowerCase() === c.name?.toLowerCase()
+      )
+      return match ? match.id : null
+    })
+    .filter(Boolean)
+
+  const managedInputTypeIds = Array.from(
+    new Set([
+      dedTypeId,
+      reimbTypeId,
+      transportTypeId,
+      npaTypeId,
+      overtimeTypeId,
+      halfLeaveTypeId,
+      sickLeaveTypeId,
+      leaveTypeId,
+      13, // legacy KPI id
+      ...dynamicInputTypeIds,
+    ])
+  )
 
   // 5. Pay Run Batch (hr.payslip.run) - dibuat jika ada slip baru yang perlu dibuat
   const runName = `Pay Run Cut-off ${dateFrom} s/d ${dateTo}`
@@ -716,26 +736,50 @@ export async function syncCutoffToOdoo({
         })
       }
 
-      // 3. Tunjangan Transportasi (TRANSPORT)
-      if (emp.enableTransport && emp.transportAllowance > 0) {
-        newInputs.push({
-          payslip_id: payslipId,
-          input_type_id: transportTypeId,
-          name: 'Transport Allowance',
-          amount: emp.transportAllowance,
-        })
-      }
+      // 3. Tunjangan-tunjangan Dinamis dari Komponen Gaji (Strategi 2: Pre-Configured Rule Pool)
+      const dynamicComponents = (salaryConfig.components || []).filter((c) => !c.isBase)
 
-      // 4. Non Permanent Allowance (NPA)
-      const npAllowance = emp.nonPermanentAllowance ?? emp.kpiAllowance ?? 0
-      const isNpEnabled = emp.enableNonPermanent ?? emp.enableKpi ?? true
-      if (isNpEnabled && npAllowance > 0) {
-        newInputs.push({
-          payslip_id: payslipId,
-          input_type_id: npaTypeId,
-          name: 'Non Permanent Allowance',
-          amount: npAllowance,
-        })
+      for (const comp of dynamicComponents) {
+        const compItem = emp.items?.[comp.code]
+        let amount = 0
+        let isEnabled = true
+
+        if (compItem) {
+          amount = compItem.amount || 0
+          isEnabled = compItem.enabled
+        } else if (comp.code === 'TRANS') {
+          amount = emp.transportAllowance || 0
+          isEnabled = emp.enableTransport ?? true
+        } else if (comp.code === 'NPA') {
+          amount = emp.nonPermanentAllowance ?? emp.kpiAllowance ?? 0
+          isEnabled = emp.enableNonPermanent ?? emp.enableKpi ?? true
+        }
+
+        if (isEnabled && amount > 0) {
+          let matchedType = inputTypes.find(
+            (t) =>
+              t.code?.toLowerCase() === comp.odooInputCode?.toLowerCase() ||
+              t.code?.toLowerCase() === comp.code?.toLowerCase() ||
+              t.name?.toLowerCase() === comp.name?.toLowerCase()
+          )
+
+          if (!matchedType) {
+            if (comp.code === 'TRANS') matchedType = { id: transportTypeId }
+            else if (comp.code === 'NPA') matchedType = { id: npaTypeId }
+            else {
+              matchedType = inputTypes.find((t) => t.code?.toLowerCase() === 'other_alw')
+            }
+          }
+
+          if (matchedType?.id) {
+            newInputs.push({
+              payslip_id: payslipId,
+              input_type_id: matchedType.id,
+              name: comp.name,
+              amount,
+            })
+          }
+        }
       }
 
       // 5. Lembur (Overtime)
