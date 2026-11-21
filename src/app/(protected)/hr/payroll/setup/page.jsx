@@ -1232,7 +1232,10 @@ export default function PayrollSetupPage() {
 
       {/* Modal Tambah Komponen dari Pool Odoo */}
       {addComponentModalOpen && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/50 p-4 animate-in fade-in duration-150">
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150"
+          style={{ zIndex: 70 }}
+        >
           <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden border border-gray-100">
             <div
               className="p-4 text-white flex items-center justify-between"
