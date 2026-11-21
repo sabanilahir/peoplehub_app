@@ -106,14 +106,14 @@ export async function GET() {
         })
       } catch {}
 
-      // Upsert menu Kalkulator Payroll HO
+      // Upsert menu Kalkulator Payroll
       try {
         await prisma.menuItem.upsert({
           where: { key: 'hr-payroll-ho-calculator' },
           create: {
             id: 3050,
             key: 'hr-payroll-ho-calculator',
-            label: 'Kalkulator Payroll HO',
+            label: 'Kalkulator Payroll',
             icon: 'calculator',
             href: '/hr/payroll/ho-calculator',
             parentId: parentId,
@@ -123,7 +123,7 @@ export async function GET() {
             active: true,
           },
           update: {
-            label: 'Kalkulator Payroll HO',
+            label: 'Kalkulator Payroll',
             icon: 'calculator',
             href: '/hr/payroll/ho-calculator',
             parentId: parentId,

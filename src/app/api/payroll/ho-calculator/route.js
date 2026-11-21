@@ -114,23 +114,16 @@ export async function GET(req) {
 
     const empIdsWithLeave = [...new Set(leaveRecords.map((lv) => lv.user?.employeeId || lv.userId).filter(Boolean))]
 
-    // 5. Ambil seluruh karyawan aktif (HO dan karyawan lain yang memiliki lembur/cuti di periode ini)
+    // 5. Ambil seluruh karyawan aktif (seluruh lokasi kerja: HO, Sales, Gudang, Livestream, dll)
     let empWhere = {}
     if (empIdParam && empIdParam !== 'all') {
       empWhere = {
-        status: 'Active',
         id: Number(empIdParam),
       }
     } else {
       empWhere = {
-        status: 'Active',
         OR: [
-          { workLocationCode: 'ho' },
-          { location: { contains: 'Head Office', mode: 'insensitive' } },
-          { location: { contains: 'HO', mode: 'insensitive' } },
-          { workLocationCode: 'sales' },
-          { location: { contains: 'Others', mode: 'insensitive' } },
-          { location: { contains: 'Sales', mode: 'insensitive' } },
+          { status: 'Active' },
           ...(empIdsWithOvertime.length > 0 ? [{ id: { in: empIdsWithOvertime } }] : []),
           ...(empIdsWithLeave.length > 0 ? [{ id: { in: empIdsWithLeave } }] : []),
         ],

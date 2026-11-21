@@ -70,6 +70,7 @@ export default function HoPayrollCalculatorPage() {
   const [activeTab, setActiveTab] = useState('rekap') // 'rekap' | 'lembur' | 'setengah' | 'sakit' | 'unpaid' | 'prorata'
   const [otStatusFilter, setOtStatusFilter] = useState('all') // 'all' | 'Approved' | 'Pending' | 'Rejected'
   const [searchQuery, setSearchQuery] = useState('')
+  const [locationFilter, setLocationFilter] = useState('all')
   const [actionMsg, setActionMsg] = useState(null)
   const [syncingWage, setSyncingWage] = useState(false)
 
@@ -82,7 +83,7 @@ export default function HoPayrollCalculatorPage() {
   // Auto-reset page when filter changes
   useEffect(() => {
     setRekapPage(1)
-  }, [searchQuery])
+  }, [searchQuery, locationFilter])
 
   useEffect(() => {
     setOtPage(1)
@@ -505,17 +506,60 @@ export default function HoPayrollCalculatorPage() {
     }
   }, [editOtForm, data.overtimeConfig, overrideWorkingDays, data.range, baseComponent])
 
+  // Location badge renderer
+  const renderLocationBadge = (emp) => {
+    const loc = (emp.workLocationCode || emp.location || '').toLowerCase()
+    if (loc === 'sales' || loc.includes('sales') || loc.includes('other')) {
+      return (
+        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-sky-100 text-sky-800 border border-sky-200">
+          💼 Area Sales
+        </span>
+      )
+    }
+    if (loc === 'gudang' || loc.includes('warehouse') || loc.includes('pack')) {
+      return (
+        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200">
+          📦 Gudang
+        </span>
+      )
+    }
+    if (loc === 'livestream' || loc.includes('stream') || loc.includes('manhattan')) {
+      return (
+        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-teal-100 text-teal-800 border border-teal-200">
+          🎥 Livestream
+        </span>
+      )
+    }
+    return (
+      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
+        🏢 Head Office
+      </span>
+    )
+  }
+
   // Filtered employees for table
   const filteredEmployees = useMemo(() => {
-    if (!searchQuery.trim()) return data.employees
+    let list = data.employees || []
+    if (locationFilter !== 'all') {
+      list = list.filter((e) => {
+        const loc = (e.workLocationCode || e.location || '').toLowerCase()
+        if (locationFilter === 'ho') return loc === 'ho' || loc.includes('head')
+        if (locationFilter === 'gudang') return loc === 'gudang' || loc.includes('warehouse') || loc.includes('pack')
+        if (locationFilter === 'sales') return loc === 'sales' || loc.includes('other')
+        if (locationFilter === 'livestream') return loc === 'livestream' || loc.includes('stream') || loc.includes('manhattan')
+        return loc === locationFilter
+      })
+    }
+    if (!searchQuery.trim()) return list
     const q = searchQuery.toLowerCase()
-    return data.employees.filter(
+    return list.filter(
       (e) =>
         e.name.toLowerCase().includes(q) ||
         (e.nik && e.nik.toLowerCase().includes(q)) ||
-        (e.dept && e.dept.toLowerCase().includes(q))
+        (e.dept && e.dept.toLowerCase().includes(q)) ||
+        (e.location && e.location.toLowerCase().includes(q))
     )
-  }, [data.employees, searchQuery])
+  }, [data.employees, locationFilter, searchQuery])
 
   // Pagination for Rekapitulasi Payroll
   const totalRekapPages = Math.max(1, Math.ceil(filteredEmployees.length / rekapPageSize))
@@ -567,7 +611,7 @@ export default function HoPayrollCalculatorPage() {
 
         return row
       })
-      exportCsv(rows, `HO_Payroll_Rekap_${data.range?.dateFrom}_${data.range?.dateTo}.csv`)
+      exportCsv(rows, `Payroll_Rekap_${data.range?.dateFrom}_${data.range?.dateTo}.csv`)
     } else if (activeTab === 'lembur') {
       const rows = (data.tables?.overtimes || []).map((o, idx) => ({
         No: idx + 1,
@@ -582,7 +626,7 @@ export default function HoPayrollCalculatorPage() {
         Tugas: o.taskNote || '',
         Status: o.status,
       }))
-      exportCsv(rows, `HO_Overtime_Rekap_${data.range?.dateFrom}_${data.range?.dateTo}.csv`)
+      exportCsv(rows, `Overtime_Rekap_${data.range?.dateFrom}_${data.range?.dateTo}.csv`)
     } else {
       flash('Gunakan tab Rekapitulasi atau Lembur untuk ekspor CSV.', 'info')
     }
@@ -593,8 +637,8 @@ export default function HoPayrollCalculatorPage() {
       {/* Page Header */}
       <PageHeader
         icon="🏢"
-        title="Kalkulator Payroll Head Office (HO) & Area Sales"
-        subtitle="Simulasi komprehensif gaji, lembur proporsional, dan potongan presensi untuk karyawan Head Office (HO) dan Area Sales."
+        title="Kalkulator Payroll Karyawan"
+        subtitle="Simulasi komprehensif gaji, lembur (proporsional HO/Sales & flat rate Gudang), serta potongan presensi untuk seluruh karyawan (HO, Area Sales, Gudang & Livestream)."
       >
         <div className="flex flex-wrap items-center gap-2">
           <ActionButton
@@ -684,7 +728,7 @@ export default function HoPayrollCalculatorPage() {
             </div>
             <div className="h-4 w-px bg-slate-300" />
             <div>
-              <span className="text-gray-500">Hari Kerja HO: </span>
+              <span className="text-gray-500">Hari Kerja Efektif: </span>
               <span className="inline-flex items-center px-2 py-0.5 rounded font-bold bg-indigo-100 text-indigo-800">
                 {data.range?.workingDays || 22} Hari
               </span>
@@ -703,36 +747,41 @@ export default function HoPayrollCalculatorPage() {
         <StatCard
           icon="👥"
           tone="brand"
-          label="Karyawan HO"
+          label="Total Karyawan"
           value={data.stats?.totalEmployees || 0}
+          hint="Seluruh Lokasi Kerja"
         />
         <StatCard
           icon="📅"
           tone="blue"
           label="Hari Kerja Efektif"
           value={`${data.stats?.workingDays || 22} Hari`}
+          hint="Periode cut-off resmi"
         />
         <StatCard
           icon="⏱️"
           tone="green"
           label="Total Uang Lembur"
           value={fmtRp(data.stats?.totalOvertimeSum)}
+          hint={`${data.stats?.approvedOvertimeCount || 0} entri disetujui`}
         />
         <StatCard
           icon="🔻"
           tone="orange"
-          label="Total Potongan HO"
+          label="Total Potongan"
           value={fmtRp(
             (data.stats?.totalHalfDayDeductionSum || 0) +
               (data.stats?.totalSickDeductionSum || 0) +
               (data.stats?.totalUnpaidDeductionSum || 0)
           )}
+          hint="1/2 Hari, Sakit & Unpaid"
         />
         <StatCard
           icon="💰"
           tone="purple"
-          label="Total Gross Salary HO"
+          label="Total Gross Salary"
           value={fmtRp(data.stats?.totalGrossSum)}
+          hint="Akumulasi seluruh karyawan"
         />
       </div>
 
@@ -746,7 +795,7 @@ export default function HoPayrollCalculatorPage() {
               : 'border-transparent text-gray-500 hover:text-gray-800'
           }`}
         >
-          <span>📊</span> Rekapitulasi Payroll HO
+          <span>📊</span> Rekapitulasi Payroll
         </button>
         <button
           onClick={() => setActiveTab('lembur')}
@@ -800,18 +849,42 @@ export default function HoPayrollCalculatorPage() {
         </button>
       </div>
 
-      {/* TAB 1: REKAPITULASI PAYROLL HO & AREA SALES */}
+      {/* TAB 1: REKAPITULASI PAYROLL SELURUH KARYAWAN */}
       {activeTab === 'rekap' && (
         <SectionCard
-          title="Tabel Rekapitulasi Payroll Head Office & Area Sales"
-          subtitle="Rincian komprehensif seluruh komponen gaji, lembur proporsional, dan potongan sesuai aturan HO & Area Sales."
+          title="Tabel Rekapitulasi Payroll Seluruh Karyawan"
+          subtitle="Rincian komprehensif seluruh komponen gaji, lembur, dan potongan sesuai kebijakan masing-masing lokasi kerja (HO, Area Sales, Gudang & Livestream)."
         >
-          <div className="mb-4 max-w-sm">
-            <Input
-              placeholder="Cari nama karyawan / NIK..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-3 flex-1">
+              <div className="max-w-sm flex-1 min-w-[200px]">
+                <Input
+                  placeholder="Cari nama karyawan, NIK, divisi..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <label className="text-xs font-semibold text-gray-500">Lokasi:</label>
+                <select
+                  value={locationFilter}
+                  onChange={(e) => {
+                    setLocationFilter(e.target.value)
+                    setRekapPage(1)
+                  }}
+                  className="text-xs border border-gray-200 rounded-lg px-2.5 py-2 bg-white focus:outline-teal-600 font-medium cursor-pointer"
+                >
+                  <option value="all">Semua Lokasi ({data.employees?.length || 0})</option>
+                  <option value="ho">Head Office ({data.employees?.filter((e) => (e.workLocationCode || e.location || '').toLowerCase().includes('ho') || (e.workLocationCode || '').toLowerCase() === 'ho').length || 0})</option>
+                  <option value="gudang">Gudang ({data.employees?.filter((e) => (e.workLocationCode || e.location || '').toLowerCase().includes('gudang') || (e.workLocationCode || '').toLowerCase() === 'gudang').length || 0})</option>
+                  <option value="sales">Area Sales ({data.employees?.filter((e) => (e.workLocationCode || e.location || '').toLowerCase().includes('sales') || (e.workLocationCode || '').toLowerCase() === 'sales').length || 0})</option>
+                  <option value="livestream">Livestream ({data.employees?.filter((e) => (e.workLocationCode || e.location || '').toLowerCase().includes('stream') || (e.workLocationCode || '').toLowerCase() === 'livestream').length || 0})</option>
+                </select>
+              </div>
+            </div>
+            <div className="text-xs text-gray-500 font-medium">
+              Menampilkan <strong className="text-gray-900">{filteredEmployees.length}</strong> dari {data.employees?.length || 0} karyawan
+            </div>
           </div>
 
           <DataTable
@@ -851,15 +924,7 @@ export default function HoPayrollCalculatorPage() {
                             Sampel Excel
                           </span>
                         )}
-                        {e.workLocationCode === 'sales' || (e.location && e.location.toLowerCase().includes('other')) ? (
-                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-sky-100 text-sky-800 border border-sky-200">
-                            💼 Area Sales
-                          </span>
-                        ) : (
-                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
-                            🏢 HO
-                          </span>
-                        )}
+                        {renderLocationBadge(e)}
                       </div>
                       <div className="text-xs text-gray-500 font-mono">{e.nik || `ID: ${e.empId}`} · {e.position}</div>
                     </Td>

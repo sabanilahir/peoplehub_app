@@ -238,7 +238,7 @@ const HR_GROUPS = [
     { label: 'Hasil Psychotest',  href: '/hr/recruitment/psychotest/results',icon: ic('chart') },
   ]},
   { title: 'Payroll', icon: ic('money'), items: [
-    { label: 'Kalkulator Payroll HO', href: '/hr/payroll/ho-calculator', icon: ic('calculator') },
+    { label: 'Kalkulator Payroll', href: '/hr/payroll/ho-calculator', icon: ic('calculator') },
     { label: 'Integrasi Odoo Payroll', href: '/hr/payroll/odoo-sync', icon: ic('zap') },
     { label: 'Payroll Run',      href: '/hr/payroll/run',      icon: ic('money') },
     { label: 'Payroll Setup',    href: '/hr/payroll/setup',    icon: ic('list') },
